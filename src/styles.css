@@ -178,6 +178,27 @@ h3 { font-size:14px; font-weight:700; }
 .upload-tile span { color:var(--forest); font-weight:600; }
 .app-shell { background-position:center; background-repeat:no-repeat; background-attachment:fixed; }
 @media (max-width: 700px) { .profile-settings-grid,.profile-upload-row { grid-template-columns:1fr; } .signed-in-as { display:none; } }
+.todo-row { width:100%; border:0; border-bottom:1px solid var(--line); background:transparent; font:inherit; text-align:left; cursor:pointer; }
+.todo-complete { color:var(--muted); text-decoration:line-through; }
+.media-form-card { margin-bottom:18px; }
+.media-form { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.media-form label:nth-child(2), .media-form label:nth-child(3), .media-form label:nth-child(4), .media-form label:nth-child(5), .media-form button { grid-column:span 2; }
+.media-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:18px; }
+.media-card { overflow:hidden; }
+.media-frame { min-height:190px; background:var(--ink); }
+.media-frame iframe { display:block; width:100%; height:210px; border:0; }
+.media-link-card { min-height:190px; display:grid; place-content:center; gap:10px; padding:20px; color:var(--paper); text-align:center; }
+.media-link-card a { color:#f6c3a6; }
+.media-card h3 { margin:10px 0 5px; font-size:18px; }
+.media-card p { margin:0; color:var(--muted); font-size:12px; }
+.assistant-card { max-width:850px; }
+.assistant-form { display:flex; gap:10px; }
+.assistant-form input { flex:1; min-width:0; border:1px solid var(--line); padding:12px; font:inherit; }
+.assistant-response { display:flex; gap:12px; align-items:flex-start; margin-top:20px; padding:16px; background:#eef3eb; color:var(--forest); }
+.assistant-response p { margin:0; line-height:1.5; }
+.assistant-result { color:inherit; text-decoration:none; }
+@media (max-width: 900px) { .media-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (max-width: 600px) { .media-form { grid-template-columns:1fr; } .media-form label:nth-child(2), .media-form label:nth-child(3), .media-form label:nth-child(4), .media-form label:nth-child(5), .media-form button { grid-column:auto; } .media-grid { grid-template-columns:1fr; } .assistant-form { flex-direction:column; } }
 .meeting-overlay { position:fixed; inset:0; z-index:30; display:grid; place-items:center; padding:20px; background:rgba(22,58,52,.78); }
 .meeting-shell { width:min(1100px,100%); max-height:calc(100vh - 40px); overflow:auto; background:var(--paper); box-shadow:0 24px 70px rgba(0,0,0,.25); }
 .meeting-header { display:flex; align-items:flex-start; justify-content:space-between; padding:22px 25px; border-bottom:1px solid var(--line); }

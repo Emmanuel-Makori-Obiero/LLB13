@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import type { Assignment, AssignmentStatus, Discussion, Material, Member, Unit } from './types'
+import type { Assignment, AssignmentStatus, Discussion, Material, MediaResource, Member, Todo, Unit } from './types'
 
 export type Group13Repository = {
   getUnits: () => Promise<Unit[]>
@@ -11,6 +11,11 @@ export type Group13Repository = {
   updateAssignmentStatus: (id: string, status: AssignmentStatus) => Promise<void>
   createMaterial: (material: Omit<Material, 'id'>, file?: File) => Promise<Material>
   createAssignment: (assignment: Omit<Assignment, 'id'>) => Promise<Assignment>
+  getTodos: () => Promise<Todo[]>
+  createTodo: (todo: Omit<Todo, 'id'>) => Promise<Todo>
+  toggleTodo: (id: string, completed: boolean) => Promise<void>
+  getMedia: () => Promise<MediaResource[]>
+  createMedia: (media: Omit<MediaResource, 'id'>) => Promise<MediaResource>
 }
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined
@@ -44,7 +49,7 @@ const supabaseRepository: Group13Repository = {
   getMaterials: () => readRequired<Material>('materials', async () => supabase!.from('materials').select('id,title,type,unit,topic,date,source,url,storage_path').order('date', { ascending: false })),
   getAssignments: () => readRequired<Assignment>('assignments', async () => supabase!.from('assignments').select('id,title,unit,due,status,owner,reviewer,brief').order('due')),
   getDiscussions: () => readRequired<Discussion>('discussions', async () => supabase!.from('discussions').select('id,title,day,time,leader,status,prep,topics').order('day')),
-  getMembers: () => readRequired<Member>('members', async () => supabase!.from('members').select('name,initials,role,units,progress,tone').order('name')),
+  getMembers: () => readRequired<Member>('members', async () => supabase!.from('members').select('name,initials,role,units,progress,tone,section').order('name')),
   getStats: async () => ({ streak: 0, completed: 0, total: 0, focus: '' }),
   updateAssignmentStatus: async (id, status) => {
     if (!supabase) throw new Error('Supabase is not configured.')
@@ -70,6 +75,31 @@ const supabaseRepository: Group13Repository = {
     const { data, error } = await supabase.from('assignments').insert(record).select('id,title,unit,due,status,owner,reviewer,brief').single()
     if (error) throw new Error(`Could not create assignment: ${error.message}`)
     return data as Assignment
+  },
+  getTodos: () => readRequired<Todo>('todos', async () => supabase!.from('todos').select('id,title,completed,due,assignment_id,source').order('created_at')),
+  createTodo: async todo => {
+    if (!supabase) throw new Error('Supabase is not configured.')
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('Please sign in before creating a to-do.')
+    const record = { id: crypto.randomUUID(), user_id: user.id, ...todo }
+    const { data, error } = await supabase.from('todos').insert(record).select('id,title,completed,due,assignment_id,source').single()
+    if (error) throw new Error(`Could not create to-do: ${error.message}`)
+    return data as Todo
+  },
+  toggleTodo: async (id, completed) => {
+    if (!supabase) throw new Error('Supabase is not configured.')
+    const { error } = await supabase.from('todos').update({ completed }).eq('id', id)
+    if (error) throw new Error(`Could not update to-do: ${error.message}`)
+  },
+  getMedia: () => readRequired<MediaResource>('media_resources', async () => supabase!.from('media_resources').select('id,kind,title,url,topic,source').order('title')),
+  createMedia: async media => {
+    if (!supabase) throw new Error('Supabase is not configured.')
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('Please sign in before adding media.')
+    const record = { id: crypto.randomUUID(), user_id: user.id, ...media }
+    const { data, error } = await supabase.from('media_resources').insert(record).select('id,kind,title,url,topic,source').single()
+    if (error) throw new Error(`Could not add media: ${error.message}`)
+    return data as MediaResource
   },
 }
 

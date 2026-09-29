@@ -56,11 +56,37 @@ create table if not exists public.members (
   tone text not null
 );
 
+alter table public.members add column if not exists section text not null default 'A' check (section in ('A', 'B'));
+
+create table if not exists public.todos (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  title text not null,
+  completed boolean not null default false,
+  due text,
+  assignment_id text references public.assignments(id) on delete set null,
+  source text not null default 'manual' check (source in ('manual', 'assignment')),
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.media_resources (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  kind text not null check (kind in ('movie', 'youtube', 'music', 'court')),
+  title text not null,
+  url text not null,
+  topic text not null,
+  source text not null,
+  created_at timestamptz not null default now()
+);
+
 alter table public.units enable row level security;
 alter table public.materials enable row level security;
 alter table public.assignments enable row level security;
 alter table public.discussions enable row level security;
 alter table public.members enable row level security;
+alter table public.todos enable row level security;
+alter table public.media_resources enable row level security;
 
 -- All workspace data requires a signed-in Supabase Auth user.
 drop policy if exists "Group 13 units are readable" on public.units;
@@ -80,6 +106,8 @@ create policy "Group 13 materials can be created" on public.materials for insert
 create policy "Group 13 assignments can be created" on public.assignments for insert to authenticated with check (true);
 create policy "Group 13 discussions are readable" on public.discussions for select to authenticated using (true);
 create policy "Group 13 members are readable" on public.members for select to authenticated using (true);
+create policy "Users can manage their own todos" on public.todos for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy "Users can manage media resources" on public.media_resources for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
 
 insert into storage.buckets (id, name, public)
 values ('materials', 'materials', true)
@@ -101,6 +129,10 @@ create policy "Group 13 profile images can be uploaded" on storage.objects for i
 grant select on table public.units, public.materials, public.assignments, public.discussions, public.members to authenticated;
 grant update on table public.assignments to authenticated;
 grant insert on table public.materials, public.assignments to authenticated;
+grant select, insert, update, delete on table public.todos, public.media_resources to authenticated;
+
+/* Demo seed data intentionally disabled. Add your own units, members, materials,
+   assignments, and discussions through Supabase or the app. */
 
 insert into public.units (id, name, code, lead, progress, next, color) values
   ('criminal', 'Criminal Law I', 'LAW 111', 'Joan W.', 72, 'Mens rea · Thu 7:00 PM', '#8F3E32'),
@@ -142,3 +174,4 @@ insert into public.discussions (id, title, day, time, leader, status, prep, topi
   ('d2', 'Criminal Law I', 'Thursday, 01 October', '7:00–8:15 PM', 'Joan W.', 'Upcoming', 'Read the mens rea primer', array['Intention', 'Recklessness', 'Transferred malice']),
   ('d3', 'Legal Systems & Methods', 'Tuesday, 06 October', '7:00–8:15 PM', 'Bianca N.', 'Scheduled', 'Bring one difficult authority', array['Precedent', 'Ratio decidendi', 'Obiter dicta'])
 on conflict (id) do update set title = excluded.title, day = excluded.day, time = excluded.time, leader = excluded.leader, status = excluded.status, prep = excluded.prep, topics = excluded.topics;
+*/
