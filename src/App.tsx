@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { BookOpen, CalendarDays, Check, ChevronRight, Clock3, FileText, Gavel, LayoutDashboard, Library, Menu, MessageSquare, MoreHorizontal, Plus, Search, Settings, Shield, Sparkles, Users, Video, X } from 'lucide-react'
-import { isSupabaseConfigured, repository } from './data/repository'
+import { BookOpen, CalendarDays, Check, ChevronRight, Clock3, FileText, Gavel, LayoutDashboard, Library, LogOut, Menu, MessageSquare, MoreHorizontal, Plus, Search, Settings, Shield, Sparkles, Users, Video, X } from 'lucide-react'
+import { isSupabaseConfigured, repository, supabase } from './data/repository'
 import type { Assignment, AssignmentStatus, Discussion, Material, Member, Unit } from './data/types'
 import MeetingRoom from './MeetingRoom'
 
@@ -23,6 +23,8 @@ const statusOrder: AssignmentStatus[] = ['Not Started', 'In Progress', 'Submitte
 const initials = 'AM'
 
 function App() {
+  const [authLoading, setAuthLoading] = useState(true)
+  const [userEmail, setUserEmail] = useState<string | null>(null)
   const [view, setView] = useState(viewFromPath)
   const [units, setUnits] = useState<Unit[]>([])
   const [materials, setMaterials] = useState<Material[]>([])
@@ -37,6 +39,13 @@ function App() {
   const [activeMeeting, setActiveMeeting] = useState<Discussion | null>(null)
   const [materialFormOpen, setMaterialFormOpen] = useState(false)
   const [assignmentFormOpen, setAssignmentFormOpen] = useState(false)
+
+  useEffect(() => {
+    if (!supabase) { setAuthLoading(false); return }
+    supabase.auth.getSession().then(({ data }) => { setUserEmail(data.session?.user.email ?? null); setAuthLoading(false) })
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => setUserEmail(session?.user.email ?? null))
+    return () => listener.subscription.unsubscribe()
+  }, [])
 
   useEffect(() => {
     const onPopState = () => setView(viewFromPath())
@@ -82,10 +91,14 @@ function App() {
     catch (error) { setNotice(error instanceof Error ? error.message : 'Could not save assignment status.') }
   }
 
+  if (!isSupabaseConfigured) return <LoginPage configured={false} />
+  if (authLoading) return <div className="auth-page"><div className="auth-card"><Brand /><p className="subheading">Checking your secure session…</p></div></div>
+  if (!userEmail) return <LoginPage configured onSignedIn={setUserEmail} />
+
   return <div className="app-shell">
     <aside className="sidebar"><Brand /><nav><div className="nav-label">Workspace</div>{nav.slice(0, 5).map(item => <NavItem key={item.id} {...item} active={view === item.id} onClick={() => setPage(item.id)} />)}<div className="nav-label">Practice</div>{nav.slice(5).map(item => <NavItem key={item.id} {...item} active={view === item.id} onClick={() => setPage(item.id)} />)}<div className="nav-label">Account</div><NavItem id="settings" label="Settings" icon={Settings} active={view === 'settings'} onClick={() => setPage('settings')} /></nav><div className="sidebar-bottom"><div className="profile-mini"><Avatar initials={initials} tone="#C96E52" /><div><div className="profile-name">Amina M.</div><div className="profile-role">LLB · Year 1</div></div><MoreHorizontal size={15} style={{ marginLeft: 'auto', color: 'rgba(255,255,255,.45)' }} /></div></div></aside>
     <div className="mobile-nav"><Brand compact /><button className="icon-button" onClick={() => setPage(view === 'dashboard' ? 'units' : 'dashboard')}><Menu size={17} /></button></div>
-    <main className="main"><Topbar view={view} /><div className="content">{loadError && <div className="connection-error"><strong>Supabase request failed</strong><span>{loadError}</span></div>}{view === 'dashboard' && <Dashboard units={units} materials={materials} assignments={assignments} discussions={discussions} setPage={setPage} />}{view === 'units' && <UnitsPage units={units} selected={selected} selectedUnit={selectedUnit} setSelectedUnit={setSelectedUnit} materials={materials} setNotice={setNotice} />}{view === 'library' && <LibraryPageReal materials={filteredMaterials} search={search} setSearch={setSearch} openCreate={() => setMaterialFormOpen(true)} />}{view === 'assignments' && <AssignmentsPageReal assignments={assignments} selected={selectedA} selectedId={selectedAssignment} setSelected={setSelectedAssignment} bump={bumpAssignment} openCreate={() => setAssignmentFormOpen(true)} />}{view === 'discussions' && <DiscussionsPage discussions={discussions} openMeeting={openMeeting} setNotice={setNotice} />}{view === 'arena' && <ArenaPage setNotice={setNotice} />}{view === 'members' && <MembersPage members={members} />}{view === 'settings' && <SettingsPage setNotice={setNotice} />}{view === 'meeting' && activeMeeting && <div className="meeting-page"><PageHeading eyebrow="Group 13 live room" title={activeMeeting.title} subtitle="Your private browser-based discussion room is ready." stamp={false} /></div>}</div></main>
+    <main className="main"><Topbar view={view} email={userEmail} onSignOut={async () => { await supabase?.auth.signOut(); setUserEmail(null) }} /><div className="content">{loadError && <div className="connection-error"><strong>Supabase request failed</strong><span>{loadError}</span></div>}{view === 'dashboard' && <Dashboard units={units} materials={materials} assignments={assignments} discussions={discussions} setPage={setPage} />}{view === 'units' && <UnitsPage units={units} selected={selected} selectedUnit={selectedUnit} setSelectedUnit={setSelectedUnit} materials={materials} setNotice={setNotice} />}{view === 'library' && <LibraryPageReal materials={filteredMaterials} search={search} setSearch={setSearch} openCreate={() => setMaterialFormOpen(true)} />}{view === 'assignments' && <AssignmentsPageReal assignments={assignments} selected={selectedA} selectedId={selectedAssignment} setSelected={setSelectedAssignment} bump={bumpAssignment} openCreate={() => setAssignmentFormOpen(true)} />}{view === 'discussions' && <DiscussionsPage discussions={discussions} openMeeting={openMeeting} setNotice={setNotice} />}{view === 'arena' && <ArenaPage setNotice={setNotice} />}{view === 'members' && <MembersPage members={members} />}{view === 'settings' && <SettingsPage setNotice={setNotice} />}{view === 'meeting' && activeMeeting && <div className="meeting-page"><PageHeading eyebrow="Group 13 live room" title={activeMeeting.title} subtitle="Your private browser-based discussion room is ready." stamp={false} /></div>}</div></main>
     {notice && <div className="toast"><Check size={15} />{notice}<button onClick={() => setNotice('')}><X size={14} /></button></div>}
     {activeMeeting && <MeetingRoom discussion={activeMeeting} onClose={closeMeeting} />}
     {materialFormOpen && <MaterialForm units={units} onClose={() => setMaterialFormOpen(false)} onCreated={async (material, file) => { try { const created = await repository.createMaterial(material, file); setMaterials(current => [created, ...current]); setMaterialFormOpen(false); setNotice(file ? 'Material uploaded to Supabase.' : 'Material link added to Supabase.') } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not add material.') } }} />}
@@ -93,10 +106,11 @@ function App() {
   </div>
 }
 
+function LoginPage({ configured, onSignedIn }: { configured: boolean; onSignedIn?: (email: string) => void }) { const [mode, setMode] = useState<'sign-in' | 'sign-up'>('sign-in'); const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [busy, setBusy] = useState(false); const [message, setMessage] = useState(''); const submit = async (event: React.FormEvent) => { event.preventDefault(); if (!supabase) return; setBusy(true); setMessage(''); const result = mode === 'sign-in' ? await supabase.auth.signInWithPassword({ email, password }) : await supabase.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin } }); setBusy(false); if (result.error) { setMessage(result.error.message); return } if (mode === 'sign-up' && !result.data.session) setMessage('Account created. Check your email to confirm it, then sign in.'); else onSignedIn?.(email) }; return <div className="auth-page"><div className="auth-card"><Brand /><div className="eyebrow">Private workspace</div><h1>{mode === 'sign-in' ? 'Welcome back.' : 'Create your account.'}</h1><p className="subheading">Sign in to access your Group 13 classes, materials, assignments, and meeting rooms.</p>{!configured && <div className="connection-error"><strong>Supabase setup required</strong><span>Add the environment values in .env.local before signing in.</span></div>}{configured && <form className="data-form" onSubmit={submit}><label>Email<input type="email" required autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="you@example.com" /></label><label>Password<input type="password" required minLength={6} autoComplete={mode === 'sign-in' ? 'current-password' : 'new-password'} value={password} onChange={event => setPassword(event.target.value)} placeholder="At least 6 characters" /></label>{message && <div className="form-message">{message}</div>}<button className="primary-button" type="submit" disabled={busy}>{busy ? 'Please wait…' : mode === 'sign-in' ? 'Sign in' : 'Create account'}</button></form>}<button className="auth-switch" onClick={() => { setMode(mode === 'sign-in' ? 'sign-up' : 'sign-in'); setMessage('') }}>{mode === 'sign-in' ? 'New to Group 13? Create an account' : 'Already have an account? Sign in'}</button></div></div> }
 function Brand({ compact = false }: { compact?: boolean }) { return <div className="brand"><div className="brand-mark">13</div>{!compact && <div><div className="brand-name">GROUP 13</div><div className="brand-sub">Law school hub</div></div>}</div> }
 function Avatar({ initials, tone }: { initials: string; tone: string }) { return <div className="avatar" style={{ background: tone }}>{initials}</div> }
 function NavItem({ label, icon: Icon, active, onClick }: { id: string; label: string; icon: typeof BookOpen; active: boolean; onClick: () => void }) { return <button className={`nav-item ${active ? 'active' : ''}`} onClick={onClick}><Icon />{label}</button> }
-function Topbar({ view }: { view: string }) { const label = view === 'meeting' ? 'Meeting room' : nav.find(n => n.id === view)?.label ?? 'Settings'; return <header className="topbar"><div className="breadcrumb"><span>Group 13</span><ChevronRight size={13} /><strong>{label}</strong></div><div className="top-actions"><button className="icon-button" title="Notifications"><Sparkles size={15} /></button><button className="icon-button" title="Calendar"><CalendarDays size={15} /></button><Avatar initials="AM" tone="#163A34" /></div></header> }
+function Topbar({ view, email, onSignOut }: { view: string; email: string; onSignOut: () => void }) { const label = view === 'meeting' ? 'Meeting room' : nav.find(n => n.id === view)?.label ?? 'Settings'; return <header className="topbar"><div className="breadcrumb"><span>Group 13</span><ChevronRight size={13} /><strong>{label}</strong></div><div className="top-actions"><span className="signed-in-as" title={email}>{email}</span><button className="icon-button" title="Sign out" onClick={onSignOut}><LogOut size={15} /></button><Avatar initials="AM" tone="#163A34" /></div></header> }
 function PageHeading({ eyebrow, title, subtitle, stamp = true }: { eyebrow: string; title: string; subtitle: string; stamp?: boolean }) { return <div className="page-heading"><div><div className="eyebrow">{eyebrow}</div><h1>{title}</h1><p className="subheading">{subtitle}</p></div>{stamp && <div className="date-stamp"><strong>Tuesday, 29 September 2026</strong>Week 4 · Semester 1</div>}</div> }
 function CardHeader({ label, action }: { label: string; action?: string }) { return <div className="card-header"><span className="section-label">{label}</span>{action && <span className="quiet">{action}</span>}</div> }
 

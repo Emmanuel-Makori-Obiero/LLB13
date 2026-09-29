@@ -157,6 +157,15 @@ h3 { font-size:14px; font-weight:700; }
 .data-form textarea { min-height:100px; resize:vertical; }
 .field-hint { color:var(--muted); font-size:10px; font-weight:400; }
 .material-link { color:var(--forest); font-weight:600; text-decoration:underline; }
+.auth-page { min-height:100vh; display:grid; place-items:center; padding:24px; background:var(--cream); }
+.auth-card { width:min(430px,100%); padding:34px; background:var(--paper); border:1px solid var(--line); box-shadow:0 20px 60px rgba(22,58,52,.12); }
+.auth-card .brand { margin-bottom:42px; }
+.auth-card h1 { margin:8px 0 10px; font-size:38px; }
+.auth-card .data-form { margin-top:24px; }
+.auth-switch { margin-top:18px; padding:0; border:0; background:transparent; color:var(--forest); text-decoration:underline; font:inherit; cursor:pointer; }
+.form-message { padding:11px 12px; background:#fff2e8; color:#8f3e32; font-size:12px; line-height:1.45; }
+.primary-button:disabled { opacity:.55; cursor:wait; }
+.signed-in-as { max-width:230px; overflow:hidden; color:var(--muted); font-size:11px; text-overflow:ellipsis; white-space:nowrap; }
 .meeting-overlay { position:fixed; inset:0; z-index:30; display:grid; place-items:center; padding:20px; background:rgba(22,58,52,.78); }
 .meeting-shell { width:min(1100px,100%); max-height:calc(100vh - 40px); overflow:auto; background:var(--paper); box-shadow:0 24px 70px rgba(0,0,0,.25); }
 .meeting-header { display:flex; align-items:flex-start; justify-content:space-between; padding:22px 25px; border-bottom:1px solid var(--line); }
