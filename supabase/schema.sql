@@ -175,3 +175,19 @@ insert into public.discussions (id, title, day, time, leader, status, prep, topi
   ('d3', 'Legal Systems & Methods', 'Tuesday, 06 October', '7:00–8:15 PM', 'Bianca N.', 'Scheduled', 'Bring one difficult authority', array['Precedent', 'Ratio decidendi', 'Obiter dicta'])
 on conflict (id) do update set title = excluded.title, day = excluded.day, time = excluded.time, leader = excluded.leader, status = excluded.status, prep = excluded.prep, topics = excluded.topics;
 */
+
+-- Keep the client workspace live when rows change in Supabase.
+do $$
+declare
+  table_name text;
+begin
+  foreach table_name in array array['units', 'materials', 'assignments', 'discussions', 'members', 'todos', 'media_resources'] loop
+    if not exists (
+      select 1
+      from pg_publication_tables
+      where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = table_name
+    ) then
+      execute format('alter publication supabase_realtime add table public.%I', table_name);
+    end if;
+  end loop;
+end $$;

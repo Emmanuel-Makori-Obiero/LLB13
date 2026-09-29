@@ -27,6 +27,7 @@ const viewFromPath = () => {
 }
 const statusOrder: AssignmentStatus[] = ['Not Started', 'In Progress', 'Submitted', 'Under Review', 'Corrections', 'Completed']
 const initials = '13'
+const ADMIN_EMAIL = 'emmanuelmakobiero@gmail.com'
 const profileInitials = (name: string, email = '') => (name || email.split('@')[0] || initials).split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase()
 type UserProfile = { displayName: string; role: string; avatarUrl: string; wallpaperUrl: string }
 
@@ -51,6 +52,7 @@ function App() {
   const [activeMaterial, setActiveMaterial] = useState<Material | null>(null)
   const [materialFormOpen, setMaterialFormOpen] = useState(false)
   const [assignmentFormOpen, setAssignmentFormOpen] = useState(false)
+  const isAdmin = userEmail?.trim().toLowerCase() === ADMIN_EMAIL
 
   useEffect(() => {
     if (!supabase) { setAuthLoading(false); return }
@@ -66,10 +68,23 @@ function App() {
     return () => window.removeEventListener('popstate', onPopState)
   }, [])
   useEffect(() => {
-    Promise.all([repository.getUnits(), repository.getMaterials(), repository.getAssignments(), repository.getDiscussions(), repository.getMembers(), repository.getTodos(), repository.getMedia()])
-      .then(([u, m, a, d, members, todos, media]) => { setUnits(u); setMaterials(m); setAssignments(a); setDiscussions(d); setMembers(members); setTodos(todos); setMedia(media); setLoadError('') })
-      .catch((error: Error) => setLoadError(error.message))
-  }, [])
+    if (!userEmail || !supabase) return
+    const client = supabase
+    let active = true
+    const refresh = async () => {
+      try {
+        const [u, m, a, d, groupMembers, userTodos, resources] = await Promise.all([repository.getUnits(), repository.getMaterials(), repository.getAssignments(), repository.getDiscussions(), repository.getMembers(), repository.getTodos(), repository.getMedia()])
+        if (!active) return
+        setUnits(u); setMaterials(m); setAssignments(a); setDiscussions(d); setMembers(groupMembers); setTodos(userTodos); setMedia(resources); setLoadError('')
+      } catch (error) { if (active) setLoadError(error instanceof Error ? error.message : 'Could not load workspace data.') }
+    }
+    void refresh()
+    const channel = client.channel('group13-live-data')
+    const tables = ['units', 'materials', 'assignments', 'discussions', 'members', 'todos', 'media_resources']
+    tables.forEach(table => channel.on('postgres_changes', { event: '*', schema: 'public', table }, () => void refresh()))
+    void channel.subscribe()
+    return () => { active = false; void client.removeChannel(channel) }
+  }, [userEmail])
   useEffect(() => {
     const meetingId = window.location.pathname.match(/^\/meetings\/([^/]+)/)?.[1]
     if (meetingId && discussions.length) setActiveMeeting(discussions.find(discussion => discussion.id === meetingId) ?? null)
@@ -94,6 +109,7 @@ function App() {
     setView(target)
     setSearch('')
   }
+  useEffect(() => { if (userEmail && !isAdmin && view === 'settings') setPage('dashboard') }, [userEmail, isAdmin, view])
   const openMeeting = (discussion: Discussion) => {
     window.history.pushState({}, '', `/meetings/${discussion.id}`)
     setActiveMeeting(discussion)
@@ -122,9 +138,9 @@ function App() {
   if (!userEmail) return <LoginPage configured onSignedIn={setUserEmail} />
 
   return <div className="app-shell" style={profile.wallpaperUrl ? { backgroundImage: `linear-gradient(rgba(247,245,240,.76), rgba(247,245,240,.76)), url(${profile.wallpaperUrl})`, backgroundSize: 'cover', backgroundAttachment: 'fixed' } : undefined}>
-    <aside className="sidebar"><Brand /><nav><div className="nav-label">Workspace</div>{nav.slice(0, 5).map(item => <NavItem key={item.id} {...item} active={view === item.id} onClick={() => setPage(item.id)} />)}<div className="nav-label">Practice</div>{nav.slice(5).map(item => <NavItem key={item.id} {...item} active={view === item.id} onClick={() => setPage(item.id)} />)}<div className="nav-label">Account</div><NavItem id="settings" label="Settings" icon={Settings} active={view === 'settings'} onClick={() => setPage('settings')} /></nav><div className="sidebar-bottom"><div className="profile-mini"><Avatar initials={profileInitials(profile.displayName, userEmail ?? '')} tone="#C96E52" image={profile.avatarUrl} /><div><div className="profile-name">{profile.displayName || userEmail?.split('@')[0] || 'Your profile'}</div><div className="profile-role">{profile.role}</div></div><MoreHorizontal size={15} style={{ marginLeft: 'auto', color: 'rgba(255,255,255,.45)' }} /></div></div></aside>
+    <aside className="sidebar"><Brand /><nav><div className="nav-label">Workspace</div>{nav.slice(0, 5).map(item => <NavItem key={item.id} {...item} active={view === item.id} onClick={() => setPage(item.id)} />)}<div className="nav-label">Practice</div>{nav.slice(5).map(item => <NavItem key={item.id} {...item} active={view === item.id} onClick={() => setPage(item.id)} />)}<>{isAdmin && <><div className="nav-label">Administration</div><NavItem id="settings" label="Settings" icon={Settings} active={view === 'settings'} onClick={() => setPage('settings')} /></>}</></nav><div className="sidebar-bottom"><div className="profile-mini"><Avatar initials={profileInitials(profile.displayName, userEmail ?? '')} tone="#C96E52" image={profile.avatarUrl} /><div><div className="profile-name">{profile.displayName || userEmail?.split('@')[0] || 'Your profile'}</div><div className="profile-role">{profile.role}</div></div><MoreHorizontal size={15} style={{ marginLeft: 'auto', color: 'rgba(255,255,255,.45)' }} /></div></div></aside>
     <div className="mobile-nav"><Brand compact /><button className="icon-button" onClick={() => setPage(view === 'dashboard' ? 'units' : 'dashboard')}><Menu size={17} /></button></div>
-    <main className="main"><Topbar view={view} email={userEmail ?? ''} initials={profileInitials(profile.displayName, userEmail ?? '')} image={profile.avatarUrl} onSignOut={async () => { await supabase?.auth.signOut(); setUserEmail(null) }} /><div className="content">{loadError && <div className="connection-error"><strong>Supabase request failed</strong><span>{loadError}</span></div>}{view === 'dashboard' && <Dashboard displayName={profile.displayName || userEmail?.split('@')[0] || 'there'} units={units} materials={materials} assignments={assignments} discussions={discussions} setPage={setPage} />}{view === 'units' && <UnitsPage units={units} selected={selected} selectedUnit={selectedUnit} setSelectedUnit={setSelectedUnit} materials={materials} setNotice={setNotice} setPage={setPage} openUnit={openUnit} />}{view === 'unit' && selected && <UnitWorkspacePage unit={selected} materials={materials} assignments={assignments} discussions={discussions} openReader={openReader} openMeeting={openMeeting} />}{view === 'library' && <LibraryPageReal materials={filteredMaterials} search={search} setSearch={setSearch} openCreate={() => setMaterialFormOpen(true)} openReader={openReader} />}{view === 'reader' && activeMaterial && <MaterialReader material={activeMaterial} onClose={closeReader} />}{view === 'assignments' && <AssignmentsPageReal assignments={assignments} selected={selectedA} selectedId={selectedAssignment} setSelected={setSelectedAssignment} bump={bumpAssignment} openCreate={() => setAssignmentFormOpen(true)} />}{view === 'todos' && <TodoPage todos={visibleTodos} onCreate={async todo => { const created = await repository.createTodo(todo); setTodos(current => [created, ...current]) }} onToggle={async todo => { if (todo.source === 'assignment' && todo.assignment_id) await bumpAssignment(todo.assignment_id); else { await repository.toggleTodo(todo.id, !todo.completed); setTodos(current => current.map(item => item.id === todo.id ? { ...item, completed: !item.completed } : item)) } }} />}{view === 'discussions' && <DiscussionsPage discussions={discussions} openMeeting={openMeeting} setNotice={setNotice} />}{view === 'media' && <MediaPage media={media} onCreate={async item => { const created = await repository.createMedia(item); setMedia(current => [...current, created]); setNotice('Media resource added.') }} />}{view === 'arena' && <ArenaPage materials={materials} setPage={setPage} openReader={openReader} />}{view === 'members' && <SectionedMembersPage members={members} />}{view === 'assistant' && <AssistantPage materials={materials} media={media} setPage={setPage} />}{view === 'counsellor' && <CounsellorPage />}{view === 'settings' && <><ProfileSettings profile={profile} onSave={saveProfile} onUpload={uploadProfileAssetAndSave} setNotice={setNotice} /><SettingsPage setNotice={setNotice} /></>}{view === 'meeting' && activeMeeting && <div className="meeting-page"><PageHeading eyebrow="Group 13 live room" title={activeMeeting.title} subtitle="Your private browser-based discussion room is ready." stamp={false} /></div>}</div></main>
+    <main className="main"><Topbar view={view} email={userEmail ?? ''} initials={profileInitials(profile.displayName, userEmail ?? '')} image={profile.avatarUrl} onSignOut={async () => { await supabase?.auth.signOut(); setUserEmail(null) }} /><div className="content">{loadError && <div className="connection-error"><strong>Supabase request failed</strong><span>{loadError}</span></div>}{view === 'dashboard' && <Dashboard displayName={profile.displayName || userEmail?.split('@')[0] || 'there'} units={units} materials={materials} assignments={assignments} discussions={discussions} setPage={setPage} />}{view === 'units' && <UnitsPage units={units} selected={selected} selectedUnit={selectedUnit} setSelectedUnit={setSelectedUnit} materials={materials} setNotice={setNotice} setPage={setPage} openUnit={openUnit} />}{view === 'unit' && selected && <UnitWorkspacePage unit={selected} materials={materials} assignments={assignments} discussions={discussions} openReader={openReader} openMeeting={openMeeting} />}{view === 'library' && <LibraryPageReal materials={filteredMaterials} search={search} setSearch={setSearch} openCreate={() => setMaterialFormOpen(true)} openReader={openReader} />}{view === 'reader' && activeMaterial && <MaterialReader material={activeMaterial} onClose={closeReader} />}{view === 'assignments' && <AssignmentsPageReal assignments={assignments} selected={selectedA} selectedId={selectedAssignment} setSelected={setSelectedAssignment} bump={bumpAssignment} openCreate={() => setAssignmentFormOpen(true)} />}{view === 'todos' && <TodoPage todos={visibleTodos} onCreate={async todo => { const created = await repository.createTodo(todo); setTodos(current => [created, ...current]) }} onToggle={async todo => { if (todo.source === 'assignment' && todo.assignment_id) await bumpAssignment(todo.assignment_id); else { await repository.toggleTodo(todo.id, !todo.completed); setTodos(current => current.map(item => item.id === todo.id ? { ...item, completed: !item.completed } : item)) } }} />}{view === 'discussions' && <DiscussionsPage discussions={discussions} openMeeting={openMeeting} setNotice={setNotice} />}{view === 'media' && <MediaPage media={media} onCreate={async item => { const created = await repository.createMedia(item); setMedia(current => [...current, created]); setNotice('Media resource added.') }} />}{view === 'arena' && <ArenaPage materials={materials} setPage={setPage} openReader={openReader} />}{view === 'members' && <SectionedMembersPage members={members} />}{view === 'assistant' && <AssistantPage materials={materials} media={media} setPage={setPage} />}{view === 'counsellor' && <CounsellorPage />}{view === 'settings' && isAdmin && <><ProfileSettings profile={profile} onSave={saveProfile} onUpload={uploadProfileAssetAndSave} setNotice={setNotice} /><SettingsPage setNotice={setNotice} /></>}{view === 'meeting' && activeMeeting && <div className="meeting-page"><PageHeading eyebrow="Group 13 live room" title={activeMeeting.title} subtitle="Your private browser-based discussion room is ready." stamp={false} /></div>}</div></main>
     {notice && <div className="toast"><Check size={15} />{notice}<button onClick={() => setNotice('')}><X size={14} /></button></div>}
     {activeMeeting && <MeetingRoom discussion={activeMeeting} onClose={closeMeeting} />}
     {materialFormOpen && <MaterialForm units={units} onClose={() => setMaterialFormOpen(false)} onCreated={async (material, file) => { try { const created = await repository.createMaterial(material, file); setMaterials(current => [created, ...current]); setMaterialFormOpen(false); setNotice(file ? 'Material uploaded to Supabase.' : 'Material link added to Supabase.') } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not add material.') } }} />}
