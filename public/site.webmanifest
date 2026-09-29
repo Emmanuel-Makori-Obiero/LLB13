@@ -1,0 +1,36 @@
+{
+  "name": "Group 13 Hub",
+  "short_name": "Group 13",
+  "description": "A private academic workspace for Group 13 law students.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#F7F5F0",
+  "theme_color": "#163A34",
+  "lang": "en-KE",
+  "categories": ["education", "productivity"],
+  "icons": [
+    {
+      "src": "/group13-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Library",
+      "short_name": "Library",
+      "url": "/library",
+      "icons": [{ "src": "/group13-icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "To-do list",
+      "short_name": "To-do",
+      "url": "/todos",
+      "icons": [{ "src": "/group13-icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    }
+  ]
+}

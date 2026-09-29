@@ -13,6 +13,8 @@ npm run dev
 
 Open `http://localhost:3000`.
 
+On a deployed HTTPS URL, open the site on a phone and choose **Add to Home screen** (Android) or **Share → Add to Home Screen** (iPhone). The webmanifest makes Group 13 Hub install as a standalone app.
+
 ## Supabase setup
 
 1. Create or open your Supabase project.
