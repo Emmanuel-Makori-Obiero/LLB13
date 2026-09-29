@@ -163,6 +163,7 @@ h3 { font-size:14px; font-weight:700; }
 .auth-card h1 { margin:8px 0 10px; font-size:38px; }
 .auth-card .data-form { margin-top:24px; }
 .auth-switch { margin-top:18px; padding:0; border:0; background:transparent; color:var(--forest); text-decoration:underline; font:inherit; cursor:pointer; }
+.auth-reset { margin-top:14px; padding:0; border:0; background:transparent; color:var(--muted); font:inherit; font-size:12px; cursor:pointer; }
 .form-message { padding:11px 12px; background:#fff2e8; color:#8f3e32; font-size:12px; line-height:1.45; }
 .primary-button:disabled { opacity:.55; cursor:wait; }
 .signed-in-as { max-width:230px; overflow:hidden; color:var(--muted); font-size:11px; text-overflow:ellipsis; white-space:nowrap; }
