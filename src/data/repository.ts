@@ -18,6 +18,17 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undef
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey)
 export const supabase = isSupabaseConfigured ? createClient(supabaseUrl!, supabaseAnonKey!) : null
 
+export async function uploadUserAsset(kind: 'avatar' | 'wallpaper', file: File): Promise<string> {
+  if (!supabase) throw new Error('Supabase is not configured.')
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
+  if (userError || !user) throw new Error('Please sign in before uploading profile images.')
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '-')
+  const path = `${user.id}/${kind}-${Date.now()}-${safeName}`
+  const upload = await supabase.storage.from('profiles').upload(path, file, { upsert: false })
+  if (upload.error) throw new Error(`Could not upload ${kind}: ${upload.error.message}`)
+  return supabase.storage.from('profiles').getPublicUrl(path).data.publicUrl
+}
+
 async function readRequired<T>(
   table: string,
   query: () => Promise<{ data: T[] | null; error: { message: string } | null }>,

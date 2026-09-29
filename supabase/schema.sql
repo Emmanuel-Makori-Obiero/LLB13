@@ -85,10 +85,18 @@ insert into storage.buckets (id, name, public)
 values ('materials', 'materials', true)
 on conflict (id) do update set public = true;
 
+insert into storage.buckets (id, name, public)
+values ('profiles', 'profiles', true)
+on conflict (id) do update set public = true;
+
 drop policy if exists "Group 13 materials files are readable" on storage.objects;
 drop policy if exists "Group 13 materials files can be uploaded" on storage.objects;
 create policy "Group 13 materials files are readable" on storage.objects for select to authenticated using (bucket_id = 'materials');
 create policy "Group 13 materials files can be uploaded" on storage.objects for insert to authenticated with check (bucket_id = 'materials');
+drop policy if exists "Group 13 profile images are readable" on storage.objects;
+drop policy if exists "Group 13 profile images can be uploaded" on storage.objects;
+create policy "Group 13 profile images are readable" on storage.objects for select to authenticated using (bucket_id = 'profiles');
+create policy "Group 13 profile images can be uploaded" on storage.objects for insert to authenticated with check (bucket_id = 'profiles' and (storage.foldername(name))[1] = (select auth.uid()::text));
 
 grant select on table public.units, public.materials, public.assignments, public.discussions, public.members to authenticated;
 grant update on table public.assignments to authenticated;
