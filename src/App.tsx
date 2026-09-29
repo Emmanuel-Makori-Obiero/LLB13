@@ -12,11 +12,16 @@ const nav = [
   { id: 'arena', label: 'Legal Arena', icon: Gavel },
   { id: 'members', label: 'Members', icon: Users },
 ]
+const validViews = new Set([...nav.map(item => item.id), 'settings'])
+const viewFromPath = () => {
+  const path = window.location.pathname.replace(/^\/+|\/+$/g, '')
+  return path && validViews.has(path) ? path : 'dashboard'
+}
 const statusOrder: AssignmentStatus[] = ['Not Started', 'In Progress', 'Submitted', 'Under Review', 'Corrections', 'Completed']
 const initials = 'AM'
 
 function App() {
-  const [view, setView] = useState('dashboard')
+  const [view, setView] = useState(viewFromPath)
   const [units, setUnits] = useState<Unit[]>([])
   const [materials, setMaterials] = useState<Material[]>([])
   const [assignments, setAssignments] = useState<Assignment[]>([])
@@ -27,13 +32,24 @@ function App() {
   const [search, setSearch] = useState('')
   const [notice, setNotice] = useState('')
 
+  useEffect(() => {
+    const onPopState = () => setView(viewFromPath())
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [])
   useEffect(() => { Promise.all([repository.getUnits(), repository.getMaterials(), repository.getAssignments(), repository.getDiscussions(), repository.getMembers()]).then(([u, m, a, d, members]) => { setUnits(u); setMaterials(m); setAssignments(a); setDiscussions(d); setMembers(members) }) }, [])
   useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(''), 2800); return () => clearTimeout(timer) }, [notice])
 
   const selected = units.find(u => u.id === selectedUnit) ?? units[1]
   const selectedA = assignments.find(a => a.id === selectedAssignment) ?? assignments[0]
   const filteredMaterials = useMemo(() => materials.filter(m => [m.title, m.type, m.unit, m.topic].join(' ').toLowerCase().includes(search.toLowerCase())), [materials, search])
-  const setPage = (next: string) => { setView(next); setSearch('') }
+  const setPage = (next: string) => {
+    const target = validViews.has(next) ? next : 'dashboard'
+    const path = target === 'dashboard' ? '/' : `/${target}`
+    if (window.location.pathname !== path) window.history.pushState({}, '', path)
+    setView(target)
+    setSearch('')
+  }
   const bumpAssignment = (id: string) => setAssignments(current => current.map(a => a.id === id ? { ...a, status: statusOrder[(statusOrder.indexOf(a.status) + 1) % statusOrder.length] } : a))
 
   return <div className="app-shell">
