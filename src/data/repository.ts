@@ -9,7 +9,7 @@ export type Group13Repository = {
   getMembers: () => Promise<Member[]>
   getStats: () => Promise<{ streak: number; completed: number; total: number; focus: string }>
   updateAssignmentStatus: (id: string, status: AssignmentStatus) => Promise<void>
-  createMaterial: (material: Omit<Material, 'id'>) => Promise<Material>
+  createMaterial: (material: Omit<Material, 'id'>, file?: File) => Promise<Material>
   createAssignment: (assignment: Omit<Assignment, 'id'>) => Promise<Assignment>
 }
 
@@ -30,7 +30,7 @@ async function readRequired<T>(
 
 const supabaseRepository: Group13Repository = {
   getUnits: () => readRequired<Unit>('units', async () => supabase!.from('units').select('id,name,code,lead,progress,next,color').order('name')),
-  getMaterials: () => readRequired<Material>('materials', async () => supabase!.from('materials').select('id,title,type,unit,topic,date,source').order('date', { ascending: false })),
+  getMaterials: () => readRequired<Material>('materials', async () => supabase!.from('materials').select('id,title,type,unit,topic,date,source,url,storage_path').order('date', { ascending: false })),
   getAssignments: () => readRequired<Assignment>('assignments', async () => supabase!.from('assignments').select('id,title,unit,due,status,owner,reviewer,brief').order('due')),
   getDiscussions: () => readRequired<Discussion>('discussions', async () => supabase!.from('discussions').select('id,title,day,time,leader,status,prep,topics').order('day')),
   getMembers: () => readRequired<Member>('members', async () => supabase!.from('members').select('name,initials,role,units,progress,tone').order('name')),
@@ -40,10 +40,16 @@ const supabaseRepository: Group13Repository = {
     const { error } = await supabase.from('assignments').update({ status }).eq('id', id)
     if (error) throw new Error(`Could not update assignment: ${error.message}`)
   },
-  createMaterial: async material => {
+  createMaterial: async (material, file) => {
     if (!supabase) throw new Error('Supabase is not configured.')
-    const record = { id: crypto.randomUUID(), ...material }
-    const { data, error } = await supabase.from('materials').insert(record).select('id,title,type,unit,topic,date,source').single()
+    let record = { id: crypto.randomUUID(), ...material }
+    if (file) {
+      const path = `${record.id}/${file.name.replace(/[^a-zA-Z0-9._-]/g, '-')}`
+      const upload = await supabase.storage.from('materials').upload(path, file, { upsert: false })
+      if (upload.error) throw new Error(`Could not upload material: ${upload.error.message}`)
+      record = { ...record, url: supabase.storage.from('materials').getPublicUrl(path).data.publicUrl, storage_path: path }
+    }
+    const { data, error } = await supabase.from('materials').insert(record).select('id,title,type,unit,topic,date,source,url,storage_path').single()
     if (error) throw new Error(`Could not add material: ${error.message}`)
     return data as Material
   },

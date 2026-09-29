@@ -22,6 +22,9 @@ create table if not exists public.materials (
   created_at timestamptz not null default now()
 );
 
+alter table public.materials add column if not exists url text;
+alter table public.materials add column if not exists storage_path text;
+
 create table if not exists public.assignments (
   id text primary key,
   title text not null,
@@ -77,6 +80,15 @@ create policy "Group 13 materials can be created" on public.materials for insert
 create policy "Group 13 assignments can be created" on public.assignments for insert to anon, authenticated with check (true);
 create policy "Group 13 discussions are readable" on public.discussions for select to anon, authenticated using (true);
 create policy "Group 13 members are readable" on public.members for select to anon, authenticated using (true);
+
+insert into storage.buckets (id, name, public)
+values ('materials', 'materials', true)
+on conflict (id) do update set public = true;
+
+drop policy if exists "Group 13 materials files are readable" on storage.objects;
+drop policy if exists "Group 13 materials files can be uploaded" on storage.objects;
+create policy "Group 13 materials files are readable" on storage.objects for select to anon, authenticated using (bucket_id = 'materials');
+create policy "Group 13 materials files can be uploaded" on storage.objects for insert to anon, authenticated with check (bucket_id = 'materials');
 
 grant select on table public.units, public.materials, public.assignments, public.discussions, public.members to anon, authenticated;
 grant update on table public.assignments to anon, authenticated;
