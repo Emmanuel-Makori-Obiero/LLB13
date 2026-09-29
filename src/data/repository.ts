@@ -9,6 +9,8 @@ export type Group13Repository = {
   getMembers: () => Promise<Member[]>
   getStats: () => Promise<{ streak: number; completed: number; total: number; focus: string }>
   updateAssignmentStatus: (id: string, status: AssignmentStatus) => Promise<void>
+  createMaterial: (material: Omit<Material, 'id'>) => Promise<Material>
+  createAssignment: (assignment: Omit<Assignment, 'id'>) => Promise<Assignment>
 }
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined
@@ -37,6 +39,20 @@ const supabaseRepository: Group13Repository = {
     if (!supabase) throw new Error('Supabase is not configured.')
     const { error } = await supabase.from('assignments').update({ status }).eq('id', id)
     if (error) throw new Error(`Could not update assignment: ${error.message}`)
+  },
+  createMaterial: async material => {
+    if (!supabase) throw new Error('Supabase is not configured.')
+    const record = { id: crypto.randomUUID(), ...material }
+    const { data, error } = await supabase.from('materials').insert(record).select('id,title,type,unit,topic,date,source').single()
+    if (error) throw new Error(`Could not add material: ${error.message}`)
+    return data as Material
+  },
+  createAssignment: async assignment => {
+    if (!supabase) throw new Error('Supabase is not configured.')
+    const record = { id: crypto.randomUUID(), ...assignment }
+    const { data, error } = await supabase.from('assignments').insert(record).select('id,title,unit,due,status,owner,reviewer,brief').single()
+    if (error) throw new Error(`Could not create assignment: ${error.message}`)
+    return data as Assignment
   },
 }
 

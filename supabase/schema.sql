@@ -64,6 +64,8 @@ drop policy if exists "Group 13 units are readable" on public.units;
 drop policy if exists "Group 13 materials are readable" on public.materials;
 drop policy if exists "Group 13 assignments are readable" on public.assignments;
 drop policy if exists "Group 13 assignments can be updated" on public.assignments;
+drop policy if exists "Group 13 materials can be created" on public.materials;
+drop policy if exists "Group 13 assignments can be created" on public.assignments;
 drop policy if exists "Group 13 discussions are readable" on public.discussions;
 drop policy if exists "Group 13 members are readable" on public.members;
 
@@ -71,8 +73,14 @@ create policy "Group 13 units are readable" on public.units for select to anon, 
 create policy "Group 13 materials are readable" on public.materials for select to anon, authenticated using (true);
 create policy "Group 13 assignments are readable" on public.assignments for select to anon, authenticated using (true);
 create policy "Group 13 assignments can be updated" on public.assignments for update to anon, authenticated using (true) with check (true);
+create policy "Group 13 materials can be created" on public.materials for insert to anon, authenticated with check (true);
+create policy "Group 13 assignments can be created" on public.assignments for insert to anon, authenticated with check (true);
 create policy "Group 13 discussions are readable" on public.discussions for select to anon, authenticated using (true);
 create policy "Group 13 members are readable" on public.members for select to anon, authenticated using (true);
+
+grant select on table public.units, public.materials, public.assignments, public.discussions, public.members to anon, authenticated;
+grant update on table public.assignments to anon, authenticated;
+grant insert on table public.materials, public.assignments to anon, authenticated;
 
 insert into public.units (id, name, code, lead, progress, next, color) values
   ('criminal', 'Criminal Law I', 'LAW 111', 'Joan W.', 72, 'Mens rea · Thu 7:00 PM', '#8F3E32'),

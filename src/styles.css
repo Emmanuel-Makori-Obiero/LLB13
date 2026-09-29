@@ -147,6 +147,14 @@ h3 { font-size:14px; font-weight:700; }
 .mobile-nav { display:none; }
 .connection-error { display:flex; flex-direction:column; gap:5px; margin-bottom:18px; padding:14px 16px; border:1px solid #e5b9ad; background:#fff7f4; color:var(--oxblood); font-size:12px; }
 .connection-error span { color:var(--muted); }
+.assignment-row { width:100%; text-align:left; border:0; border-bottom:1px solid var(--line); background:transparent; font:inherit; }
+.assignment-row:hover { background:#fbfaf6; }
+.form-overlay { position:fixed; inset:0; z-index:40; display:grid; place-items:center; padding:20px; background:rgba(22,58,52,.55); }
+.form-card { width:min(520px,100%); max-height:calc(100vh - 40px); overflow:auto; padding:24px; background:var(--paper); box-shadow:0 24px 70px rgba(0,0,0,.25); }
+.data-form { display:grid; gap:13px; margin-top:18px; }
+.data-form label { display:grid; gap:6px; color:var(--muted); font-size:11px; }
+.data-form input, .data-form select, .data-form textarea { width:100%; border:1px solid var(--line); background:var(--white); padding:10px; color:var(--ink); font:inherit; }
+.data-form textarea { min-height:100px; resize:vertical; }
 .meeting-overlay { position:fixed; inset:0; z-index:30; display:grid; place-items:center; padding:20px; background:rgba(22,58,52,.78); }
 .meeting-shell { width:min(1100px,100%); max-height:calc(100vh - 40px); overflow:auto; background:var(--paper); box-shadow:0 24px 70px rgba(0,0,0,.25); }
 .meeting-header { display:flex; align-items:flex-start; justify-content:space-between; padding:22px 25px; border-bottom:1px solid var(--line); }
