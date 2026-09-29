@@ -21,7 +21,11 @@ Open `http://localhost:3000`.
 4. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
 5. Restart `npm run dev`.
 
+Open the app and choose **Create an account** on the sign-in screen. If email confirmation is enabled in Supabase Auth, confirm the email before signing in. The workspace is private: database access and material uploads require an authenticated Supabase user.
+
 When both values are present, `src/data/repository.ts` uses Supabase as the only source of truth. Configuration or query errors are shown in the UI; the client no longer falls back to bundled demo data.
+
+The Library accepts either a web link or a file upload and stores uploaded files in the `materials` Supabase Storage bucket.
 
 ## Live discussion rooms
 
