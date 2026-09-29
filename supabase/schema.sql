@@ -63,12 +63,14 @@ alter table public.members enable row level security;
 drop policy if exists "Group 13 units are readable" on public.units;
 drop policy if exists "Group 13 materials are readable" on public.materials;
 drop policy if exists "Group 13 assignments are readable" on public.assignments;
+drop policy if exists "Group 13 assignments can be updated" on public.assignments;
 drop policy if exists "Group 13 discussions are readable" on public.discussions;
 drop policy if exists "Group 13 members are readable" on public.members;
 
 create policy "Group 13 units are readable" on public.units for select to anon, authenticated using (true);
 create policy "Group 13 materials are readable" on public.materials for select to anon, authenticated using (true);
 create policy "Group 13 assignments are readable" on public.assignments for select to anon, authenticated using (true);
+create policy "Group 13 assignments can be updated" on public.assignments for update to anon, authenticated using (true) with check (true);
 create policy "Group 13 discussions are readable" on public.discussions for select to anon, authenticated using (true);
 create policy "Group 13 members are readable" on public.members for select to anon, authenticated using (true);
 

@@ -1,6 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { assignments, discussions, materials, members, stats, units } from './seed'
-import type { Assignment, Discussion, Material, Member, Unit } from './seed'
+import type { Assignment, AssignmentStatus, Discussion, Material, Member, Unit } from './types'
 
 export type Group13Repository = {
   getUnits: () => Promise<Unit[]>
@@ -8,46 +7,37 @@ export type Group13Repository = {
   getAssignments: () => Promise<Assignment[]>
   getDiscussions: () => Promise<Discussion[]>
   getMembers: () => Promise<Member[]>
-  getStats: () => Promise<typeof stats>
-}
-
-export const mockRepository: Group13Repository = {
-  getUnits: async () => units,
-  getMaterials: async () => materials,
-  getAssignments: async () => assignments,
-  getDiscussions: async () => discussions,
-  getMembers: async () => members,
-  getStats: async () => stats
+  getStats: () => Promise<{ streak: number; completed: number; total: number; focus: string }>
+  updateAssignmentStatus: (id: string, status: AssignmentStatus) => Promise<void>
 }
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey)
-const supabase = isSupabaseConfigured ? createClient(supabaseUrl!, supabaseAnonKey!) : null
+export const supabase = isSupabaseConfigured ? createClient(supabaseUrl!, supabaseAnonKey!) : null
 
-async function readWithFallback<T>(
+async function readRequired<T>(
   table: string,
   query: () => Promise<{ data: T[] | null; error: { message: string } | null }>,
-  fallback: T[],
 ): Promise<T[]> {
-  if (!supabase) return fallback
+  if (!supabase) throw new Error('Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env.local.')
   const { data, error } = await query()
-  if (error) {
-    console.warn(`Supabase query failed for ${table}; using seeded fallback.`, error.message)
-    return fallback
-  }
-  return data ?? fallback
+  if (error) throw new Error(`Supabase query failed for ${table}: ${error.message}`)
+  return data ?? []
 }
 
 const supabaseRepository: Group13Repository = {
-  getUnits: () => readWithFallback<Unit>('units', async () => supabase!.from('units').select('id,name,code,lead,progress,next,color').order('name'), units),
-  getMaterials: () => readWithFallback<Material>('materials', async () => supabase!.from('materials').select('id,title,type,unit,topic,date,source').order('date', { ascending: false }), materials),
-  getAssignments: () => readWithFallback<Assignment>('assignments', async () => supabase!.from('assignments').select('id,title,unit,due,status,owner,reviewer,brief').order('due'), assignments),
-  getDiscussions: () => readWithFallback<Discussion>('discussions', async () => supabase!.from('discussions').select('id,title,day,time,leader,status,prep,topics').order('day'), discussions),
-  getMembers: () => readWithFallback<Member>('members', async () => supabase!.from('members').select('name,initials,role,units,progress,tone').order('name'), members),
-  getStats: async () => stats,
+  getUnits: () => readRequired<Unit>('units', async () => supabase!.from('units').select('id,name,code,lead,progress,next,color').order('name')),
+  getMaterials: () => readRequired<Material>('materials', async () => supabase!.from('materials').select('id,title,type,unit,topic,date,source').order('date', { ascending: false })),
+  getAssignments: () => readRequired<Assignment>('assignments', async () => supabase!.from('assignments').select('id,title,unit,due,status,owner,reviewer,brief').order('due')),
+  getDiscussions: () => readRequired<Discussion>('discussions', async () => supabase!.from('discussions').select('id,title,day,time,leader,status,prep,topics').order('day')),
+  getMembers: () => readRequired<Member>('members', async () => supabase!.from('members').select('name,initials,role,units,progress,tone').order('name')),
+  getStats: async () => ({ streak: 0, completed: 0, total: 0, focus: '' }),
+  updateAssignmentStatus: async (id, status) => {
+    if (!supabase) throw new Error('Supabase is not configured.')
+    const { error } = await supabase.from('assignments').update({ status }).eq('id', id)
+    if (error) throw new Error(`Could not update assignment: ${error.message}`)
+  },
 }
 
-// UI components depend on this interface, not on the SDK. With VITE_SUPABASE_* present,
-// Supabase is the source of truth; without it, the app stays usable in demo mode.
-export const repository: Group13Repository = isSupabaseConfigured ? supabaseRepository : mockRepository
+export const repository: Group13Repository = supabaseRepository

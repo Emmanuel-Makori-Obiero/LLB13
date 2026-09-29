@@ -1,21 +1,22 @@
 # Group 13 Hub — implementation plan
 
 ## Product outcome
-Deliver a navigable, responsive academic operating system shell for Group 13 with realistic seeded data and a design system that feels editorial and law-school specific rather than AI-generated or generic SaaS.
+Deliver a navigable, responsive academic operating system shell for Group 13 with Supabase-backed data and a design system that feels editorial and law-school specific rather than AI-generated or generic SaaS.
 
 ## Architecture
 - **Frontend:** React + TypeScript + Vite SPA, managed with npm.
 - **Database:** Supabase via `@supabase/supabase-js`, using `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `.env.local`.
-- **Data boundary:** `src/data/repository.ts` exposes a typed `Group13Repository`. The app uses the Supabase adapter when both environment values are present and safely falls back to `src/data/seed.ts` when they are absent or a table is not ready.
+- **Data boundary:** `src/data/repository.ts` exposes a typed `Group13Repository`. Supabase is the only data source; configuration and query failures are surfaced in the UI.
+- **Meetings:** Browser WebRTC carries audio/video peer-to-peer. Supabase Realtime Broadcast/Presence provides free signaling and room presence.
 - **State:** Local React state for navigation, filters, search, status transitions, and modal/drawer states in this first slice.
 - **Styling:** Plain CSS with design tokens in `src/styles.css`; avoid heavy UI libraries to keep the visual system intentional.
 - **Serving:** Static SPA build output in `dist`; preview listener on port 3000. If later published with dynamic APIs, route `/api/*` to the server and `/*` to static SPA fallback; personalized responses remain private/no-store.
 
 ## Product structure
 - `src/App.tsx`: shell, route-like view switching, data orchestration, responsive navigation.
-- `src/data/seed.ts`: realistic Group 13 fallback data.
-- `src/data/repository.ts`: Supabase-backed repository plus demo fallback.
-- `supabase/schema.sql`: starter tables, read policies, and seed inserts.
+- `src/data/types.ts`: shared data types used by the Supabase repository and UI.
+- `src/data/repository.ts`: Supabase-only typed repository.
+- `supabase/schema.sql`: tables, read/update policies, and initial project records.
 - `src/styles.css`: visual system and responsive layout.
 - `public/`: favicon, route manifest, and icon assets.
 

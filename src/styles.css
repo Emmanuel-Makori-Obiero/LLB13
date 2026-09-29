@@ -145,5 +145,33 @@ h3 { font-size:14px; font-weight:700; }
 .toast { position:fixed; bottom:22px; right:24px; z-index:20; background:var(--forest); color:var(--paper); border:1px solid rgba(255,255,255,.16); padding:12px 12px 12px 14px; display:flex; align-items:center; gap:9px; box-shadow:0 10px 25px rgba(22,58,52,.18); font-size:12px; }
 .toast button { border:0; background:transparent; color:rgba(255,255,255,.62); display:grid; place-items:center; padding:0; margin-left:7px; }
 .mobile-nav { display:none; }
+.connection-error { display:flex; flex-direction:column; gap:5px; margin-bottom:18px; padding:14px 16px; border:1px solid #e5b9ad; background:#fff7f4; color:var(--oxblood); font-size:12px; }
+.connection-error span { color:var(--muted); }
+.meeting-overlay { position:fixed; inset:0; z-index:30; display:grid; place-items:center; padding:20px; background:rgba(22,58,52,.78); }
+.meeting-shell { width:min(1100px,100%); max-height:calc(100vh - 40px); overflow:auto; background:var(--paper); box-shadow:0 24px 70px rgba(0,0,0,.25); }
+.meeting-header { display:flex; align-items:flex-start; justify-content:space-between; padding:22px 25px; border-bottom:1px solid var(--line); }
+.meeting-header h2 { margin-top:5px; font-size:24px; }
+.meeting-header p { margin-top:5px; color:var(--muted); font-size:12px; }
+.meeting-layout { display:grid; grid-template-columns:minmax(0,1fr) 250px; min-height:450px; }
+.video-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px; align-content:start; padding:16px; background:#0e2825; }
+.video-tile { position:relative; aspect-ratio:16/10; overflow:hidden; background:#183b36; border:1px solid rgba(255,255,255,.15); }
+.video-tile video { width:100%; height:100%; object-fit:cover; display:block; }
+.video-tile span { position:absolute; left:10px; bottom:9px; color:white; font-size:11px; text-shadow:0 1px 3px #000; }
+.meeting-empty { grid-column:1/-1; display:grid; place-items:center; align-content:center; gap:9px; min-height:260px; color:#dbe8df; text-align:center; }
+.meeting-empty p { font-size:13px; }
+.meeting-empty small { color:#99b2a5; }
+.meeting-chat { display:flex; flex-direction:column; min-height:450px; padding:18px; background:var(--white); border-left:1px solid var(--line); }
+.chat-messages { flex:1; overflow:auto; margin:14px 0; }
+.chat-message { display:flex; flex-direction:column; gap:3px; margin-bottom:12px; font-size:11px; }
+.chat-message strong { color:var(--forest); font-size:10px; }
+.chat-message span { color:var(--ink); line-height:1.4; }
+.chat-form { display:flex; gap:6px; border-top:1px solid var(--line); padding-top:12px; }
+.chat-form input { min-width:0; flex:1; border:1px solid var(--line); padding:9px; background:var(--paper); font-size:11px; }
+.chat-form button { border:0; background:var(--forest); color:white; width:34px; display:grid; place-items:center; }
+.meeting-controls { display:flex; justify-content:center; align-items:center; gap:10px; padding:16px; border-top:1px solid var(--line); }
+.meeting-controls > button { width:38px; height:38px; display:grid; place-items:center; border:1px solid var(--line); background:var(--white); color:var(--forest); }
+.meeting-controls .control-off { background:#fff0ec; color:var(--oxblood); }
+.meeting-controls .leave-button { width:auto; padding:0 17px; background:var(--oxblood); color:white; border-color:var(--oxblood); font-size:11px; }
+@media (max-width:760px) { .meeting-overlay { padding:0; } .meeting-shell { max-height:100vh; height:100vh; } .meeting-layout { grid-template-columns:1fr; } .meeting-chat { min-height:180px; max-height:240px; } .video-grid { min-height:360px; } }
 @media (max-width: 1050px) { .sidebar { width:205px; } .topbar,.content { padding-left:28px; padding-right:28px; } .grid-main,.page-grid { grid-template-columns:1fr; } }
 @media (max-width: 760px) { .sidebar { display:none; } .mobile-nav { display:flex; position:sticky; top:0; z-index:10; background:var(--forest); color:#fff; height:58px; align-items:center; justify-content:space-between; padding:0 17px; } .mobile-nav .brand { padding:0; } .topbar { height:57px; padding:0 17px; } .content { padding:26px 17px 45px; } h1 { font-size:31px; } .page-heading { align-items:flex-start; flex-direction:column; margin-bottom:22px; } .date-stamp { text-align:left; } .grid-two,.unit-list { grid-template-columns:1fr; } .card-pad { padding:17px; } .table { min-width:650px; } .table-wrap { overflow-x:auto; } .toast { left:17px; right:17px; bottom:16px; } }
