@@ -56,3 +56,5 @@ html, body, #root { width: 100%; }
   .grid-main, .page-grid { grid-template-columns: 1fr; }
   .media-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+.reader-frame iframe, .reader-frame object { display:block; width:100%; height:100%; }
+.reader-page-expanded .reader-frame iframe, .reader-page-expanded .reader-frame object { min-height:0; }

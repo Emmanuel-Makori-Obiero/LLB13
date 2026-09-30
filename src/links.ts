@@ -7,7 +7,8 @@ export function readerUrl(material: Material) {
   const url = safeUrl(material.url)
   if (!url) return ''
   const path = new URL(url).pathname
-  if (/\.(pdf|docx?|pptx?|xlsx?)(\?|$)/i.test(path) || material.storage_path) return `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(url)}`
+  if (/\.pdf(\?|$)/i.test(path)) return url
+  if (/\.(docx?|pptx?|xlsx?)(\?|$)/i.test(path) || (material.storage_path && !/\.pdf(\?|$)/i.test(material.storage_path))) return `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(url)}`
   return toEmbedUrl(url)
 }
 export function downloadInfo(material: Material): { href: string; label: string; file: boolean } | null { const url = safeUrl(material.url); if (!url) return null; if (material.storage_path && supabase) return { href: supabase.storage.from('materials').getPublicUrl(material.storage_path, { download: true }).data.publicUrl, label: 'Download', file: true }; return { href: url, label: /\.(pdf|docx?|pptx?|xlsx?|zip)(\?|#|$)/i.test(url) ? 'Download' : 'Open link', file: true } }
