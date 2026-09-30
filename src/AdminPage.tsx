@@ -9,6 +9,8 @@ type Props = {
   members: Member[]
   currentEmail: string
   setNotice: (notice: string) => void
+  onUnitAdded?: (unit: Unit) => void
+  onUnitRemoved?: (id: string) => void
 }
 
 const TONES = ['#8F3E32', '#163A34', '#6E7D63', '#C96E52', '#536C75', '#9E7C46']
@@ -16,13 +18,23 @@ const splitUnits = (value: string) => value.split('·').map(part => part.trim())
 const initialsOf = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase() || '?'
 const formatDate = (value: string | null) => (value ? new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'never')
 
-export default function AdminPage({ units, members, currentEmail, setNotice }: Props) {
+export default function AdminPage({ units, members, currentEmail, setNotice, onUnitAdded, onUnitRemoved }: Props) {
   const [accounts, setAccounts] = useState<AdminAccount[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [newName, setNewName] = useState('')
   const [newRole, setNewRole] = useState('Member')
   const [newSection, setNewSection] = useState<'A' | 'B'>('A')
+  const [unitName, setUnitName] = useState('')
+  const [unitCode, setUnitCode] = useState('')
+  const addUnit = async () => {
+    if (!unitName.trim() || !unitCode.trim()) { setNotice('Enter the unit name and code.'); return }
+    try { const created = await repository.adminCreateUnit({ name: unitName.trim(), code: unitCode.trim(), lead: 'To be assigned' }); onUnitAdded?.(created); setUnitName(''); setUnitCode(''); setNotice(`${created.name} added.`) } catch (e) { setNotice(e instanceof Error ? e.message : 'Could not add unit.') }
+  }
+  const removeUnit = async (unit: Unit) => {
+    if (!window.confirm(`Remove ${unit.name}? Materials and assignments keep their text but lose this unit.`)) return
+    try { await repository.adminDeleteUnit(unit.id); onUnitRemoved?.(unit.id); setNotice(`${unit.name} removed.`) } catch (e) { setNotice(e instanceof Error ? e.message : 'Could not remove unit.') }
+  }
 
   const run = useCallback(async (action: () => Promise<void>, success: string) => {
     try {
@@ -182,7 +194,9 @@ export default function AdminPage({ units, members, currentEmail, setNotice }: P
         </div>
 
         <div className="card card-pad">
-          <div className="card-header"><span className="section-label">Unit leads</span></div>
+          <div className="card-header"><span className="section-label">Units and unit representatives</span></div>
+          <div className="unit-add"><input placeholder="Unit name, e.g. Constitutional Law" value={unitName} onChange={e => setUnitName(e.target.value)} /><input placeholder="Code, e.g. LAW 101" value={unitCode} onChange={e => setUnitCode(e.target.value)} /><button className="primary-button" onClick={() => void addUnit()}>Add unit</button></div>
+          {units.length === 0 && <p className="field-hint">No units yet. Add the first one above, then assign members to it.</p>}
           <div className="row-list">
             {units.map(unit => (
               <div className="row" key={unit.id}>
@@ -200,6 +214,7 @@ export default function AdminPage({ units, members, currentEmail, setNotice }: P
                     {leadOptions(unit).map(name => <option key={name} value={name}>{name}</option>)}
                     <option value="To be assigned">To be assigned</option>
                   </select>
+                  <button className="icon-button" aria-label={`Remove ${unit.name}`} onClick={() => void removeUnit(unit)}>×</button>
                 </div>
               </div>
             ))}

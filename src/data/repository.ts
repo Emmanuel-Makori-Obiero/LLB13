@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import type { AdminAccount, Assignment, AssignmentStatus, Discussion, Material, MediaResource, Member, Todo, Unit } from './types'
+import type { AdminAccount, Assignment, AssignmentStatus, Discussion, Lesson, Material, MediaResource, Member, Todo, Unit } from './types'
 
 export type Group13Repository = {
   getUnits: () => Promise<Unit[]>
@@ -27,6 +27,11 @@ export type Group13Repository = {
   adminCreateMember: (member: Member) => Promise<void>
   adminDeleteMember: (name: string) => Promise<void>
   adminUpdateUnitLead: (id: string, lead: string) => Promise<void>
+  getTimetable: () => Promise<Lesson[]>
+  createLesson: (lesson: Omit<Lesson, 'id' | 'created_by'>) => Promise<Lesson>
+  deleteLesson: (id: string) => Promise<void>
+  adminCreateUnit: (unit: Pick<Unit, 'name' | 'code' | 'lead'>) => Promise<Unit>
+  adminDeleteUnit: (id: string) => Promise<void>
 }
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined
@@ -74,6 +79,31 @@ async function readRequired<T>(
 }
 
 const supabaseRepository: Group13Repository = {
+  getTimetable: () => readRequired<Lesson>('timetable', async () => supabase!.from('timetable').select('id,unit,topic,lesson_date,start_time,end_time,representative,venue,created_by').order('lesson_date').order('start_time')),
+  createLesson: async lesson => {
+    if (!supabase) throw new Error('Not connected.')
+    const { data, error } = await supabase.from('timetable').insert(lesson).select('id,unit,topic,lesson_date,start_time,end_time,representative,venue,created_by').single()
+    if (error) throw new Error(`Could not add lesson: ${error.message}`)
+    return data as Lesson
+  },
+  deleteLesson: async id => {
+    if (!supabase) throw new Error('Not connected.')
+    const { error } = await supabase.from('timetable').delete().eq('id', id)
+    if (error) throw new Error(`Could not delete lesson: ${error.message}`)
+  },
+  adminCreateUnit: async unit => {
+    if (!supabase) throw new Error('Not connected.')
+    const colors = ['#2F5D50', '#C96E52', '#5B6FA6', '#B08A3E', '#7A5C8E', '#3F7F8C']
+    const { count } = await supabase.from('units').select('id', { count: 'exact', head: true })
+    const { data, error } = await supabase.from('units').insert({ ...unit, progress: 0, next: 'To be scheduled', color: colors[(count ?? 0) % colors.length] }).select('id,name,code,lead,progress,next,color').single()
+    if (error) throw new Error(`Could not create unit: ${error.message}`)
+    return data as Unit
+  },
+  adminDeleteUnit: async id => {
+    if (!supabase) throw new Error('Not connected.')
+    const { error } = await supabase.from('units').delete().eq('id', id)
+    if (error) throw new Error(`Could not delete unit: ${error.message}`)
+  },
   getUnits: () => readRequired<Unit>('units', async () => supabase!.from('units').select('id,name,code,lead,progress,next,color').order('name')),
   getMaterials: () => readRequired<Material>('materials', async () => supabase!.from('materials').select(MATERIAL_COLUMNS).order('date', { ascending: false })),
   getAssignments: () => readRequired<Assignment>('assignments', async () => supabase!.from('assignments').select('id,title,unit,due,status,owner,reviewer,brief').order('due')),

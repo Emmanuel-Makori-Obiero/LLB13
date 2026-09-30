@@ -7,3 +7,5 @@ export type Member = { name: string; initials: string; role: string; units: stri
 export type Todo = { id: string; title: string; completed: boolean; due?: string; assignment_id?: string; source?: 'manual' | 'assignment' }
 export type MediaResource = { id: string; kind: 'movie' | 'youtube' | 'music' | 'court'; title: string; url: string; topic: string; source: string }
 export type AdminAccount = { id: string; email: string; display_name: string; created_at: string; last_sign_in_at: string | null }
+
+export type Lesson = { id: string; unit: string; topic: string; lesson_date: string; start_time?: string | null; end_time?: string | null; representative?: string | null; venue?: string | null; created_by?: string | null }

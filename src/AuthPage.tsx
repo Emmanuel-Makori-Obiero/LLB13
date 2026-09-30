@@ -185,8 +185,8 @@ export default function LoginPage({ configured, onSignedIn }: { configured: bool
 
           {!configured ? (
             <div className="auth-notice error">
-              <strong>Supabase setup required</strong>
-              <span>Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env.local, then restart the dev server.</span>
+              <strong>We’ll be right back</strong>
+              <span>Group 13 is being set up. Please try again in a little while.</span>
             </div>
           ) : pendingEmail ? (
             <div className="auth-pending">
