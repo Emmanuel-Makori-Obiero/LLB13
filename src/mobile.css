@@ -31,8 +31,10 @@
   .tabbar button.active { color:var(--forest); font-weight:600; }
   .app-shell, .main { width:100%; min-height:100dvh; }
   .main { padding-bottom:calc(84px + env(safe-area-inset-bottom)); }
-  .content, .topbar { width:100%; padding-left:16px; padding-right:16px; }
-  .content { padding-bottom:calc(60px + env(safe-area-inset-bottom)); }
+  .content { width:100%; padding-left:0; padding-right:0; padding-bottom:calc(60px + env(safe-area-inset-bottom)); }
+  .topbar { width:100%; padding-left:16px; padding-right:16px; }
+  .content > .page-heading, .content > .toolbar, .content > .connection-error { margin-left:16px; margin-right:16px; }
+  .content > .empty { margin-left:16px; margin-right:16px; }
   .quick-row { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-top:14px; }
   .quick-row button { display:flex; align-items:center; gap:8px; padding:14px; border-radius:12px; border:1px solid rgba(0,0,0,.1); background:#fff; font-weight:600; }
   .tt-time { min-width:78px; }
