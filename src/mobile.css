@@ -20,8 +20,9 @@
 .install-chip { display:none; }
 @media (max-width: 760px) {
   body { overflow-x: hidden; }
+  .app-shell { display:block; width:100%; max-width:100%; }
   .sidebar { display: none; }
-  .mobile-nav { gap:10px; align-items:center; }
+  .mobile-nav { width:100%; max-width:100%; gap:10px; align-items:center; }
   .mobile-title { display:block; flex:1; font-weight:600; font-size:15px; }
   .mobile-avatar { display:block; background:none; border:0; padding:0; }
   .install-chip { display:inline-flex; align-items:center; gap:5px; padding:6px 10px; border-radius:999px; border:1px solid rgba(255,255,255,.4); background:transparent; color:#fff; font-size:12px; }
