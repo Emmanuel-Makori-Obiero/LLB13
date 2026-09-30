@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import type { Assignment, AssignmentStatus, Discussion, Material, MediaResource, Member, Todo, Unit } from './types'
+import type { AdminAccount, Assignment, AssignmentStatus, Discussion, Material, MediaResource, Member, Todo, Unit } from './types'
 
 export type Group13Repository = {
   getUnits: () => Promise<Unit[]>
@@ -16,6 +16,17 @@ export type Group13Repository = {
   toggleTodo: (id: string, completed: boolean) => Promise<void>
   getMedia: () => Promise<MediaResource[]>
   createMedia: (media: Omit<MediaResource, 'id'>) => Promise<MediaResource>
+  isSuperAdmin: () => Promise<boolean>
+  deleteMaterial: (material: Material) => Promise<void>
+  createMeeting: (title: string, leader: string) => Promise<Discussion>
+  deleteMeeting: (id: string) => Promise<void>
+  deleteMyAccount: () => Promise<void>
+  adminListAccounts: () => Promise<AdminAccount[]>
+  adminRemoveAccount: (id: string) => Promise<void>
+  adminUpdateMember: (name: string, changes: Partial<Pick<Member, 'role' | 'units' | 'section' | 'progress'>>) => Promise<void>
+  adminCreateMember: (member: Member) => Promise<void>
+  adminDeleteMember: (name: string) => Promise<void>
+  adminUpdateUnitLead: (id: string, lead: string) => Promise<void>
 }
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined
@@ -34,6 +45,24 @@ export async function uploadUserAsset(kind: 'avatar' | 'wallpaper', file: File):
   return supabase.storage.from('profiles').getPublicUrl(path).data.publicUrl
 }
 
+const MATERIAL_COLUMNS = 'id,title,type,unit,topic,date,source,url,storage_path,owner_id'
+const DISCUSSION_COLUMNS = 'id,title,day,time,leader,status,prep,topics,instant,created_by'
+
+function db() {
+  if (!supabase) throw new Error('Supabase is not configured.')
+  return supabase
+}
+
+// Removes a person's stored files (library uploads + profile images) before their account is deleted.
+async function removeUserFiles(userId: string) {
+  const client = db()
+  const { data: rows } = await client.from('materials').select('storage_path').eq('owner_id', userId)
+  const paths = (rows ?? []).map(row => row.storage_path as string | null).filter((path): path is string => Boolean(path))
+  if (paths.length) await client.storage.from('materials').remove(paths)
+  const { data: images } = await client.storage.from('profiles').list(userId)
+  if (images?.length) await client.storage.from('profiles').remove(images.map(image => `${userId}/${image.name}`))
+}
+
 async function readRequired<T>(
   table: string,
   query: () => Promise<{ data: T[] | null; error: { message: string } | null }>,
@@ -46,9 +75,9 @@ async function readRequired<T>(
 
 const supabaseRepository: Group13Repository = {
   getUnits: () => readRequired<Unit>('units', async () => supabase!.from('units').select('id,name,code,lead,progress,next,color').order('name')),
-  getMaterials: () => readRequired<Material>('materials', async () => supabase!.from('materials').select('id,title,type,unit,topic,date,source,url,storage_path').order('date', { ascending: false })),
+  getMaterials: () => readRequired<Material>('materials', async () => supabase!.from('materials').select(MATERIAL_COLUMNS).order('date', { ascending: false })),
   getAssignments: () => readRequired<Assignment>('assignments', async () => supabase!.from('assignments').select('id,title,unit,due,status,owner,reviewer,brief').order('due')),
-  getDiscussions: () => readRequired<Discussion>('discussions', async () => supabase!.from('discussions').select('id,title,day,time,leader,status,prep,topics').order('day')),
+  getDiscussions: () => readRequired<Discussion>('discussions', async () => supabase!.from('discussions').select(DISCUSSION_COLUMNS).order('day')),
   getMembers: () => readRequired<Member>('members', async () => supabase!.from('members').select('name,initials,role,units,progress,tone,section').order('name')),
   getStats: async () => ({ streak: 0, completed: 0, total: 0, focus: '' }),
   updateAssignmentStatus: async (id, status) => {
@@ -66,7 +95,7 @@ const supabaseRepository: Group13Repository = {
       if (upload.error) throw new Error(`Could not upload material: ${upload.error.message}`)
       record = { ...record, url: supabase.storage.from('materials').getPublicUrl(path).data.publicUrl, storage_path: path }
     }
-    const { data, error } = await supabase.from('materials').insert(record).select('id,title,type,unit,topic,date,source,url,storage_path').single()
+    const { data, error } = await supabase.from('materials').insert(record).select(MATERIAL_COLUMNS).single()
     if (error) throw new Error(`Could not add material: ${error.message}`)
     return data as Material
   },
@@ -102,6 +131,80 @@ const supabaseRepository: Group13Repository = {
     const { data, error } = await supabase.from('media_resources').insert(record).select('id,kind,title,url,topic,source').single()
     if (error) throw new Error(`Could not add media: ${error.message}`)
     return data as MediaResource
+  },
+  isSuperAdmin: async () => {
+    const { data, error } = await db().rpc('is_super_admin')
+    return !error && data === true
+  },
+  deleteMaterial: async material => {
+    const client = db()
+    if (material.storage_path) {
+      const removed = await client.storage.from('materials').remove([material.storage_path])
+      if (removed.error) throw new Error(`Could not delete the file: ${removed.error.message}`)
+    }
+    const { data, error } = await client.from('materials').delete().eq('id', material.id).select('id')
+    if (error) throw new Error(`Could not delete material: ${error.message}`)
+    if (!data?.length) throw new Error('You can only delete materials you uploaded.')
+  },
+  createMeeting: async (title, leader) => {
+    const now = new Date()
+    const record = {
+      id: crypto.randomUUID(),
+      title,
+      day: now.toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'long' }),
+      time: now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+      leader,
+      status: 'Live now',
+      prep: 'Instant room',
+      topics: [] as string[],
+      instant: true,
+    }
+    const { data, error } = await db().from('discussions').insert(record).select(DISCUSSION_COLUMNS).single()
+    if (error) throw new Error(`Could not start the meeting: ${error.message}`)
+    return data as Discussion
+  },
+  deleteMeeting: async id => {
+    const { data, error } = await db().from('discussions').delete().eq('id', id).select('id')
+    if (error) throw new Error(`Could not end the meeting: ${error.message}`)
+    if (!data?.length) throw new Error('Only the host or the super admin can end this meeting.')
+  },
+  deleteMyAccount: async () => {
+    const client = db()
+    const { data: { user } } = await client.auth.getUser()
+    if (!user) throw new Error('Please sign in again before deleting your account.')
+    await removeUserFiles(user.id)
+    const { error } = await client.rpc('delete_my_account')
+    if (error) throw new Error(error.message)
+    await client.auth.signOut()
+  },
+  adminListAccounts: async () => {
+    const { data, error } = await db().rpc('admin_list_accounts')
+    if (error) throw new Error(`Could not load accounts: ${error.message}`)
+    return (data ?? []) as AdminAccount[]
+  },
+  adminRemoveAccount: async id => {
+    await removeUserFiles(id)
+    const { error } = await db().rpc('admin_remove_account', { target: id })
+    if (error) throw new Error(error.message)
+  },
+  adminUpdateMember: async (name, changes) => {
+    const { data, error } = await db().from('members').update(changes).eq('name', name).select('name')
+    if (error) throw new Error(`Could not update member: ${error.message}`)
+    if (!data?.length) throw new Error('Only the super admin can change the roster.')
+  },
+  adminCreateMember: async member => {
+    const { error } = await db().from('members').insert(member)
+    if (error) throw new Error(`Could not add member: ${error.message}`)
+  },
+  adminDeleteMember: async name => {
+    const { data, error } = await db().from('members').delete().eq('name', name).select('name')
+    if (error) throw new Error(`Could not remove member: ${error.message}`)
+    if (!data?.length) throw new Error('Only the super admin can change the roster.')
+  },
+  adminUpdateUnitLead: async (id, lead) => {
+    const { data, error } = await db().from('units').update({ lead }).eq('id', id).select('id')
+    if (error) throw new Error(`Could not update the unit lead: ${error.message}`)
+    if (!data?.length) throw new Error('Only the super admin can change unit leads.')
   },
 }
 
