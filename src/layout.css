@@ -31,6 +31,17 @@ html, body, #root { width: 100%; }
 .tab-bar { display: flex; gap: 18px; margin-top: 22px; border-bottom: 1px solid var(--line); }
 .tab { padding: 11px 0; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font-size: 11px; }
 .tab.active { color: var(--forest); border-color: var(--oxblood); font-weight: 700; }
+.table { width:100%; border-collapse:collapse; }
+.table th { padding:0 10px 11px 0; border-bottom:1px solid var(--line); color:var(--muted); font-size:9px; font-weight:700; letter-spacing:.13em; text-align:left; text-transform:uppercase; }
+.table td { padding:14px 10px 14px 0; border-bottom:1px solid var(--line); vertical-align:middle; font-size:12px; }
+.table tr:last-child td { border-bottom:0; }
+.material-title { display:block; color:var(--ink); font-weight:600; line-height:1.35; }
+.material-sub { display:block; margin-top:4px; color:var(--muted); font-size:10px; }
+.chip { display:inline-flex; align-items:center; gap:6px; padding:5px 7px; border:1px solid var(--line); border-radius:2px; color:var(--muted); font-size:10px; white-space:nowrap; }
+.chip-dot { display:inline-block; width:5px; height:5px; background:var(--clay); }
+.resource-actions { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+.material-link { color:var(--forest); font-size:11px; font-weight:600; text-decoration:underline; }
+.material-preview-button { padding:0; border:0; background:transparent; }
 @media (max-width: 1100px) and (min-width: 761px) {
   .sidebar { width: 210px; flex-basis: 210px; }
   .content, .topbar { padding-left: 28px; padding-right: 28px; }
