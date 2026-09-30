@@ -42,6 +42,14 @@ html, body, #root { width: 100%; }
 .resource-actions { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
 .material-link { color:var(--forest); font-size:11px; font-weight:600; text-decoration:underline; }
 .material-preview-button { padding:0; border:0; background:transparent; }
+.reader-heading { min-width:0; text-align:center; }
+.reader-heading strong, .reader-heading span { display:block; max-width:38vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.reader-heading span { margin-top:4px; color:var(--muted); font-size:11px; }
+.reader-actions { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:8px; }
+.reader-size-button { display:inline-flex; align-items:center; gap:6px; }
+.reader-page-expanded { position:fixed; inset:0; z-index:35; min-height:100dvh; padding:20px 28px; background:var(--paper); }
+.reader-page-expanded .reader-frame { min-height:0; flex:1; }
+.reader-page-expanded .reader-frame iframe { min-height:0; }
 @media (max-width: 1100px) and (min-width: 761px) {
   .sidebar { width: 210px; flex-basis: 210px; }
   .content, .topbar { padding-left: 28px; padding-right: 28px; }
