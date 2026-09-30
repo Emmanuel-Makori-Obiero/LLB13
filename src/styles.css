@@ -283,3 +283,20 @@ h3 { font-size:14px; font-weight:700; }
   .auth-panel h1 { font-size:28px; }
   .auth-field input { font-size:16px; } /* stops iOS zoom on focus */
 }
+
+/* ---------- Downloads, reader, mobile drawer ---------- */
+a.primary-button, a.secondary-button { text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:6px; }
+.resource-actions { display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+.reader-toolbar > .reader-actions { display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
+.reader-hint { color:var(--muted); font-size:12px; }
+.auth-shell.single { grid-template-columns:1fr; width:min(440px,100%); }
+.mobile-backdrop { display:none; }
+@media (max-width: 760px) {
+  .mobile-backdrop { display:block; position:fixed; inset:58px 0 0 0; z-index:20; background:rgba(15,25,22,.5); }
+  .mobile-drawer { width:min(300px,86vw); height:100%; overflow-y:auto; background:var(--forest); color:var(--paper); padding:14px 16px 24px; display:flex; flex-direction:column; }
+  .mobile-drawer-foot { margin-top:auto; padding-top:16px; border-top:1px solid rgba(255,255,255,.14); }
+  .mobile-drawer-foot .profile-name { padding:0 9px 8px; color:rgba(247,245,240,.7); font-size:12px; }
+  .reader-toolbar { flex-direction:column; align-items:stretch; }
+  .reader-toolbar > div { text-align:left; }
+  .reader-toolbar > .reader-actions { justify-content:flex-start; }
+}

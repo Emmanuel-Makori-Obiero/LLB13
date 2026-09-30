@@ -59,6 +59,7 @@ const supabaseRepository: Group13Repository = {
   createMaterial: async (material, file) => {
     if (!supabase) throw new Error('Supabase is not configured.')
     let record = { id: crypto.randomUUID(), ...material }
+    if (record.url && !/^https?:\/\//i.test(record.url.trim())) throw new Error('Links must start with http:// or https://')
     if (file) {
       const path = `${record.id}/${file.name.replace(/[^a-zA-Z0-9._-]/g, '-')}`
       const upload = await supabase.storage.from('materials').upload(path, file, { upsert: false })
@@ -97,6 +98,7 @@ const supabaseRepository: Group13Repository = {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('Please sign in before adding media.')
     const record = { id: crypto.randomUUID(), user_id: user.id, ...media }
+    if (!/^https?:\/\//i.test(record.url.trim())) throw new Error('Links must start with http:// or https://')
     const { data, error } = await supabase.from('media_resources').insert(record).select('id,kind,title,url,topic,source').single()
     if (error) throw new Error(`Could not add media: ${error.message}`)
     return data as MediaResource

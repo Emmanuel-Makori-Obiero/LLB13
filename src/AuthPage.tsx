@@ -13,6 +13,7 @@ function friendlyError(message: string): string {
   if (m.includes('rate limit') || m.includes('too many') || m.includes('after')) return 'Too many emails requested. Please wait a few minutes before trying again.'
   if (m.includes('already registered') || m.includes('already been registered')) return 'This email already has an account. Try signing in instead.'
   if (m.includes('password') && m.includes('weak')) return 'That password is too weak. Use at least 8 characters with a mix of letters and numbers.'
+  if (m.includes('database error saving new user')) return 'Sign-ups are limited to approved Group 13 emails. Ask the group admin to add yours.'
   if (m.includes('failed to fetch') || m.includes('network')) return 'Could not reach the server. Check your internet connection and try again.'
   return message
 }
@@ -64,6 +65,17 @@ export default function LoginPage({ configured, onSignedIn }: { configured: bool
   const [notice, setNotice] = useState<Notice>(null)
   const [pendingEmail, setPendingEmail] = useState<string | null>(null) // set once we are waiting for email confirmation
   const [cooldown, setCooldown] = useState(0)
+
+  // Expired or already-used email links come back as #error=...&error_description=...
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+    const description = params.get('error_description')
+    if (description) {
+      const expired = params.get('error_code') === 'otp_expired'
+      setNotice({ tone: 'error', text: expired ? 'That email link has expired or was already used. Sign in, or request a new link.' : description.replace(/\+/g, ' ') })
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [])
 
   useEffect(() => {
     if (cooldown <= 0) return
@@ -236,6 +248,44 @@ export default function LoginPage({ configured, onSignedIn }: { configured: bool
               )}
             </>
           )}
+        </section>
+      </div>
+    </div>
+  )
+}
+
+export function ResetPasswordPage({ onDone }: { onDone: () => void }) {
+  const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState<Notice>(null)
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!supabase || busy) return
+    if (password.length < 8) { setNotice({ tone: 'error', text: 'Password must be at least 8 characters.' }); return }
+    if (password !== confirm) { setNotice({ tone: 'error', text: 'Passwords do not match.' }); return }
+    setBusy(true)
+    const { error } = await supabase.auth.updateUser({ password })
+    setBusy(false)
+    if (error) { setNotice({ tone: 'error', text: friendlyError(error.message) }); return }
+    window.history.replaceState({}, '', '/')
+    onDone()
+  }
+
+  return (
+    <div className="auth-page">
+      <div className="auth-shell single">
+        <section className="auth-panel">
+          <div className="auth-mobile-logo" style={{ display: 'block' }}><Logo /></div>
+          <h1>Set a new password</h1>
+          <p className="auth-lead">Choose a new password for your Group 13 account.</p>
+          <form className="auth-form" onSubmit={submit}>
+            <PasswordField label="New password" value={password} onChange={setPassword} autoComplete="new-password" placeholder="At least 8 characters" />
+            <PasswordField label="Confirm new password" value={confirm} onChange={setConfirm} autoComplete="new-password" placeholder="Repeat your password" />
+            {notice && <div className={`auth-notice ${notice.tone}`} role="status">{notice.text}</div>}
+            <button type="submit" className="auth-submit" disabled={busy}>{busy ? 'Saving…' : 'Save password'}</button>
+          </form>
         </section>
       </div>
     </div>
