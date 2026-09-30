@@ -93,11 +93,19 @@ function App() {
     const client = supabase
     let active = true
     const refresh = async () => {
-      try {
-        const [u, m, a, d, groupMembers, userTodos, timetable, resources] = await Promise.all([repository.getUnits(), repository.getMaterials(), repository.getAssignments(), repository.getDiscussions(), repository.getMembers(), repository.getTodos(), repository.getTimetable(), repository.getMedia()])
-        if (!active) return
-        setUnits(u); setMaterials(m); setAssignments(a); setDiscussions(d); setMembers(groupMembers); setTodos(userTodos); setLessons(timetable); setMedia(resources); setLoadError('')
-      } catch (error) { if (active) setLoadError(error instanceof Error ? error.message : 'Could not load workspace data.') }
+      const results = await Promise.allSettled([repository.getUnits(), repository.getMaterials(), repository.getAssignments(), repository.getDiscussions(), repository.getMembers(), repository.getTodos(), repository.getTimetable(), repository.getMedia()])
+      if (!active) return
+      const [u, m, a, d, groupMembers, userTodos, timetable, resources] = results
+      if (u.status === 'fulfilled') setUnits(u.value)
+      if (m.status === 'fulfilled') setMaterials(m.value)
+      if (a.status === 'fulfilled') setAssignments(a.value)
+      if (d.status === 'fulfilled') setDiscussions(d.value)
+      if (groupMembers.status === 'fulfilled') setMembers(groupMembers.value)
+      if (userTodos.status === 'fulfilled') setTodos(userTodos.value)
+      if (timetable.status === 'fulfilled') setLessons(timetable.value)
+      if (resources.status === 'fulfilled') setMedia(resources.value)
+      const failed = results.find(result => result.status === 'rejected')
+      setLoadError(failed?.status === 'rejected' ? (failed.reason instanceof Error ? failed.reason.message : 'Some workspace data could not be loaded.') : '')
     }
     void refresh()
     const channel = client.channel('group13-live-data')
