@@ -20,7 +20,7 @@ import {
 } from "./lib/ai";
 import { Answer, type Turn } from "./StudyAssistant";
 import "./assistant.css";
-import { downloadPdf, downloadWord } from "./export";
+import { downloadBlob, downloadPdf, downloadWord } from "./export";
 
 const SECTIONS_PER_PART = 6; // sections read per request: small enough for free-tier token limits
 const WAITS = [0, 25_000, 50_000]; // retry pauses when every AI provider is busy
@@ -66,6 +66,14 @@ const ACTIONS: Action[] = [
     prompt:
       "Create 12 flashcards covering the key rules, terms and cases from this lecture transcript.",
   },
+  {
+    feature: "extract_assignments",
+    label: "Find assignments",
+    icon: ListChecks,
+    hint: "Find coursework, deadlines and explicit tasks mentioned in this lesson.",
+    prompt:
+      "Scan this lecture transcript for assignments, coursework, essay questions, presentations, readings, deadlines or explicit tasks. Return only items clearly mentioned in the transcript; do not invent anything.",
+  },
 ];
 
 type Visibility = "private" | "group";
@@ -80,17 +88,30 @@ type SavedNote = {
   created_at: string;
   updated_at: string;
 };
+type ExtractedAssignment = {
+  localId: string;
+  title: string;
+  brief: string;
+  due: string;
+  confidence: number;
+  source_excerpt: string;
+  status: "pending" | "accepted" | "rejected";
+};
 
 export function TranscriptAI({
   transcriptId,
   userId,
   title,
+  unit,
+  ownerName = "Group 13 member",
   getText,
   ready,
 }: {
   transcriptId: string;
   userId: string | null;
   title: string;
+  unit?: string | null;
+  ownerName?: string;
   getText: () => string;
   ready: boolean; // false while the transcript text is still loading
 }) {
@@ -103,6 +124,8 @@ export function TranscriptAI({
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState("");
   const [reload, setReload] = useState(0);
+  const [extracted, setExtracted] = useState<ExtractedAssignment[]>([]);
+  const [assignmentMsg, setAssignmentMsg] = useState("");
 
   const mkTask = (a: Action) => ({
     feature: a.feature,
@@ -111,16 +134,12 @@ export function TranscriptAI({
   });
 
   const download = () => {
-    const url = URL.createObjectURL(
+    downloadBlob(
       new Blob([`# ${title}\n\n${notesText || turn?.result?.answer || ""}`], {
         type: "text/markdown",
       }),
+      `${title.replace(/[^\w\- ]+/g, "").trim() || "lecture"} - ${turn?.task.feature === "summarize" ? "summary" : "notes"}.md`,
     );
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${title.replace(/[^\w\- ]+/g, "").trim() || "lecture"} - ${turn?.task.feature === "summarize" ? "summary" : "notes"}.md`;
-    link.click();
-    URL.revokeObjectURL(url);
   };
   const generatedText = notesText || turn?.result?.answer || "";
   const downloadNotesPdf = () =>
@@ -238,6 +257,34 @@ export function TranscriptAI({
         messages: [{ role: "user", content: action.prompt }],
         docIds: [doc.id],
       });
+      if (action.feature === "extract_assignments") {
+        const raw = result.data as { assignments?: unknown[] } | null;
+        const rows = Array.isArray(raw?.assignments)
+          ? raw.assignments
+              .map((item, index) => {
+                const row = item as Record<string, unknown>;
+                return {
+                  localId: `${transcriptId}-${index}-${Date.now()}`,
+                  title: String(row.title ?? "").trim(),
+                  brief: String(row.brief ?? "").trim(),
+                  due: String(row.due ?? "").trim(),
+                  confidence: Math.max(
+                    0,
+                    Math.min(1, Number(row.confidence ?? 0)),
+                  ),
+                  source_excerpt: String(row.source_excerpt ?? "").trim(),
+                  status: "pending" as const,
+                };
+              })
+              .filter((row) => row.title)
+          : [];
+        setExtracted(rows);
+        setAssignmentMsg(
+          rows.length
+            ? "Review the suggested assignments before adding them."
+            : "No clear assignments were found in this lesson.",
+        );
+      }
       setTurn({ id: 1, task, prompt: action.prompt, result });
     } catch (e) {
       setTurn({
@@ -250,6 +297,62 @@ export function TranscriptAI({
       setBusy(null);
       setStep("");
     }
+  };
+  const acceptAssignment = async (row: ExtractedAssignment) => {
+    if (!supabase || !userId) return;
+    setAssignmentMsg("Adding assignment…");
+    const assignmentId = `ai-${crypto.randomUUID()}`;
+    const { error: assignmentError } = await supabase
+      .from("assignments")
+      .insert({
+        id: assignmentId,
+        title: row.title,
+        unit: unit ?? "Unassigned",
+        due: row.due || "Not set",
+        status: "Not Started",
+        owner: ownerName,
+        reviewer: "Unassigned",
+        brief:
+          row.brief ||
+          row.source_excerpt ||
+          "Extracted from a lesson transcript.",
+      });
+    if (assignmentError) {
+      setAssignmentMsg(assignmentError.message);
+      return;
+    }
+    const { error: extractionError } = await supabase
+      .from("assignment_extractions")
+      .insert({
+        transcript_id: transcriptId,
+        title: row.title,
+        unit: unit ?? "",
+        due: row.due,
+        brief: row.brief,
+        source_excerpt: row.source_excerpt,
+        confidence: row.confidence,
+        status: "accepted",
+        assignment_id: assignmentId,
+      });
+    if (extractionError) {
+      setAssignmentMsg(
+        "Assignment added, but the extraction record could not be saved. Run the assignment migration.",
+      );
+      return;
+    }
+    setExtracted((rows) =>
+      rows.map((item) =>
+        item.localId === row.localId ? { ...item, status: "accepted" } : item,
+      ),
+    );
+    setAssignmentMsg("Assignment added to the group assignments list.");
+  };
+  const rejectAssignment = (row: ExtractedAssignment) => {
+    setExtracted((rows) =>
+      rows.map((item) =>
+        item.localId === row.localId ? { ...item, status: "rejected" } : item,
+      ),
+    );
   };
 
   const saveNote = async () => {
@@ -323,7 +426,57 @@ export function TranscriptAI({
       )}
       {turn && (
         <div className="ta-result">
-          <Answer turn={turn} />
+          {turn.task.feature !== "extract_assignments" && (
+            <Answer turn={turn} />
+          )}
+          {turn.task.feature === "extract_assignments" && (
+            <div className="ta-assignment-review">
+              <p className="subheading">
+                The AI found these possible tasks. Confirm each one before it
+                enters the group assignments list.
+              </p>
+              {extracted.map((row) => (
+                <div className="ta-assignment" key={row.localId}>
+                  <div>
+                    <strong>{row.title}</strong>
+                    {row.brief && <p>{row.brief}</p>}
+                    <small>
+                      {row.due ? `Due: ${row.due}` : "No deadline stated"} ·{" "}
+                      {Math.round(row.confidence * 100)}% confidence
+                    </small>
+                    {row.source_excerpt && (
+                      <blockquote>{row.source_excerpt}</blockquote>
+                    )}
+                  </div>
+                  <div className="ta-assignment-actions">
+                    {row.status === "pending" ? (
+                      <>
+                        <button
+                          type="button"
+                          className="primary-button"
+                          onClick={() => void acceptAssignment(row)}
+                        >
+                          Add assignment
+                        </button>
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() => rejectAssignment(row)}
+                        >
+                          Discard
+                        </button>
+                      </>
+                    ) : (
+                      <span className="chip">
+                        {row.status === "accepted" ? "Added" : "Discarded"}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {assignmentMsg && <p className="field-hint">{assignmentMsg}</p>}
+            </div>
+          )}
           {textual && !busy && (
             <div className="ta-after">
               <button

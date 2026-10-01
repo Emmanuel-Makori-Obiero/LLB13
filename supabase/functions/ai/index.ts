@@ -1,3 +1,4 @@
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 // ===== providers (fallback chain) =====
@@ -291,6 +292,11 @@ const FEATURES: Record<
     json: true,
     docWide: true,
     task: 'Create flashcards (rule/definition/case on one side, application on the other). Return ONLY JSON: {"cards":[{"front":"","back":""}]}',
+  },
+  extract_assignments: {
+    json: true,
+    docWide: true,
+    task: 'Find only assignments, coursework, essays, problem questions, presentations, readings or explicit tasks mentioned in the lecture. Return ONLY JSON: {"assignments":[{"title":"","brief":"","due":"","confidence":0,"source_excerpt":""}]}. Use an empty string when a deadline is not stated. Do not invent tasks or dates. Confidence must be between 0 and 1.',
   },
 };
 
@@ -623,14 +629,12 @@ Deno.serve(async (req) => {
       temperature: strict ? 0.1 : 0.3,
       json: FEATURES[feature].json,
     });
-    await admin
-      .from("ai_usage")
-      .insert({
-        user_id: u.user.id,
-        feature,
-        provider: r.provider,
-        model: r.model,
-      });
+    await admin.from("ai_usage").insert({
+      user_id: u.user.id,
+      feature,
+      provider: r.provider,
+      model: r.model,
+    });
 
     // post-checks
     const warnings: string[] = [];

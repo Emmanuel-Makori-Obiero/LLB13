@@ -241,7 +241,7 @@ const supabaseRepository: Group13Repository = {
     readRequired<Member>("members", async () =>
       supabase!
         .from("members")
-        .select("name,initials,role,units,progress,tone,section")
+        .select("name,initials,role,units,user_id,progress,tone,section")
         .order("name"),
     ),
   getStats: async () => ({ streak: 0, completed: 0, total: 0, focus: "" }),

@@ -54,6 +54,7 @@ export type Member = {
   initials: string;
   role: string;
   units: string;
+  user_id?: string | null;
   progress: number;
   tone: string;
   section?: "A" | "B";

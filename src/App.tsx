@@ -7,6 +7,7 @@ import {
 } from "react";
 import {
   BookOpen,
+  Bell,
   CalendarDays,
   Check,
   CheckSquare,
@@ -751,6 +752,8 @@ function App() {
           name={profile.displayName}
           initials={profileInitials(profile.displayName, userEmail ?? "")}
           image={profile.avatarUrl}
+          userId={userId}
+          onOpenNotifications={() => setPage("discussions")}
           onSignOut={async () => {
             await supabase?.auth.signOut();
             setUserEmail(null);
@@ -897,6 +900,13 @@ function App() {
           {view === "discussions" && (
             <DiscussionsPage
               discussions={discussions}
+              members={members}
+              userId={userId}
+              displayName={
+                profile.displayName ||
+                userEmail?.split("@")[0] ||
+                "Group 13 member"
+              }
               openMeeting={openMeeting}
               onStart={startMeeting}
               onEnd={endMeeting}
@@ -1139,12 +1149,78 @@ function NavItem({
     </button>
   );
 }
+function NotificationBell({
+  userId,
+  onOpen,
+}: {
+  userId: string | null;
+  onOpen: () => void;
+}) {
+  const [unread, setUnread] = useState(0);
+  useEffect(() => {
+    if (!supabase || !userId) return;
+    const client = supabase;
+    let active = true;
+    const load = async () => {
+      const { count } = await client
+        .from("notifications")
+        .select("id", { count: "exact", head: true })
+        .eq("recipient_id", userId)
+        .is("read_at", null);
+      if (active) setUnread(count ?? 0);
+    };
+    void load();
+    const channel = client
+      .channel(`notifications-${userId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "notifications",
+          filter: `recipient_id=eq.${userId}`,
+        },
+        () => void load(),
+      )
+      .subscribe();
+    return () => {
+      active = false;
+      void client.removeChannel(channel);
+    };
+  }, [userId]);
+  const open = async () => {
+    if (supabase && userId) {
+      await supabase
+        .from("notifications")
+        .update({ read_at: new Date().toISOString() })
+        .eq("recipient_id", userId)
+        .is("read_at", null);
+      setUnread(0);
+    }
+    onOpen();
+  };
+  return (
+    <button
+      type="button"
+      className="icon-button notification-button"
+      title={unread ? `${unread} unread notifications` : "Notifications"}
+      onClick={() => void open()}
+    >
+      <Bell size={15} />
+      {unread > 0 && (
+        <span className="notification-count">{unread > 9 ? "9+" : unread}</span>
+      )}
+    </button>
+  );
+}
 function Topbar({
   view,
   email,
   name,
   initials,
   image,
+  userId,
+  onOpenNotifications,
   onSignOut,
 }: {
   view: string;
@@ -1152,6 +1228,8 @@ function Topbar({
   name: string;
   initials: string;
   image?: string;
+  userId: string | null;
+  onOpenNotifications: () => void;
   onSignOut: () => void;
 }) {
   const label = pageLabel(view);
@@ -1164,6 +1242,7 @@ function Topbar({
       </div>
       <div className="top-actions">
         <InstallButton className="secondary-button install-button" />
+        <NotificationBell userId={userId} onOpen={onOpenNotifications} />
         <span className="signed-in-as" title={email}>
           {name || email}
         </span>
@@ -1363,6 +1442,9 @@ function UnitsPage({
 
 function DiscussionsPage({
   discussions,
+  members,
+  userId,
+  displayName,
   openMeeting,
   onStart,
   onEnd,
@@ -1370,6 +1452,9 @@ function DiscussionsPage({
   canEnd,
 }: {
   discussions: Discussion[];
+  members: Member[];
+  userId: string | null;
+  displayName: string;
   openMeeting: (discussion: Discussion) => void;
   onStart: (title: string) => Promise<void>;
   onEnd: (discussion: Discussion) => Promise<void>;
@@ -1547,8 +1632,157 @@ function DiscussionsPage({
             )}
           </div>
         </div>
+        <AnnouncementPanel
+          members={members}
+          userId={userId}
+          displayName={displayName}
+        />
       </div>
     </>
+  );
+}
+
+type Announcement = {
+  id: string;
+  author_name: string;
+  title: string;
+  message: string;
+  created_at: string;
+};
+
+function AnnouncementPanel({
+  members,
+  userId,
+  displayName,
+}: {
+  members: Member[];
+  userId: string | null;
+  displayName: string;
+}) {
+  const [title, setTitle] = useState("");
+  const [message, setMessage] = useState("");
+  const [rows, setRows] = useState<Announcement[]>([]);
+  const [sending, setSending] = useState(false);
+  const [status, setStatus] = useState("");
+  const load = async () => {
+    if (!supabase) return;
+    const { data } = await supabase
+      .from("group_announcements")
+      .select("id,author_name,title,message,created_at")
+      .order("created_at", { ascending: false })
+      .limit(20);
+    setRows((data ?? []) as Announcement[]);
+  };
+  useEffect(() => {
+    void load();
+    if (!supabase) return;
+    const channel = supabase
+      .channel("group-announcements")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "group_announcements" },
+        () => void load(),
+      )
+      .subscribe();
+    return () => {
+      void supabase?.removeChannel(channel);
+    };
+  }, []);
+  const send = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!supabase || !userId || !title.trim() || !message.trim()) return;
+    setSending(true);
+    setStatus("");
+    const { data: announcement, error } = await supabase
+      .from("group_announcements")
+      .insert({
+        created_by: userId,
+        author_name: displayName || "Group 13 member",
+        title: title.trim(),
+        message: message.trim(),
+      })
+      .select("id")
+      .single();
+    if (error || !announcement) {
+      setStatus(error?.message ?? "Could not send announcement.");
+      setSending(false);
+      return;
+    }
+    const recipients = [
+      ...new Set([
+        userId,
+        ...members
+          .map((member) => member.user_id)
+          .filter((id): id is string => Boolean(id)),
+      ]),
+    ];
+    const { error: notifyError } = await supabase
+      .from("notifications")
+      .insert(
+        recipients.map((recipient_id) => ({
+          recipient_id,
+          announcement_id: announcement.id,
+          title: title.trim(),
+          body: message.trim(),
+        })),
+      );
+    setTitle("");
+    setMessage("");
+    setSending(false);
+    setStatus(
+      notifyError
+        ? "Announcement sent, but some notification badges could not be created."
+        : "Announcement sent to the group.",
+    );
+    void load();
+  };
+  return (
+    <div className="card card-pad announcement-panel">
+      <div className="card-header">
+        <span className="section-label">Group announcements</span>
+        <span className="quiet">Notify everyone in Group 13</span>
+      </div>
+      <form className="data-form announcement-form" onSubmit={send}>
+        <label>
+          Announcement title
+          <input
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="e.g. Change of venue for tomorrow"
+          />
+        </label>
+        <label>
+          Message
+          <textarea
+            value={message}
+            onChange={(event) => setMessage(event.target.value)}
+            placeholder="Tell the group what changed…"
+            rows={3}
+          />
+        </label>
+        <button
+          className="primary-button"
+          type="submit"
+          disabled={sending || !userId}
+        >
+          {sending ? "Sending…" : "Notify group"}
+        </button>
+        {status && <span className="field-hint">{status}</span>}
+      </form>
+      {rows.length > 0 && (
+        <div className="announcement-list">
+          {rows.map((row) => (
+            <article className="announcement" key={row.id}>
+              <strong>{row.title}</strong>
+              <p>{row.message}</p>
+              <small>
+                {row.author_name} · {new Date(row.created_at).toLocaleString()}
+              </small>
+            </article>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1704,6 +1938,7 @@ function UnitRecordings({
             transcriptId={selected.id}
             userId={userId}
             title={selected.lesson_title || selected.title}
+            unit={selected.unit}
             ready
             getText={() => chunks.map((chunk) => chunk.text).join("\n\n")}
           />
