@@ -252,6 +252,19 @@ export default function RealtimeJudgeRoom() {
       setError("Supabase is not configured.");
       return;
     }
+    if (
+      typeof WebSocket === "undefined" ||
+      !navigator.mediaDevices?.getUserMedia ||
+      typeof AudioContext === "undefined" ||
+      !AudioContext.prototype.audioWorklet ||
+      typeof AudioWorkletNode === "undefined"
+    ) {
+      setError(
+        "Live voice is not supported by this browser. Use the Layer 1 judge, which works with ordinary speech controls, or open Group 13 in a recent Safari, Chrome, or Edge browser.",
+      );
+      setState("error");
+      return;
+    }
     setState("connecting");
     setError("");
     setUserText("");

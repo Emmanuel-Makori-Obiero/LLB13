@@ -333,6 +333,7 @@ body,
   max-width: none;
   min-width: 0;
   align-self: stretch;
+  min-height: calc(100vh - 120px);
   min-height: calc(100dvh - 120px);
 }
 .reader-toolbar {

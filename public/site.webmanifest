@@ -5,15 +5,13 @@
   "id": "/",
   "start_url": "/",
   "scope": "/",
+  "display_override": ["standalone", "minimal-ui", "browser"],
   "display": "standalone",
   "orientation": "portrait-primary",
   "background_color": "#F7F5F0",
   "theme_color": "#163A34",
   "lang": "en-KE",
-  "categories": [
-    "education",
-    "productivity"
-  ],
+  "categories": ["education", "productivity"],
   "icons": [
     {
       "src": "/icon-192.png",
