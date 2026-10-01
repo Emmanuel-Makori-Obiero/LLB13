@@ -16,6 +16,7 @@ import {
   Maximize2,
   Menu,
   MessageSquare,
+  Mic,
   Minimize2,
   MoreHorizontal,
   Plus,
@@ -55,6 +56,7 @@ import InstallButton from "./InstallButton";
 import { DeleteAccountCard } from "./AccountPage";
 import Home from "./Home";
 import TimetablePage from "./TimetablePage";
+import TranscribePage from "./TranscribePage";
 
 const nav = [
   { id: "dashboard", label: "Home", icon: LayoutDashboard },
@@ -65,6 +67,7 @@ const nav = [
   { id: "units", label: "Units", icon: BookOpen },
   { id: "discussions", label: "Discussions", icon: MessageSquare },
   { id: "members", label: "Members", icon: Users },
+  { id: "transcribe", label: "Transcribe", icon: Mic },
   { id: "media", label: "Media", icon: Film },
   { id: "assistant", label: "Study assistant", icon: Sparkles },
   { id: "arena", label: "Legal Arena", icon: Gavel },
@@ -735,6 +738,17 @@ function App() {
               todos={visibleTodos}
               assignments={assignments}
               setPage={setPage}
+            />
+          )}
+          {view === "transcribe" && (
+            <TranscribePage
+              units={units}
+              userId={userId}
+              isAdmin={isAdmin}
+              displayName={
+                profile.displayName || userEmail?.split("@")[0] || "Member"
+              }
+              setNotice={setNotice}
             />
           )}
           {view === "timetable" && (

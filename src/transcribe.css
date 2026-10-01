@@ -1,0 +1,61 @@
+.tr-form {
+  display: grid;
+  gap: 12px;
+}
+.tr-two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.tr-status {
+  margin-top: 14px;
+}
+.tr-status .progress {
+  margin: 8px 0;
+}
+.tr-reader {
+  margin-top: 12px;
+  max-height: 62vh;
+  overflow: auto;
+  border-top: 1px solid #0000001a;
+}
+.tr-para {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid #00000010;
+  line-height: 1.55;
+}
+.tr-time {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  font-size: 12px;
+  padding-top: 3px;
+}
+.tr-para mark {
+  background: #f2d98a;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+.tr-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.tr-note {
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.5;
+  margin-top: 10px;
+}
+@media (max-width: 640px) {
+  .tr-two {
+    grid-template-columns: 1fr;
+  }
+  .tr-para {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}
