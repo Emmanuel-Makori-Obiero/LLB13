@@ -464,6 +464,32 @@
   justify-content: space-between;
   align-items: center;
 }
+.sa-contents {
+  padding: 14px;
+  border: 1px solid var(--line);
+  background: var(--white);
+}
+.sa-contents ol {
+  margin: 12px 0 0;
+  padding-left: 22px;
+}
+.sa-contents ol > li {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.sa-contents p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.sa-contents ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
 @media (max-width: 980px) {
   .sa {
     grid-template-columns: 1fr;
@@ -631,6 +657,44 @@
 }
 .ta-note-body {
   margin-top: 10px;
+}
+.ta-assignment-review {
+  margin-top: 12px;
+  padding: 14px;
+  background: var(--moss, #dce7d9);
+  border: 1px solid var(--line, #d7d5cc);
+}
+.ta-assignment {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  justify-content: space-between;
+  padding: 13px 0;
+  border-top: 1px solid var(--line, #d7d5cc);
+}
+.ta-assignment p {
+  margin: 5px 0;
+}
+.ta-assignment small {
+  color: var(--muted, #68716b);
+}
+.ta-assignment blockquote {
+  margin: 8px 0 0;
+  padding-left: 10px;
+  border-left: 2px solid var(--forest, #163a34);
+  color: var(--muted, #68716b);
+  font-size: 12px;
+}
+.ta-assignment-actions {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+@media (max-width: 680px) {
+  .ta-assignment {
+    flex-direction: column;
+  }
 }
 
 /* counsellor chat */

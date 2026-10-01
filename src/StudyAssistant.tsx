@@ -84,6 +84,22 @@ const TASKS: Task[] = [
     fallback: "Summarise the selected document.",
   },
   {
+    feature: "book_contents",
+    label: "Book contents",
+    needsDoc: true,
+    placeholder: "Optional: tell me what kind of contents list you want",
+    fallback:
+      "Create a table of contents and list every major topic and subtopic in the selected book.",
+  },
+  {
+    feature: "topic_summary",
+    label: "Topic summary",
+    needsDoc: true,
+    placeholder: "Name the chapter, topic, or section to summarise",
+    fallback:
+      "List the main topics in the selected book and ask me which one I want to study first.",
+  },
+  {
     feature: "case_brief",
     label: "Case brief",
     needsDoc: true,
@@ -129,6 +145,7 @@ type QuizQ = {
   explanation: string;
 };
 type Card = { front: string; back: string };
+type ContentsItem = { title: string; topics?: string[]; summary?: string };
 
 function asQuiz(data: unknown): QuizQ[] {
   const qs = (data as { questions?: QuizQ[] } | null)?.questions;
@@ -143,6 +160,34 @@ function asCards(data: unknown): Card[] {
   return Array.isArray(cs)
     ? cs.filter((c) => c && typeof c.front === "string")
     : [];
+}
+function asContents(data: unknown): ContentsItem[] {
+  const items = (data as { contents?: ContentsItem[] } | null)?.contents;
+  return Array.isArray(items)
+    ? items.filter((item) => item && typeof item.title === "string")
+    : [];
+}
+function Contents({ items }: { items: ContentsItem[] }) {
+  return (
+    <div className="sa-contents">
+      <div className="section-label">Table of contents and topics</div>
+      <ol>
+        {items.map((item, index) => (
+          <li key={`${item.title}-${index}`}>
+            <strong>{item.title}</strong>
+            {item.summary && <p>{item.summary}</p>}
+            {!!item.topics?.length && (
+              <ul>
+                {item.topics.map((topic) => (
+                  <li key={topic}>{topic}</li>
+                ))}
+              </ul>
+            )}
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
 }
 
 function Quiz({ questions }: { questions: QuizQ[] }) {
@@ -250,7 +295,9 @@ export function Answer({ turn }: { turn: Turn }) {
   if (!r) return null;
   const quiz = turn.task.feature === "quiz" ? asQuiz(r.data) : [];
   const cards = turn.task.feature === "flashcards" ? asCards(r.data) : [];
-  const structured = quiz.length > 0 || cards.length > 0;
+  const contents =
+    turn.task.feature === "book_contents" ? asContents(r.data) : [];
+  const structured = quiz.length > 0 || cards.length > 0 || contents.length > 0;
   return (
     <div className="sa-answer">
       {turn.error && <div className="connection-error">{turn.error}</div>}
@@ -262,6 +309,7 @@ export function Answer({ turn }: { turn: Turn }) {
       </div>
       {quiz.length > 0 && <Quiz questions={quiz} />}
       {cards.length > 0 && <Flashcards cards={cards} />}
+      {contents.length > 0 && <Contents items={contents} />}
       {!structured && <Markdown text={r.answer} />}
       {r.warnings.length > 0 && (
         <ul className="sa-warnings">
