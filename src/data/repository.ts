@@ -10,6 +10,7 @@ import type {
   Member,
   Todo,
   Unit,
+  TimetableProposal,
 } from "./types";
 
 export type Group13Repository = {
@@ -66,6 +67,20 @@ export type Group13Repository = {
     lesson: Omit<Lesson, "id" | "created_by">,
   ) => Promise<Lesson>;
   deleteLesson: (id: string) => Promise<void>;
+  getTimetableProposals: () => Promise<TimetableProposal[]>;
+  createTimetableProposal: (
+    proposal: Pick<
+      TimetableProposal,
+      | "title"
+      | "instruction"
+      | "source_filename"
+      | "proposed_lessons"
+      | "rationale"
+    >,
+  ) => Promise<TimetableProposal>;
+  approveTimetableProposal: (id: string) => Promise<number>;
+  rollbackTimetableProposal: (id: string) => Promise<number>;
+  rejectTimetableProposal: (id: string) => Promise<void>;
   adminCreateUnit: (
     unit: Pick<Unit, "name" | "code" | "lead">,
   ) => Promise<Unit>;
@@ -184,6 +199,53 @@ const supabaseRepository: Group13Repository = {
     if (!supabase) throw new Error("Not connected.");
     const { error } = await supabase.from("timetable").delete().eq("id", id);
     if (error) throw new Error(`Could not delete lesson: ${error.message}`);
+  },
+  getTimetableProposals: () =>
+    readRequired<TimetableProposal>("timetable_proposals", async () =>
+      supabase!
+        .from("timetable_proposals")
+        .select(
+          "id,title,instruction,source_filename,status,proposed_lessons,rationale,created_by,created_at,approved_at",
+        )
+        .order("created_at", { ascending: false }),
+    ),
+  createTimetableProposal: async (proposal) => {
+    const { data, error } = await db()
+      .from("timetable_proposals")
+      .insert(proposal)
+      .select(
+        "id,title,instruction,source_filename,status,proposed_lessons,rationale,created_by,created_at,approved_at",
+      )
+      .single();
+    if (error)
+      throw new Error(`Could not save timetable proposal: ${error.message}`);
+    return data as TimetableProposal;
+  },
+  approveTimetableProposal: async (id) => {
+    const { data, error } = await db().rpc("admin_apply_timetable_proposal", {
+      proposal_id: id,
+    });
+    if (error)
+      throw new Error(`Could not approve timetable proposal: ${error.message}`);
+    return Number(data ?? 0);
+  },
+  rollbackTimetableProposal: async (id) => {
+    const { data, error } = await db().rpc(
+      "admin_rollback_timetable_proposal",
+      { proposal_id: id },
+    );
+    if (error)
+      throw new Error(`Could not roll back timetable: ${error.message}`);
+    return Number(data ?? 0);
+  },
+  rejectTimetableProposal: async (id) => {
+    const { error } = await db()
+      .from("timetable_proposals")
+      .update({ status: "rejected" })
+      .eq("id", id)
+      .eq("status", "pending");
+    if (error)
+      throw new Error(`Could not reject timetable proposal: ${error.message}`);
   },
   adminCreateUnit: async (unit) => {
     if (!supabase) throw new Error("Not connected.");

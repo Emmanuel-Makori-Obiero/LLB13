@@ -20,6 +20,7 @@ export type AIFeature =
   | "irac"
   | "essay_feedback"
   | "study_plan"
+  | "timetable_proposal"
   | "moot"
   | "moot_judge"
   | "moot_guide"

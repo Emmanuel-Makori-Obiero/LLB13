@@ -1017,6 +1017,8 @@ function App() {
               }
               units={units}
               members={members}
+              lessons={lessons}
+              onTimetableApplied={setLessons}
               currentEmail={userEmail ?? ""}
               setNotice={setNotice}
             />
@@ -1756,14 +1758,16 @@ function AnnouncementPanel({
           .filter((id): id is string => Boolean(id)),
       ]),
     ];
-    const { error: notifyError } = await supabase.from("notifications").insert(
-      recipients.map((recipient_id) => ({
-        recipient_id,
-        announcement_id: announcement.id,
-        title: title.trim(),
-        body: message.trim(),
-      })),
-    );
+    const { error: notifyError } = await supabase
+      .from("notifications")
+      .insert(
+        recipients.map((recipient_id) => ({
+          recipient_id,
+          announcement_id: announcement.id,
+          title: title.trim(),
+          body: message.trim(),
+        })),
+      );
     setTitle("");
     setMessage("");
     setSending(false);

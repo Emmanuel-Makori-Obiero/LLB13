@@ -96,6 +96,19 @@ export type Lesson = {
   created_by?: string | null;
 };
 
+export type TimetableProposal = {
+  id: string;
+  title: string;
+  instruction: string;
+  source_filename?: string | null;
+  status: "pending" | "approved" | "rejected" | "reverted";
+  proposed_lessons: Omit<Lesson, "id" | "created_by">[];
+  rationale: string;
+  created_by?: string | null;
+  created_at: string;
+  approved_at?: string | null;
+};
+
 // Representatives of a unit. Falls back to the old single `lead` value for units saved before multi-rep support.
 export const unitReps = (
   unit?: Pick<Unit, "lead" | "representatives"> | null,

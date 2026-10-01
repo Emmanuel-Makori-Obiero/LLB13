@@ -3,6 +3,8 @@ import { Trash2, UserPlus } from "lucide-react";
 import { repository } from "./data/repository";
 import type { AdminAccount, Member, Unit } from "./data/types";
 import { unitReps } from "./data/types";
+import type { Lesson } from "./data/types";
+import AdminTimetablePlanner from "./AdminTimetablePlanner";
 import "./admin.css";
 
 type Props = {
@@ -12,6 +14,8 @@ type Props = {
   setNotice: (notice: string) => void;
   onUnitAdded?: (unit: Unit) => void;
   onUnitRemoved?: (id: string) => void;
+  lessons: Lesson[];
+  onTimetableApplied: (lessons: Lesson[]) => void;
 };
 
 const TONES = [
@@ -51,6 +55,8 @@ export default function AdminPage({
   setNotice,
   onUnitAdded,
   onUnitRemoved,
+  lessons,
+  onTimetableApplied,
 }: Props) {
   const [accounts, setAccounts] = useState<AdminAccount[]>([]);
   const [loading, setLoading] = useState(true);
@@ -222,6 +228,12 @@ export default function AdminPage({
       </div>
 
       <div className="admin-stack">
+        <AdminTimetablePlanner
+          lessons={lessons}
+          units={units}
+          onApplied={onTimetableApplied}
+          setNotice={setNotice}
+        />
         <div className="card card-pad">
           <div className="card-header">
             <span className="section-label">Registered accounts</span>
