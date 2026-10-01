@@ -22,7 +22,7 @@ type Doc = {
   created_at: string;
 };
 
-type Task = {
+export type Task = {
   feature: AIFeature;
   label: string;
   needsDoc?: boolean;
@@ -31,18 +31,62 @@ type Task = {
 };
 
 const TASKS: Task[] = [
-  { feature: "chat", label: "Ask", placeholder: "Ask a law question, e.g. What is the neighbour principle?" },
-  { feature: "explain", label: "Explain", placeholder: "Name a concept to explain, e.g. vicarious liability" },
-  { feature: "irac", label: "IRAC", placeholder: "Paste the problem question (the facts and what is asked)" },
-  { feature: "essay_feedback", label: "Essay feedback", placeholder: "Paste your draft here" },
-  { feature: "moot", label: "Moot prep", placeholder: "Describe the moot problem and which side you are on" },
-  { feature: "summarize", label: "Summarise", needsDoc: true, placeholder: "Optional: what should the summary focus on?", fallback: "Summarise the selected document." },
-  { feature: "case_brief", label: "Case brief", needsDoc: true, placeholder: "Optional: which case in the document?", fallback: "Write a case brief from the selected document." },
-  { feature: "quiz", label: "Quiz", needsDoc: true, placeholder: "Optional: topic or number of questions", fallback: "Create 8 multiple-choice questions from the selected document." },
-  { feature: "flashcards", label: "Flashcards", needsDoc: true, placeholder: "Optional: topic or number of cards", fallback: "Create 12 flashcards from the selected document." },
+  {
+    feature: "chat",
+    label: "Ask",
+    placeholder: "Ask a law question, e.g. What is the neighbour principle?",
+  },
+  {
+    feature: "explain",
+    label: "Explain",
+    placeholder: "Name a concept to explain, e.g. vicarious liability",
+  },
+  {
+    feature: "irac",
+    label: "IRAC",
+    placeholder: "Paste the problem question (the facts and what is asked)",
+  },
+  {
+    feature: "essay_feedback",
+    label: "Essay feedback",
+    placeholder: "Paste your draft here",
+  },
+  {
+    feature: "moot",
+    label: "Moot prep",
+    placeholder: "Describe the moot problem and which side you are on",
+  },
+  {
+    feature: "summarize",
+    label: "Summarise",
+    needsDoc: true,
+    placeholder: "Optional: what should the summary focus on?",
+    fallback: "Summarise the selected document.",
+  },
+  {
+    feature: "case_brief",
+    label: "Case brief",
+    needsDoc: true,
+    placeholder: "Optional: which case in the document?",
+    fallback: "Write a case brief from the selected document.",
+  },
+  {
+    feature: "quiz",
+    label: "Quiz",
+    needsDoc: true,
+    placeholder: "Optional: topic or number of questions",
+    fallback: "Create 8 multiple-choice questions from the selected document.",
+  },
+  {
+    feature: "flashcards",
+    label: "Flashcards",
+    needsDoc: true,
+    placeholder: "Optional: topic or number of cards",
+    fallback: "Create 12 flashcards from the selected document.",
+  },
 ];
 
-type Turn = {
+export type Turn = {
   id: number;
   task: Task;
   prompt: string;
@@ -58,18 +102,27 @@ const BASIS_LABEL: Record<AIResult["basis"], string> = {
   none: "Nothing relevant found",
 };
 
-type QuizQ = { question: string; options: string[]; answerIndex: number; explanation: string };
+type QuizQ = {
+  question: string;
+  options: string[];
+  answerIndex: number;
+  explanation: string;
+};
 type Card = { front: string; back: string };
 
 function asQuiz(data: unknown): QuizQ[] {
   const qs = (data as { questions?: QuizQ[] } | null)?.questions;
   return Array.isArray(qs)
-    ? qs.filter((q) => q && typeof q.question === "string" && Array.isArray(q.options))
+    ? qs.filter(
+        (q) => q && typeof q.question === "string" && Array.isArray(q.options),
+      )
     : [];
 }
 function asCards(data: unknown): Card[] {
   const cs = (data as { cards?: Card[] } | null)?.cards;
-  return Array.isArray(cs) ? cs.filter((c) => c && typeof c.front === "string") : [];
+  return Array.isArray(cs)
+    ? cs.filter((c) => c && typeof c.front === "string")
+    : [];
 }
 
 function Quiz({ questions }: { questions: QuizQ[] }) {
@@ -103,13 +156,17 @@ function Quiz({ questions }: { questions: QuizQ[] }) {
                     disabled={answered}
                     onClick={() => setPicked((p) => ({ ...p, [qi]: oi }))}
                   >
-                    <span className="sa-letter">{String.fromCharCode(65 + oi)}</span>
+                    <span className="sa-letter">
+                      {String.fromCharCode(65 + oi)}
+                    </span>
                     {o}
                   </button>
                 );
               })}
             </div>
-            {answered && q.explanation && <p className="sa-explain">{q.explanation}</p>}
+            {answered && q.explanation && (
+              <p className="sa-explain">{q.explanation}</p>
+            )}
           </div>
         );
       })}
@@ -137,18 +194,28 @@ function Flashcards({ cards }: { cards: Card[] }) {
         className={`sa-card ${flipped ? "back" : ""}`}
         onClick={() => setFlipped((f) => !f)}
       >
-        <span className="sa-card-side">{flipped ? "Application" : "Rule or term"}</span>
+        <span className="sa-card-side">
+          {flipped ? "Application" : "Rule or term"}
+        </span>
         <span className="sa-card-text">{flipped ? card.back : card.front}</span>
         <span className="sa-card-hint">Tap to flip</span>
       </button>
       <div className="sa-flash-nav">
-        <button type="button" className="secondary-button" onClick={() => go(-1)}>
+        <button
+          type="button"
+          className="secondary-button"
+          onClick={() => go(-1)}
+        >
           Previous
         </button>
         <span className="quiet">
           {i + 1} of {cards.length}
         </span>
-        <button type="button" className="secondary-button" onClick={() => go(1)}>
+        <button
+          type="button"
+          className="secondary-button"
+          onClick={() => go(1)}
+        >
           Next
         </button>
       </div>
@@ -156,15 +223,17 @@ function Flashcards({ cards }: { cards: Card[] }) {
   );
 }
 
-function Answer({ turn }: { turn: Turn }) {
+export function Answer({ turn }: { turn: Turn }) {
   const r = turn.result;
-  if (turn.error) return <div className="connection-error">{turn.error}</div>;
+  if (turn.error && !r)
+    return <div className="connection-error">{turn.error}</div>;
   if (!r) return null;
   const quiz = turn.task.feature === "quiz" ? asQuiz(r.data) : [];
   const cards = turn.task.feature === "flashcards" ? asCards(r.data) : [];
   const structured = quiz.length > 0 || cards.length > 0;
   return (
     <div className="sa-answer">
+      {turn.error && <div className="connection-error">{turn.error}</div>}
       <div className="sa-basis">
         <span className={`sa-badge ${r.grounded ? "grounded" : "open"}`}>
           {BASIS_LABEL[r.basis]}
@@ -231,7 +300,9 @@ export function StudyAssistant() {
   }, [turns, busy]);
 
   const toggleDoc = (id: string) =>
-    setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id].slice(-10)));
+    setSelected((s) =>
+      s.includes(id) ? s.filter((x) => x !== id) : [...s, id].slice(-10),
+    );
 
   const onUpload = async (files: FileList | null) => {
     if (!files?.length) return;
@@ -291,10 +362,14 @@ export function StudyAssistant() {
         messages: [...history, { role: "user", content: text }],
         docIds: selected.length ? selected : undefined,
       });
-      setTurns((all) => all.map((t) => (t.id === turn.id ? { ...t, result } : t)));
+      setTurns((all) =>
+        all.map((t) => (t.id === turn.id ? { ...t, result } : t)),
+      );
     } catch (e) {
       setTurns((all) =>
-        all.map((t) => (t.id === turn.id ? { ...t, error: (e as Error).message } : t)),
+        all.map((t) =>
+          t.id === turn.id ? { ...t, error: (e as Error).message } : t,
+        ),
       );
     } finally {
       setBusy(false);
@@ -321,8 +396,9 @@ export function StudyAssistant() {
             <div className="sa-empty">
               <h2>What are we studying today?</h2>
               <p className="subheading">
-                Pick a task, choose where answers may come from, and ask. For summaries, case
-                briefs, quizzes and flashcards, tick a document on the right first.
+                Pick a task, choose where answers may come from, and ask. For
+                summaries, case briefs, quizzes and flashcards, tick a document
+                on the right first.
               </p>
             </div>
           )}
@@ -372,13 +448,21 @@ export function StudyAssistant() {
                 }
               }}
             />
-            <button className="primary-button sa-send" type="submit" disabled={busy}>
+            <button
+              className="primary-button sa-send"
+              type="submit"
+              disabled={busy}
+            >
               <Send size={14} /> {busy ? "Working" : "Send"}
             </button>
           </div>
           {note && <p className="sa-note">{note}</p>}
           {turns.length > 0 && (
-            <button type="button" className="sa-clear" onClick={() => setTurns([])}>
+            <button
+              type="button"
+              className="sa-clear"
+              onClick={() => setTurns([])}
+            >
               Clear conversation
             </button>
           )}
@@ -390,7 +474,10 @@ export function StudyAssistant() {
           <div className="section-label">Answer from</div>
           <div className="sa-modes">
             {AI_MODES.map((m) => (
-              <label key={m.value} className={`sa-mode ${mode === m.value ? "on" : ""}`}>
+              <label
+                key={m.value}
+                className={`sa-mode ${mode === m.value ? "on" : ""}`}
+              >
                 <input
                   type="radio"
                   name="ai-mode"
@@ -413,7 +500,12 @@ export function StudyAssistant() {
               disabled={uploading}
               onClick={() => fileRef.current?.click()}
             >
-              {uploading ? <Loader2 size={13} className="sa-spin" /> : <Upload size={13} />} Upload
+              {uploading ? (
+                <Loader2 size={13} className="sa-spin" />
+              ) : (
+                <Upload size={13} />
+              )}{" "}
+              Upload
             </button>
             <input
               ref={fileRef}
@@ -424,7 +516,9 @@ export function StudyAssistant() {
               onChange={(e) => void onUpload(e.target.files)}
             />
           </div>
-          <p className="field-hint">PDF, Word, text or markdown. Scanned PDFs need OCR first.</p>
+          <p className="field-hint">
+            PDF, Word, text or markdown. Scanned PDFs need OCR first.
+          </p>
           {mine.length === 0 ? (
             <p className="empty sa-none">No uploads yet.</p>
           ) : (

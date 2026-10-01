@@ -19,6 +19,7 @@ import {
   Mic,
   Minimize2,
   MoreHorizontal,
+  PenLine,
   Plus,
   Search,
   Settings,
@@ -58,6 +59,7 @@ import Home from "./Home";
 import TimetablePage from "./TimetablePage";
 import TranscribePage from "./TranscribePage";
 import { StudyAssistant } from "./StudyAssistant";
+import { ResearchWriter } from "./ResearchWriter";
 
 const nav = [
   { id: "dashboard", label: "Home", icon: LayoutDashboard },
@@ -71,6 +73,7 @@ const nav = [
   { id: "transcribe", label: "Transcribe", icon: Mic },
   { id: "media", label: "Media", icon: Film },
   { id: "assistant", label: "Study assistant", icon: Sparkles },
+  { id: "research", label: "Research writer", icon: PenLine },
   { id: "arena", label: "Legal Arena", icon: Gavel },
   { id: "counsellor", label: "Counsellor", icon: Users },
 ];
@@ -890,6 +893,16 @@ function App() {
                 subtitle="Ask, summarise, brief cases and practise from your own materials."
               />
               <StudyAssistant />
+            </>
+          )}
+          {view === "research" && (
+            <>
+              <PageHeading
+                eyebrow="From topic to finished paper"
+                title="Research writer."
+                subtitle="Plan, draft, critique and cite your essays and research papers with an assistant that marks every authority you must verify."
+              />
+              <ResearchWriter />
             </>
           )}
           {view === "counsellor" && <CounsellorPage />}

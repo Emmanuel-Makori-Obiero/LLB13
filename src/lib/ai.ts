@@ -18,7 +18,15 @@ export type AIFeature =
   | "study_plan"
   | "moot"
   | "quiz"
-  | "flashcards";
+  | "flashcards"
+  | "notes"
+  | "rw_question"
+  | "rw_outline"
+  | "rw_draft"
+  | "rw_improve"
+  | "rw_critique"
+  | "rw_citations"
+  | "rw_bookends";
 
 export const AI_MODES: { value: AIMode; label: string; hint: string }[] = [
   {
@@ -63,6 +71,7 @@ export async function askAI(args: {
   mode: AIMode;
   messages: AIMessage[];
   docIds?: string[];
+  part?: number; // 'notes' only: which block of a document to read
 }): Promise<AIResult> {
   const { data, error } = await db().functions.invoke("ai", { body: args });
   if (error) {
@@ -160,20 +169,50 @@ export async function uploadMaterial(
   file: File,
   citation?: string,
 ): Promise<{ id: string; chunks: number }> {
-  const { data: u } = await db().auth.getUser();
-  if (!u.user) throw new Error("Sign in first.");
   const text = (await extractText(file)).trim();
   if (text.length < 50)
     throw new Error(
       "No readable text found. Scanned PDFs need OCR before upload.",
     );
+  return storeText(file.name.replace(/\.[^.]+$/, ""), text, citation);
+}
+
+/** Save plain text (e.g. a lecture transcript) as a document the AI can read.
+ *  Any earlier copy with the same title is replaced, so the AI never reads a stale version. */
+export async function saveTextMaterial(
+  title: string,
+  text: string,
+  citation?: string,
+): Promise<{ id: string; chunks: number }> {
+  const { data: u } = await db().auth.getUser();
+  if (!u.user) throw new Error("Sign in first.");
+  const clean = text.trim();
+  if (clean.length < 50)
+    throw new Error("There is not enough text to work with yet.");
+  const { data: old } = await db()
+    .from("ai_documents")
+    .select("id")
+    .eq("owner", u.user.id)
+    .eq("scope", "user")
+    .eq("title", title);
+  for (const o of old ?? []) await deleteMaterial(o.id);
+  return storeText(title, clean, citation);
+}
+
+async function storeText(
+  title: string,
+  text: string,
+  citation?: string,
+): Promise<{ id: string; chunks: number }> {
+  const { data: u } = await db().auth.getUser();
+  if (!u.user) throw new Error("Sign in first.");
 
   const { data: doc, error } = await db()
     .from("ai_documents")
     .insert({
       owner: u.user.id,
       scope: "user",
-      title: file.name.replace(/\.[^.]+$/, ""),
+      title,
       citation: citation ?? null,
     })
     .select("id")
