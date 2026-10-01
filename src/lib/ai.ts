@@ -1,6 +1,11 @@
-// Client side of the AI layer. Adjust this import to wherever your Supabase client is created.
-import { supabase } from "./supabase";
+// Client side of the AI layer.
+import { supabase as client } from "../data/repository";
 import { useCallback, useState } from "react";
+
+function db() {
+  if (!client) throw new Error("Supabase is not configured.");
+  return client;
+}
 
 export type AIMode = "materials" | "library" | "auto" | "general";
 export type AIFeature =
@@ -59,7 +64,7 @@ export async function askAI(args: {
   messages: AIMessage[];
   docIds?: string[];
 }): Promise<AIResult> {
-  const { data, error } = await supabase.functions.invoke("ai", { body: args });
+  const { data, error } = await db().functions.invoke("ai", { body: args });
   if (error) {
     // supabase-js wraps non-2xx; try to surface the function's own message
     let msg = "The assistant is unavailable right now.";
@@ -155,7 +160,7 @@ export async function uploadMaterial(
   file: File,
   citation?: string,
 ): Promise<{ id: string; chunks: number }> {
-  const { data: u } = await supabase.auth.getUser();
+  const { data: u } = await db().auth.getUser();
   if (!u.user) throw new Error("Sign in first.");
   const text = (await extractText(file)).trim();
   if (text.length < 50)
@@ -163,7 +168,7 @@ export async function uploadMaterial(
       "No readable text found. Scanned PDFs need OCR before upload.",
     );
 
-  const { data: doc, error } = await supabase
+  const { data: doc, error } = await db()
     .from("ai_documents")
     .insert({
       owner: u.user.id,
@@ -183,11 +188,11 @@ export async function uploadMaterial(
     content,
   }));
   for (let i = 0; i < rows.length; i += 200) {
-    const { error: e2 } = await supabase
+    const { error: e2 } = await db()
       .from("ai_chunks")
       .insert(rows.slice(i, i + 200));
     if (e2) {
-      await supabase.from("ai_documents").delete().eq("id", doc.id);
+      await db().from("ai_documents").delete().eq("id", doc.id);
       throw new Error("Upload failed part-way; nothing was kept.");
     }
   }
@@ -195,7 +200,7 @@ export async function uploadMaterial(
 }
 
 export async function listMyMaterials() {
-  const { data } = await supabase
+  const { data } = await db()
     .from("ai_documents")
     .select("id,title,citation,scope,created_at")
     .order("created_at", { ascending: false });
@@ -203,5 +208,5 @@ export async function listMyMaterials() {
 }
 
 export async function deleteMaterial(id: string) {
-  await supabase.from("ai_documents").delete().eq("id", id);
+  await db().from("ai_documents").delete().eq("id", id);
 }

@@ -57,6 +57,7 @@ import { DeleteAccountCard } from "./AccountPage";
 import Home from "./Home";
 import TimetablePage from "./TimetablePage";
 import TranscribePage from "./TranscribePage";
+import { StudyAssistant } from "./StudyAssistant";
 
 const nav = [
   { id: "dashboard", label: "Home", icon: LayoutDashboard },
@@ -882,11 +883,14 @@ function App() {
           )}
           {view === "members" && <SectionedMembersPage members={members} />}
           {view === "assistant" && (
-            <AssistantPage
-              materials={materials}
-              media={media}
-              setPage={setPage}
-            />
+            <>
+              <PageHeading
+                eyebrow="Your guided study companion"
+                title="Study assistant."
+                subtitle="Ask, summarise, brief cases and practise from your own materials."
+              />
+              <StudyAssistant />
+            </>
           )}
           {view === "counsellor" && <CounsellorPage />}
           {view === "account" && (
@@ -1989,126 +1993,6 @@ function MediaPage({
           or court recording above.
         </div>
       )}
-    </>
-  );
-}
-
-function AssistantPage({
-  materials,
-  media,
-  setPage,
-}: {
-  materials: Material[];
-  media: MediaResource[];
-  setPage: (page: string) => void;
-}) {
-  const [command, setCommand] = useState("");
-  const [response, setResponse] = useState(
-    "Ask me to find a book, open the library, start a meeting, or open your to-do list.",
-  );
-  const [results, setResults] = useState<
-    Array<{ title: string; url?: string }>
-  >([]);
-  const run = (event: React.FormEvent) => {
-    event.preventDefault();
-    const text = command.toLowerCase();
-    setResults([]);
-    if (text.includes("meeting") || text.includes("discussion")) {
-      setResponse(
-        "I can take you to the discussion rooms. Choose the room you want to join.",
-      );
-      setPage("discussions");
-      return;
-    }
-    if (
-      text.includes("to-do") ||
-      text.includes("todo") ||
-      text.includes("task")
-    ) {
-      setResponse("Opening your personal to-do list.");
-      setPage("todos");
-      return;
-    }
-    if (
-      text.includes("media") ||
-      text.includes("movie") ||
-      text.includes("youtube")
-    ) {
-      setResponse("Opening your law media collection.");
-      setPage("media");
-      return;
-    }
-    if (
-      text.includes("book") ||
-      text.includes("material") ||
-      text.includes("case")
-    ) {
-      const found = materials
-        .filter(
-          (item) =>
-            `${item.title} ${item.topic} ${item.unit}`
-              .toLowerCase()
-              .includes(
-                text.replace(/.*?(book|material|case)\s*/, "").trim(),
-              ) || text.includes(item.title.toLowerCase()),
-        )
-        .map((item) => ({ title: item.title, url: item.url }));
-      const mediaFound = media
-        .filter((item) =>
-          `${item.title} ${item.topic}`.toLowerCase().includes(text),
-        )
-        .map((item) => ({ title: item.title, url: item.url }));
-      setResults([...found, ...mediaFound]);
-      setResponse(
-        found.length || mediaFound.length
-          ? "I found these resources in your workspace."
-          : "I could not find that in your workspace yet. Add it to the Library or Media page.",
-      );
-      return;
-    }
-    setResponse(
-      "I can navigate the workspace and search your own Library/Media records. Generative legal advice and announcements need a secured server-side AI assistant before they are enabled.",
-    );
-  };
-  return (
-    <>
-      <PageHeading
-        eyebrow="Your guided study companion"
-        title="Study assistant."
-        subtitle="A controlled navigation and librarian assistant using only your Group 13 records."
-      />
-      <div className="card card-pad assistant-card">
-        <form className="assistant-form" onSubmit={run}>
-          <input
-            value={command}
-            onChange={(event) => setCommand(event.target.value)}
-            placeholder="Try: find materials on evidence, start a meeting, open my to-do list"
-          />
-          <button className="primary-button" type="submit">
-            Ask assistant
-          </button>
-        </form>
-        <div className="assistant-response">
-          <Sparkles size={18} />
-          <p>{response}</p>
-        </div>
-        {results.length > 0 && (
-          <div className="row-list">
-            {results.map((result) => (
-              <a
-                className="row assistant-result"
-                key={result.title}
-                href={safeUrl(result.url) || undefined}
-                target={safeUrl(result.url) ? "_blank" : undefined}
-                rel="noreferrer"
-              >
-                <span className="row-title">{result.title}</span>
-                <span>{result.url ? "Open resource" : "No link saved"}</span>
-              </a>
-            ))}
-          </div>
-        )}
-      </div>
     </>
   );
 }
