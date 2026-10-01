@@ -72,6 +72,7 @@ import { TranscriptAI } from "./TranscriptAI";
 import { askAI, type AIFeature } from "./lib/ai";
 import { Markdown } from "./Markdown";
 import GrowthPage from "./GrowthPage";
+import PracticeRoom from "./PracticeRoom";
 
 const nav = [
   { id: "dashboard", label: "Home", icon: LayoutDashboard },
@@ -2630,6 +2631,7 @@ function ArenaPage({
         subtitle="Practice only from sources you or your group have uploaded. No preloaded cases or invented scenarios."
       />
       <PracticeCoach />
+      <PracticeRoom />
       {materials.length === 0 ? (
         <div className="card card-pad empty-state">
           <div className="section-label">Arena is waiting for research</div>
