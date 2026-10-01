@@ -276,6 +276,13 @@ const FEATURES: Record<
     docWide: true,
     task: "Help the student study one selected topic from the book. First locate the topic in the provided source, then give a focused summary of its rule or thesis, key concepts, authorities or examples, common confusion, and one active-recall question. If the student has not named a topic, list the available major topics and ask them to choose one instead of summarising the entire book.",
   },
+  book_metadata: {
+    json: true,
+    task: 'Extract only metadata supported by the uploaded book text and the available-units list in the user message. Return ONLY JSON: {"title":"","type":"Textbook|Lecture notes|Case brief|Statute|Past paper|Guide","unit":"","topics":[""],"source":"","date":""}. Choose unit only from the supplied available-units list. Do not invent a publisher, date, or topics; use empty strings or an empty array when not supported.',
+  },
+  book_recommendation: {
+    task: "From the provided library sources, recommend the single most useful book or source for the student's revision question. Name the book exactly as shown in the sources, explain why it matches, identify the relevant topic or section if supported, and cite the source. If no library source is relevant, say so clearly instead of inventing a book.",
+  },
   case_brief: {
     docWide: true,
     task: "Write a case brief: Facts; Procedural history; Issues; Holding; Ratio decidendi; Reasoning; Obiter; Significance. Write 'Not stated in the material' for any part the sources do not cover.",

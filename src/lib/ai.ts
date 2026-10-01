@@ -14,6 +14,8 @@ export type AIFeature =
   | "summarize"
   | "book_contents"
   | "topic_summary"
+  | "book_metadata"
+  | "book_recommendation"
   | "case_brief"
   | "irac"
   | "essay_feedback"
@@ -154,7 +156,7 @@ function chunkText(text: string, size = 1200, overlap = 200): string[] {
   return chunks;
 }
 
-async function extractText(file: File): Promise<string> {
+export async function extractText(file: File): Promise<string> {
   const name = file.name.toLowerCase();
   if (name.endsWith(".pdf")) {
     const pdfjs = await import("pdfjs-dist");

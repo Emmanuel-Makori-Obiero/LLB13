@@ -100,6 +100,12 @@ const TASKS: Task[] = [
       "List the main topics in the selected book and ask me which one I want to study first.",
   },
   {
+    feature: "book_recommendation",
+    label: "Find a library book",
+    placeholder:
+      "What are you revising? e.g. judicial review or contract remedies",
+  },
+  {
     feature: "case_brief",
     label: "Case brief",
     needsDoc: true,
@@ -324,10 +330,16 @@ export function Answer({ turn }: { turn: Turn }) {
           {r.sources.map((s) => (
             <div className="sa-source" key={s.tag}>
               <sup className="md-cite">{s.tag}</sup>
-              <span>
-                {s.title}
-                {s.ref ? `, ${s.ref}` : ""}
-              </span>
+              {s.ref && /^https?:\/\//i.test(s.ref) ? (
+                <a href={s.ref} target="_blank" rel="noreferrer">
+                  {s.title} ↗
+                </a>
+              ) : (
+                <span>
+                  {s.title}
+                  {s.ref ? `, ${s.ref}` : ""}
+                </span>
+              )}
             </div>
           ))}
         </div>
@@ -413,7 +425,12 @@ export function StudyAssistant() {
     setBusy(true);
 
     // Document tasks need the chosen documents, so "Any law" is switched to "Smart" for them.
-    const useMode: AIMode = task.needsDoc && mode === "general" ? "auto" : mode;
+    const useMode: AIMode =
+      task.feature === "book_recommendation"
+        ? "library"
+        : task.needsDoc && mode === "general"
+          ? "auto"
+          : mode;
     const history = task.needsDoc
       ? []
       : turns

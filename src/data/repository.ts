@@ -32,6 +32,10 @@ export type Group13Repository = {
     material: Omit<Material, "id">,
     file?: File,
   ) => Promise<Material>;
+  updateMaterial: (
+    id: string,
+    material: Omit<Material, "id">,
+  ) => Promise<Material>;
   createAssignment: (assignment: Omit<Assignment, "id">) => Promise<Assignment>;
   getTodos: () => Promise<Todo[]>;
   createTodo: (todo: Omit<Todo, "id">) => Promise<Todo>;
@@ -278,6 +282,27 @@ const supabaseRepository: Group13Repository = {
       .select(MATERIAL_COLUMNS)
       .single();
     if (error) throw new Error(`Could not add material: ${error.message}`);
+    return data as Material;
+  },
+  updateMaterial: async (id, material) => {
+    if (!supabase) throw new Error("Supabase is not configured.");
+    if (material.url && !/^https?:\/\//i.test(material.url.trim()))
+      throw new Error("Links must start with http:// or https://");
+    const { data, error } = await supabase
+      .from("materials")
+      .update({
+        title: material.title,
+        type: material.type,
+        unit: material.unit,
+        topic: material.topic,
+        date: material.date,
+        source: material.source,
+        url: material.url || null,
+      })
+      .eq("id", id)
+      .select(MATERIAL_COLUMNS)
+      .single();
+    if (error) throw new Error(`Could not update material: ${error.message}`);
     return data as Material;
   },
   createAssignment: async (assignment) => {

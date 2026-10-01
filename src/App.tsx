@@ -69,7 +69,7 @@ import { CounsellorChat } from "./CounsellorChat";
 import { StudyAssistant } from "./StudyAssistant";
 import { ResearchWriter } from "./ResearchWriter";
 import { TranscriptAI } from "./TranscriptAI";
-import { askAI, type AIFeature } from "./lib/ai";
+import { askAI, extractText, type AIFeature } from "./lib/ai";
 import { Markdown } from "./Markdown";
 import GrowthPage from "./GrowthPage";
 import PracticeRoom from "./PracticeRoom";
@@ -171,6 +171,7 @@ function App() {
   const [activeMeeting, setActiveMeeting] = useState<Discussion | null>(null);
   const [activeMaterial, setActiveMaterial] = useState<Material | null>(null);
   const [materialFormOpen, setMaterialFormOpen] = useState(false);
+  const [editingMaterial, setEditingMaterial] = useState<Material | null>(null);
   const [assignmentFormOpen, setAssignmentFormOpen] = useState(false);
   const isAdmin = adminState === "yes";
 
@@ -455,6 +456,26 @@ function App() {
         error instanceof Error
           ? error.message
           : "Could not delete the material.",
+      );
+    }
+  };
+  const updateMaterial = async (
+    material: Material,
+    changes: Omit<Material, "id">,
+  ) => {
+    try {
+      const updated = await repository.updateMaterial(material.id, changes);
+      setMaterials((current) =>
+        current.map((item) => (item.id === updated.id ? updated : item)),
+      );
+      setActiveMaterial((current) =>
+        current?.id === updated.id ? updated : current,
+      );
+      setEditingMaterial(null);
+      setNotice("Book details updated.");
+    } catch (error) {
+      setNotice(
+        error instanceof Error ? error.message : "Could not update the book.",
       );
     }
   };
@@ -858,6 +879,7 @@ function App() {
               search={search}
               setSearch={setSearch}
               openCreate={() => setMaterialFormOpen(true)}
+              openEdit={setEditingMaterial}
               openReader={openReader}
               canDelete={(material) =>
                 isAdmin || (!!userId && material.owner_id === userId)
@@ -1057,6 +1079,14 @@ function App() {
               );
             }
           }}
+        />
+      )}
+      {editingMaterial && (
+        <MaterialForm
+          units={units}
+          initial={editingMaterial}
+          onClose={() => setEditingMaterial(null)}
+          onUpdated={(changes) => updateMaterial(editingMaterial, changes)}
         />
       )}
       {assignmentFormOpen && (
@@ -2911,6 +2941,7 @@ function LibraryPageReal({
   search,
   setSearch,
   openCreate,
+  openEdit,
   openReader,
   canDelete,
   onDelete,
@@ -2919,6 +2950,7 @@ function LibraryPageReal({
   search: string;
   setSearch: (value: string) => void;
   openCreate: () => void;
+  openEdit: (material: Material) => void;
   openReader: (material: Material) => void;
   canDelete: (material: Material) => boolean;
   onDelete: (material: Material) => void;
@@ -2986,15 +3018,24 @@ function LibraryPageReal({
                   )}
                 </td>
                 <td>
-                  {canDelete(material) && (
+                  <div className="resource-actions">
                     <button
-                      className="small-danger"
-                      onClick={() => onDelete(material)}
-                      aria-label={`Delete ${material.title}`}
+                      className="secondary-button small-action"
+                      onClick={() => openEdit(material)}
+                      aria-label={`Edit ${material.title}`}
                     >
-                      <Trash2 size={12} /> Delete
+                      Edit
                     </button>
-                  )}
+                    {canDelete(material) && (
+                      <button
+                        className="small-danger"
+                        onClick={() => onDelete(material)}
+                        aria-label={`Delete ${material.title}`}
+                      >
+                        <Trash2 size={12} /> Delete
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -3129,36 +3170,117 @@ function FormShell({
 }
 function MaterialForm({
   units,
+  initial,
   onClose,
   onCreated,
+  onUpdated,
 }: {
   units: Unit[];
+  initial?: Material;
   onClose: () => void;
-  onCreated: (material: Omit<Material, "id">, file?: File) => Promise<void>;
+  onCreated?: (material: Omit<Material, "id">, file?: File) => Promise<void>;
+  onUpdated?: (material: Omit<Material, "id">) => Promise<void>;
 }) {
   const [file, setFile] = useState<File>();
-  const [form, setForm] = useState<Omit<Material, "id">>({
-    title: "",
-    type: "Lecture notes",
-    unit: units[0]?.name ?? "",
-    topic: "",
-    date: new Date().toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    }),
-    source: "Group 13",
-    url: "",
-  });
+  const [extracting, setExtracting] = useState(false);
+  const [extractNote, setExtractNote] = useState("");
+  const [form, setForm] = useState<Omit<Material, "id">>(() =>
+    initial
+      ? {
+          title: initial.title,
+          type: initial.type,
+          unit: initial.unit,
+          topic: initial.topic,
+          date: initial.date,
+          source: initial.source,
+          url: initial.url ?? "",
+          storage_path: initial.storage_path,
+          owner_id: initial.owner_id,
+        }
+      : {
+          title: "",
+          type: "Lecture notes",
+          unit: units[0]?.name ?? "",
+          topic: "",
+          date: new Date().toLocaleDateString("en-GB", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          }),
+          source: "Group 13",
+          url: "",
+        },
+  );
   const change = (key: keyof typeof form, value: string) =>
     setForm((current) => ({ ...current, [key]: value }));
+  const inspectBook = async (selectedFile: File | undefined) => {
+    setFile(selectedFile);
+    if (!selectedFile || initial) return;
+    setExtracting(true);
+    setExtractNote("Reading the book and extracting details…");
+    try {
+      const text = (await extractText(selectedFile)).trim();
+      if (text.length < 60)
+        throw new Error(
+          "The file has too little readable text. Scanned PDFs need OCR first.",
+        );
+      const availableUnits = units.map((unit) => unit.name).join("; ");
+      const result = await askAI({
+        feature: "book_metadata",
+        mode: "general",
+        messages: [
+          {
+            role: "user",
+            content: `Inspect this uploaded book. Available units are: ${availableUnits || "none"}. Choose a matching unit only from that list. File name: ${selectedFile.name}\n\nBOOK TEXT:\n${text.slice(0, 60000)}`,
+          },
+        ],
+      });
+      const metadata = result.data as {
+        title?: string;
+        type?: string;
+        unit?: string;
+        topics?: string[];
+        source?: string;
+        date?: string;
+      } | null;
+      const matchingUnit = units.find(
+        (unit) => unit.name === metadata?.unit,
+      )?.name;
+      setForm((current) => ({
+        ...current,
+        title:
+          metadata?.title?.trim() ||
+          current.title ||
+          selectedFile.name.replace(/\.[^.]+$/, ""),
+        type: metadata?.type?.trim() || current.type,
+        unit: matchingUnit || current.unit,
+        topic: Array.isArray(metadata?.topics)
+          ? metadata.topics.filter(Boolean).join(", ")
+          : current.topic,
+        source: metadata?.source?.trim() || current.source,
+        date: metadata?.date?.trim() || current.date,
+      }));
+      setExtractNote("Details extracted. Review them before saving.");
+    } catch (error) {
+      setExtractNote(
+        error instanceof Error
+          ? error.message
+          : "Could not extract book details. Enter them manually.",
+      );
+    } finally {
+      setExtracting(false);
+    }
+  };
   return (
-    <FormShell title="Add library material" onClose={onClose}>
+    <FormShell
+      title={initial ? "Edit book details" : "Add library material"}
+      onClose={onClose}
+    >
       <form
         className="data-form"
         onSubmit={(event) => {
           event.preventDefault();
-          void onCreated(form, file);
+          void (initial ? onUpdated?.(form) : onCreated?.(form, file));
         }}
       >
         <label>
@@ -3195,7 +3317,10 @@ function MaterialForm({
           </select>
         </label>
         <label>
-          Topic
+          Topics
+          <span className="field-hint">
+            Separate multiple topics with commas
+          </span>
           <input
             required
             value={form.topic}
@@ -3228,11 +3353,23 @@ function MaterialForm({
           <input
             type="file"
             accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg"
-            onChange={(event) => setFile(event.target.files?.[0])}
+            onChange={(event) => void inspectBook(event.target.files?.[0])}
           />
+          {extracting && (
+            <span className="field-hint">
+              AI is analysing the readable text…
+            </span>
+          )}
+          {!extracting && extractNote && (
+            <span className="field-hint">{extractNote}</span>
+          )}
         </label>
         <button className="primary-button" type="submit">
-          {file ? "Upload material" : "Save material link"}
+          {initial
+            ? "Save book details"
+            : file
+              ? "Upload material"
+              : "Save material link"}
         </button>
       </form>
     </FormShell>
