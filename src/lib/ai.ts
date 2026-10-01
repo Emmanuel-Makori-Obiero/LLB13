@@ -37,7 +37,9 @@ export type AIFeature =
   | "rw_improve"
   | "rw_critique"
   | "rw_citations"
-  | "rw_bookends";
+  | "rw_bookends"
+  | "podcast_script"
+  | "video_script";
 
 export const AI_MODES: { value: AIMode; label: string; hint: string }[] = [
   {

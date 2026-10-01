@@ -138,9 +138,21 @@ export default function PracticeRoom() {
     if (!speakReplies || !("speechSynthesis" in window)) return;
     window.speechSynthesis.cancel();
     setState(nextState);
-    const utterance = new SpeechSynthesisUtterance(text);
+    const spoken = text
+      .replace(/^#+\s*/gm, "")
+      .replace(/[*_`]/g, "")
+      .replace(/\[(S\d+)\]/g, "source $1")
+      .replace(/\s+/g, " ")
+      .trim();
+    const utterance = new SpeechSynthesisUtterance(spoken);
     utterance.lang = "en-KE";
-    utterance.rate = 0.96;
+    utterance.rate = 0.91;
+    utterance.pitch = 0.98;
+    const voices = window.speechSynthesis.getVoices();
+    utterance.voice =
+      voices.find((voice) => /en[-_]KE/i.test(voice.lang)) ??
+      voices.find((voice) => /en[-_](GB|AU|US)/i.test(voice.lang)) ??
+      null;
     utterance.onend = () => {
       if (!listening) setState("idle");
     };
@@ -176,7 +188,7 @@ export default function PracticeRoom() {
           {
             role: "user",
             content:
-              "You are my live one-on-one moot judge. Give a brief acknowledgement such as 'Mm-hm, I hear you' when appropriate, then one focused observation and one bench question. Wait for my answer; do not dump a complete submission. Keep the spoken answer under 90 seconds.",
+              "You are my live one-on-one moot judge. Respond like a real human judge, not a report generator. Start by responding to the student's actual point when appropriate ('I follow you', 'All right', 'Go on', or 'Let me test that'), then make one precise observation and ask one focused bench question. Vary your wording; do not use headings, numbered checklists, canned praise, or a complete model submission. Wait for the student's answer. Keep the spoken answer under 60 seconds and use natural spoken sentences.",
           },
         ],
       });

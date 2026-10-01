@@ -75,6 +75,7 @@ import GrowthPage from "./GrowthPage";
 import PracticeRoom from "./PracticeRoom";
 import RealtimeJudgeRoom from "./RealtimeJudgeRoom";
 import BookReader from "./BookReader";
+import LearningStudio from "./LearningStudio";
 
 const nav = [
   { id: "dashboard", label: "Home", icon: LayoutDashboard },
@@ -975,6 +976,7 @@ function App() {
                 subtitle="Ask, summarise, brief cases and practise from your own materials."
               />
               <StudyAssistant />
+              <LearningStudio />
             </>
           )}
           {view === "research" && (

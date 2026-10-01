@@ -276,6 +276,14 @@ const FEATURES: Record<
     docWide: true,
     task: "Help the student study one selected topic from the book. First locate the topic in the provided source, then give a focused summary of its rule or thesis, key concepts, authorities or examples, common confusion, and one active-recall question. If the student has not named a topic, list the available major topics and ask them to choose one instead of summarising the entire book.",
   },
+  podcast_script: {
+    docWide: true,
+    task: "Write a natural two-speaker educational law podcast script grounded in the provided sources. Use Speaker 1 as a warm host and Speaker 2 as a thoughtful legal tutor. Open with a human hook, explain the topic in plain language, use one concrete example, surface a counterargument or limitation, and end with a short recap and one question for the listener. Keep it conversational rather than essay-like. Mark uncertain law with (verify), never invent authorities, and label each line HOST or TUTOR.",
+  },
+  video_script: {
+    docWide: true,
+    task: "Write a short narrated video lesson grounded in the provided sources. Structure it as 6 to 10 scenes. For every scene use this format: SCENE N — TITLE; VISUAL: one simple slide or on-screen idea; NARRATION: natural spoken explanation; SOURCE NOTE: relevant source marker or 'verify'. Use plain language, one concrete example, a counterargument or limitation, and a final quick-recall question. Do not invent authorities or pretend a quotation is verified.",
+  },
   book_metadata: {
     json: true,
     task: 'Extract only metadata supported by the uploaded book text and the available-units list in the user message. Return ONLY JSON: {"title":"","type":"Textbook|Lecture notes|Case brief|Statute|Past paper|Guide","unit":"","topics":[""],"source":"","date":""}. Choose unit only from the supplied available-units list. Do not invent a publisher, date, or topics; use empty strings or an empty array when not supported.',
@@ -300,7 +308,7 @@ const FEATURES: Record<
     task: "Help prepare a moot step by step: give one issue or drill at a time, ask the student to respond, then correct and continue. Cover strongest arguments, authorities, bench questions and rebuttals without dumping a complete submission.",
   },
   moot_judge: {
-    task: "Act as a demanding but educational moot-court judge. Do not rewrite the whole submission. First identify one strength and one high-impact weakness, then ask one bench question and wait for the student response before revealing the model approach. Later assess issue identification, authority, reasoning, application, structure, citation discipline, responsiveness, time control, persuasiveness and human voice. Mark generic, repetitive or over-polished passages as AI-like signals—not proof—and give a humanisation exercise. Score only after the coaching exchange; never invent authorities.",
+    task: "Act as a demanding but humane moot-court judge in a live oral exchange. Sound like a real person in court: acknowledge what the student actually said, use occasional natural phrases such as 'I follow you', 'All right', 'Let me test that', or 'Go on', and vary sentence length. Do not use headings, checklists, canned praise, or a full model answer. Give one precise observation, then ask one focused bench question and wait. Interrupt only for a serious legal error, a missing answer, or time control. Later assess issue identification, authority, reasoning, application, responsiveness, time control and persuasiveness. Mark generic or over-polished wording as a signal—not proof—and never invent authorities.",
   },
   moot_guide: {
     task: "Teach a first-year student how moot court works progressively, one stage at a time. Explain one step, ask a retrieval question, correct gently, repeat an earlier idea, then unlock the next step. Cover roles, memorials, authorities, addressing the bench, timekeeping, rebuttal and common mistakes.",
