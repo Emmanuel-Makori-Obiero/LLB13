@@ -1,48 +1,52 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Assignment, Lesson } from "./data/types";
+import { supabase } from "./data/repository";
 
 type Review = {
-  id: string;
+  id?: string;
+  source_id: string;
   title: string;
   kind: string;
-  due: number;
-  interval: number;
-  seen: number;
+  due_at: string;
+  interval_days: number;
+  repetitions: number;
+  last_quality?: string | null;
   skill: string;
 };
-const KEY = "group13.learning-loop.v1";
+const KEY = "group13.learning-loop.v2";
 const DAY = 86_400_000;
-
-function read(): Review[] {
+function readLocal(): Review[] {
   try {
     return JSON.parse(localStorage.getItem(KEY) ?? "[]") as Review[];
   } catch {
     return [];
   }
 }
-function save(rows: Review[]) {
+function saveLocal(rows: Review[]) {
   localStorage.setItem(KEY, JSON.stringify(rows));
 }
 
 export default function LearningLoop({
   assignments,
   lessons,
+  userId,
   onOpenArena,
 }: {
   assignments: Assignment[];
   lessons: Lesson[];
+  userId: string | null;
   onOpenArena: () => void;
 }) {
   const seeds = useMemo(
     () => [
       ...assignments.map((a) => ({
-        id: `assignment:${a.id}`,
+        source_id: `assignment:${a.id}`,
         title: a.title,
         kind: "Assignment",
         skill: a.unit,
       })),
       ...lessons.slice(0, 12).map((l) => ({
-        id: `lesson:${l.id}`,
+        source_id: `lesson:${l.id}`,
         title: l.topic,
         kind: "Lesson",
         skill: l.unit,
@@ -50,51 +54,103 @@ export default function LearningLoop({
     ],
     [assignments, lessons],
   );
-  const [rows, setRows] = useState<Review[]>(() => read());
+  const [rows, setRows] = useState<Review[]>(() => readLocal());
+  const [loaded, setLoaded] = useState(false);
   useEffect(() => {
-    const current = new Map(rows.map((r) => [r.id, r]));
-    let changed = false;
+    let alive = true;
+    const load = async () => {
+      if (!supabase || !userId) {
+        if (alive) setLoaded(true);
+        return;
+      }
+      const { data } = await supabase
+        .from("learning_reviews")
+        .select(
+          "id,source_id,title,kind,skill,due_at,interval_days,repetitions,last_quality",
+        )
+        .eq("user_id", userId)
+        .order("due_at")
+        .limit(100);
+      if (alive) {
+        setRows((data as Review[] | null) ?? []);
+        setLoaded(true);
+      }
+    };
+    void load();
+    return () => {
+      alive = false;
+    };
+  }, [userId]);
+  useEffect(() => {
+    if (!loaded) return;
+    const current = new Map(rows.map((r) => [r.source_id, r]));
     const next = seeds.map(
       (seed) =>
-        current.get(seed.id) ?? {
+        current.get(seed.source_id) ?? {
           ...seed,
-          due: Date.now(),
-          interval: 0,
-          seen: 0,
+          due_at: new Date().toISOString(),
+          interval_days: 0,
+          repetitions: 0,
         },
     );
-    if (next.length !== rows.length) changed = true;
-    if (changed) {
-      setRows(next);
-      save(next);
-    }
-  }, [seeds]);
-  const due = rows.filter((r) => r.due <= Date.now());
-  const mastered = rows.filter((r) => r.interval >= 14).length;
+    if (!next.length) return;
+    setRows(next);
+    saveLocal(next);
+    if (supabase && userId)
+      void supabase.from("learning_reviews").upsert(
+        next.map((r) => ({
+          user_id: userId,
+          source_id: r.source_id,
+          title: r.title,
+          kind: r.kind,
+          skill: r.skill,
+          due_at: r.due_at,
+          interval_days: r.interval_days,
+          repetitions: r.repetitions,
+          last_quality: r.last_quality ?? null,
+        })),
+        { onConflict: "user_id,source_id" },
+      );
+  }, [loaded, seeds]);
+  const due = rows.filter((r) => new Date(r.due_at).getTime() <= Date.now());
+  const mastered = rows.filter((r) => r.interval_days >= 14).length;
   const review = due[0];
-  const mark = (quality: "again" | "good" | "mastered") => {
+  const mark = async (quality: "again" | "good" | "mastered") => {
     if (!review) return;
+    const interval =
+      quality === "again"
+        ? 1
+        : quality === "good"
+          ? Math.max(1, review.interval_days * 2 || 2)
+          : 30;
+    const changed = {
+      ...review,
+      due_at: new Date(Date.now() + interval * DAY).toISOString(),
+      interval_days: quality === "again" ? 0 : interval,
+      repetitions: review.repetitions + 1,
+      last_quality: quality,
+    };
     const next = rows.map((r) =>
-      r.id !== review.id
-        ? r
-        : quality === "again"
-          ? { ...r, due: Date.now() + DAY, interval: 0, seen: r.seen + 1 }
-          : quality === "good"
-            ? {
-                ...r,
-                due: Date.now() + Math.max(1, r.interval * 2 || 2) * DAY,
-                interval: Math.max(1, r.interval * 2 || 2),
-                seen: r.seen + 1,
-              }
-            : {
-                ...r,
-                due: Date.now() + 30 * DAY,
-                interval: 30,
-                seen: r.seen + 1,
-              },
+      r.source_id === review.source_id ? changed : r,
     );
     setRows(next);
-    save(next);
+    saveLocal(next);
+    if (supabase && userId) {
+      await supabase
+        .from("learning_reviews")
+        .upsert(
+          { user_id: userId, ...changed },
+          { onConflict: "user_id,source_id" },
+        );
+      await supabase.from("study_sessions").insert({
+        user_id: userId,
+        mode: "recall",
+        subject: review.title,
+        minutes: 2,
+        score: quality === "mastered" ? 100 : quality === "good" ? 70 : 30,
+        metadata: { skill: review.skill, quality },
+      });
+    }
   };
   return (
     <div className="card card-pad learning-loop">
@@ -120,13 +176,22 @@ export default function LearningLoop({
             step before revealing your notes.
           </p>
           <div className="review-actions">
-            <button className="secondary-button" onClick={() => mark("again")}>
+            <button
+              className="secondary-button"
+              onClick={() => void mark("again")}
+            >
               Again · tomorrow
             </button>
-            <button className="secondary-button" onClick={() => mark("good")}>
+            <button
+              className="secondary-button"
+              onClick={() => void mark("good")}
+            >
               Good · later
             </button>
-            <button className="primary-button" onClick={() => mark("mastered")}>
+            <button
+              className="primary-button"
+              onClick={() => void mark("mastered")}
+            >
               Mastered
             </button>
           </div>
@@ -146,7 +211,7 @@ export default function LearningLoop({
       <div className="learning-meta">
         <span>{due.length} due now</span>
         <span>{rows.length} topics tracked</span>
-        <span>Intervals grow: 1d → 2d → 4d → 8d → 14d</span>
+        <span>{userId ? "Synced to cloud" : "Offline progress"}</span>
       </div>
     </div>
   );

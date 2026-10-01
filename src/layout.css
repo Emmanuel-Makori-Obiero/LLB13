@@ -84,6 +84,92 @@ body,
   color: var(--muted);
   font-size: 11px;
 }
+.growth-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.skill-row {
+  margin-top: 15px;
+}
+.skill-row > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+}
+.skill-row .progress {
+  margin-top: 7px;
+  height: 7px;
+  background: var(--soft);
+}
+.skill-row .progress span {
+  display: block;
+  height: 100%;
+  background: var(--forest);
+}
+.achievement-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+.growth-section {
+  margin-top: 14px;
+}
+.path-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 15px;
+}
+.path-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 130px;
+  padding: 15px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  text-align: left;
+  cursor: pointer;
+}
+.path-card.active {
+  border-color: var(--oxblood);
+  box-shadow: inset 0 0 0 1px var(--oxblood);
+}
+.path-card span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.path-card small {
+  margin-top: auto;
+  color: var(--muted);
+  font-size: 10px;
+}
+.path-active {
+  margin-top: 16px;
+  padding: 18px;
+  background: var(--moss);
+}
+.oral-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  font: inherit;
+  line-height: 1.5;
+}
+.practice-answer {
+  margin-top: 16px;
+  padding: 16px;
+  border-left: 3px solid var(--oxblood);
+  background: var(--soft);
+}
 .unit-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

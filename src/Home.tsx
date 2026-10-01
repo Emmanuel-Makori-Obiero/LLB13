@@ -7,6 +7,7 @@ type Props = {
   lessons: Lesson[];
   todos: Todo[];
   assignments: Assignment[];
+  userId: string | null;
   setPage: (id: string) => void;
 };
 const today = () => new Date().toISOString().slice(0, 10);
@@ -17,6 +18,7 @@ export default function Home({
   lessons,
   todos,
   assignments,
+  userId,
   setPage,
 }: Props) {
   const t = today();
@@ -42,6 +44,7 @@ export default function Home({
       <LearningLoop
         assignments={assignments}
         lessons={lessons}
+        userId={userId}
         onOpenArena={() => setPage("arena")}
       />
       <div className="home-grid">

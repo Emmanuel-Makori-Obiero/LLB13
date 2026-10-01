@@ -71,6 +71,7 @@ import { ResearchWriter } from "./ResearchWriter";
 import { TranscriptAI } from "./TranscriptAI";
 import { askAI, type AIFeature } from "./lib/ai";
 import { Markdown } from "./Markdown";
+import GrowthPage from "./GrowthPage";
 
 const nav = [
   { id: "dashboard", label: "Home", icon: LayoutDashboard },
@@ -86,6 +87,7 @@ const nav = [
   { id: "assistant", label: "Study assistant", icon: Sparkles },
   { id: "research", label: "Research writer", icon: PenLine },
   { id: "arena", label: "Legal Arena", icon: Gavel },
+  { id: "growth", label: "Growth studio", icon: Sparkles },
   { id: "counsellor", label: "Counsellor", icon: Users },
 ];
 const validViews = new Set([
@@ -782,8 +784,12 @@ function App() {
               lessons={lessons}
               todos={visibleTodos}
               assignments={assignments}
+              userId={userId}
               setPage={setPage}
             />
+          )}
+          {view === "growth" && (
+            <GrowthPage userId={userId} onOpenArena={() => setPage("arena")} />
           )}
           {view === "transcribe" && (
             <TranscribePage
