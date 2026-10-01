@@ -1,6 +1,18 @@
 import { useRef, useState } from "react";
-import { Download, Layers, ListChecks, Loader2, NotebookPen, NotebookText } from "lucide-react";
-import { askAI, saveTextMaterial, type AIFeature, type AIResult } from "./lib/ai";
+import {
+  Download,
+  Layers,
+  ListChecks,
+  Loader2,
+  NotebookPen,
+  NotebookText,
+} from "lucide-react";
+import {
+  askAI,
+  saveTextMaterial,
+  type AIFeature,
+  type AIResult,
+} from "./lib/ai";
 import { Answer, type Turn } from "./StudyAssistant";
 import "./assistant.css";
 
@@ -35,14 +47,16 @@ const ACTIONS: Action[] = [
     label: "Quiz",
     icon: ListChecks,
     hint: "Multiple-choice questions on this lecture.",
-    prompt: "Create 8 multiple-choice questions testing the main points of this lecture transcript.",
+    prompt:
+      "Create 8 multiple-choice questions testing the main points of this lecture transcript.",
   },
   {
     feature: "flashcards",
     label: "Flashcards",
     icon: Layers,
     hint: "Flip cards for revision.",
-    prompt: "Create 12 flashcards covering the key rules, terms and cases from this lecture transcript.",
+    prompt:
+      "Create 12 flashcards covering the key rules, terms and cases from this lecture transcript.",
   },
 ];
 
@@ -61,7 +75,11 @@ export function TranscriptAI({
   const [notesText, setNotesText] = useState("");
   const saved = useRef<{ id: string; chunks: number } | null>(null);
 
-  const mkTask = (a: Action) => ({ feature: a.feature, label: a.label, placeholder: "" });
+  const mkTask = (a: Action) => ({
+    feature: a.feature,
+    label: a.label,
+    placeholder: "",
+  });
 
   const download = () => {
     const url = URL.createObjectURL(
@@ -78,7 +96,12 @@ export function TranscriptAI({
     if (busy) return;
     const task = mkTask(action);
     if (!ready) {
-      setTurn({ id: 1, task, prompt: "", error: "The transcript is still loading. Try again in a moment." });
+      setTurn({
+        id: 1,
+        task,
+        prompt: "",
+        error: "The transcript is still loading. Try again in a moment.",
+      });
       return;
     }
     setBusy(action.feature);
@@ -88,7 +111,10 @@ export function TranscriptAI({
       // Save the transcript once per visit so every button reads the same copy.
       if (!saved.current) {
         setStep("Preparing the transcript");
-        saved.current = await saveTextMaterial(`${title} (lecture transcript)`, getText());
+        saved.current = await saveTextMaterial(
+          `${title} (lecture transcript)`,
+          getText(),
+        );
       }
       const doc = saved.current;
 
@@ -116,7 +142,10 @@ export function TranscriptAI({
               error: `Notes stopped at part ${i + 1} of ${parts}: ${(e as Error).message} ${
                 done.length ? `Parts 1 to ${done.length} are shown below.` : ""
               } Press Make notes to try again.`,
-              result: done.length && last ? { ...last, answer: shown, warnings: [], sources: [] } : undefined,
+              result:
+                done.length && last
+                  ? { ...last, answer: shown, warnings: [], sources: [] }
+                  : undefined,
             });
             return;
           }
@@ -143,14 +172,21 @@ export function TranscriptAI({
       });
       setTurn({ id: 1, task, prompt: action.prompt, result });
     } catch (e) {
-      setTurn({ id: 1, task, prompt: action.prompt, error: (e as Error).message });
+      setTurn({
+        id: 1,
+        task,
+        prompt: action.prompt,
+        error: (e as Error).message,
+      });
     } finally {
       setBusy(null);
       setStep("");
     }
   };
 
-  const textual = turn?.result && (turn.task.feature === "summarize" || turn.task.feature === "notes");
+  const textual =
+    turn?.result &&
+    (turn.task.feature === "summarize" || turn.task.feature === "notes");
 
   return (
     <div className="ta">
@@ -168,7 +204,11 @@ export function TranscriptAI({
                 disabled={busy !== null}
                 onClick={() => void run(a)}
               >
-                {busy === a.feature ? <Loader2 size={13} className="sa-spin" /> : <Icon size={13} />}{" "}
+                {busy === a.feature ? (
+                  <Loader2 size={13} className="sa-spin" />
+                ) : (
+                  <Icon size={13} />
+                )}{" "}
                 {a.label}
               </button>
             );
@@ -177,7 +217,8 @@ export function TranscriptAI({
       </div>
       {busy && (
         <p className="ta-step">
-          <Loader2 size={13} className="sa-spin" /> {step}. Long lectures take a few minutes.
+          <Loader2 size={13} className="sa-spin" /> {step}. Long lectures take a
+          few minutes.
         </p>
       )}
       {turn && (
@@ -188,12 +229,18 @@ export function TranscriptAI({
               <button
                 type="button"
                 className="secondary-button"
-                onClick={() => void navigator.clipboard?.writeText(turn.result!.answer)}
+                onClick={() =>
+                  void navigator.clipboard?.writeText(turn.result!.answer)
+                }
               >
                 Copy {turn.task.feature === "notes" ? "notes" : "summary"}
               </button>
               {turn.task.feature === "notes" && (
-                <button type="button" className="secondary-button ta-btn" onClick={download}>
+                <button
+                  type="button"
+                  className="secondary-button ta-btn"
+                  onClick={download}
+                >
                   <Download size={13} /> Download .md
                 </button>
               )}

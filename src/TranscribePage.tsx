@@ -3,6 +3,7 @@ import { Copy, Download, Mic, Search, Trash2, X } from "lucide-react";
 import { supabase } from "./data/repository";
 import type { Unit } from "./data/types";
 import "./transcribe.css";
+import { TranscriptAI } from "./TranscriptAI";
 
 type Props = {
   units: Unit[];
@@ -703,6 +704,14 @@ export default function TranscribePage({
               <Copy size={13} style={{ verticalAlign: "middle" }} /> Copy
             </button>
           </div>
+          <TranscriptAI
+            key={opened.id + chunks.length}
+            title={opened.title}
+            ready={chunks.length > 0}
+            getText={() =>
+              paragraphs.map((paragraph) => paragraph.text).join("\n\n")
+            }
+          />
           {opened.status !== "done" && (
             <p className="tr-note">
               This transcript is still being processed, so it may be incomplete.
