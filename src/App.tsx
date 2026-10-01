@@ -73,6 +73,7 @@ import { askAI, type AIFeature } from "./lib/ai";
 import { Markdown } from "./Markdown";
 import GrowthPage from "./GrowthPage";
 import PracticeRoom from "./PracticeRoom";
+import RealtimeJudgeRoom from "./RealtimeJudgeRoom";
 
 const nav = [
   { id: "dashboard", label: "Home", icon: LayoutDashboard },
@@ -2632,6 +2633,7 @@ function ArenaPage({
       />
       <PracticeCoach />
       <PracticeRoom />
+      <RealtimeJudgeRoom />
       {materials.length === 0 ? (
         <div className="card card-pad empty-state">
           <div className="section-label">Arena is waiting for research</div>
