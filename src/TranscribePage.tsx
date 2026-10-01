@@ -706,6 +706,8 @@ export default function TranscribePage({
           </div>
           <TranscriptAI
             key={opened.id + chunks.length}
+            transcriptId={opened.id}
+            userId={userId}
             title={opened.title}
             ready={chunks.length > 0}
             getText={() =>

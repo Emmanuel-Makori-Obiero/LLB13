@@ -20,6 +20,7 @@ export type AIFeature =
   | "quiz"
   | "flashcards"
   | "notes"
+  | "counsellor"
   | "rw_question"
   | "rw_outline"
   | "rw_draft"

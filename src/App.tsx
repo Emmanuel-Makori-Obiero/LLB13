@@ -58,6 +58,7 @@ import { DeleteAccountCard } from "./AccountPage";
 import Home from "./Home";
 import TimetablePage from "./TimetablePage";
 import TranscribePage from "./TranscribePage";
+import { CounsellorChat } from "./CounsellorChat";
 import { StudyAssistant } from "./StudyAssistant";
 import { ResearchWriter } from "./ResearchWriter";
 
@@ -2018,6 +2019,10 @@ function CounsellorPage() {
         title="Counsellor."
         subtitle="Private study support and signposting for when law school feels heavy."
       />
+      <div className="card card-pad" style={{ marginBottom: 16 }}>
+        <CardHeader label="Talk it through" />
+        <CounsellorChat />
+      </div>
       <div className="grid grid-two">
         <div className="card card-pad">
           <div className="eyebrow">Start here</div>
@@ -2032,6 +2037,12 @@ function CounsellorPage() {
               <strong>Important:</strong> This page is not a crisis service or a
               substitute for a licensed professional. If you may be in immediate
               danger, contact local emergency services or a trusted person now.
+            </p>
+            <p>
+              In Kenya: Kenya Red Cross free helpline <strong>1199</strong>,
+              Befrienders Kenya <strong>+254 722 178 177</strong> (call, SMS
+              or WhatsApp), emergencies <strong>999</strong> or{" "}
+              <strong>112</strong>.
             </p>
           </div>
         </div>

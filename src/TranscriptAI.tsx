@@ -1,12 +1,17 @@
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Download,
+  Globe,
   Layers,
   ListChecks,
   Loader2,
+  Lock,
   NotebookPen,
   NotebookText,
+  Trash2,
 } from "lucide-react";
+import { supabase } from "./data/repository";
+import { Markdown } from "./Markdown";
 import {
   askAI,
   saveTextMaterial,
@@ -62,11 +67,28 @@ const ACTIONS: Action[] = [
   },
 ];
 
+type Visibility = "private" | "group";
+type NoteKind = "notes" | "summary";
+type SavedNote = {
+  id: string;
+  owner: string;
+  owner_name: string | null;
+  kind: NoteKind;
+  content: string;
+  visibility: Visibility;
+  created_at: string;
+  updated_at: string;
+};
+
 export function TranscriptAI({
+  transcriptId,
+  userId,
   title,
   getText,
   ready,
 }: {
+  transcriptId: string;
+  userId: string | null;
   title: string;
   getText: () => string;
   ready: boolean; // false while the transcript text is still loading
@@ -76,6 +98,10 @@ export function TranscriptAI({
   const [step, setStep] = useState("");
   const [notesText, setNotesText] = useState("");
   const saved = useRef<{ id: string; chunks: number } | null>(null);
+  const [visibility, setVisibility] = useState<Visibility>("private");
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState("");
+  const [reload, setReload] = useState(0);
 
   const mkTask = (a: Action) => ({
     feature: a.feature,
@@ -210,6 +236,38 @@ export function TranscriptAI({
     }
   };
 
+  const saveNote = async () => {
+    if (!supabase || !turn?.result || !userId) return;
+    const kind = turn.task.feature as NoteKind;
+    // Source tags like [S1] only make sense next to the source list, so drop them.
+    const content = turn.result.answer.replace(/\s?\[S\d+\]/g, "").trim();
+    setSaving(true);
+    setSaveMsg("");
+    const { error } = await supabase.from("transcript_notes").upsert(
+      {
+        transcript_id: transcriptId,
+        owner: userId,
+        kind,
+        content,
+        visibility,
+      },
+      { onConflict: "transcript_id,owner,kind" },
+    );
+    setSaving(false);
+    if (error) {
+      setSaveMsg(
+        "Could not save. Ask your admin to run supabase/transcript-notes.sql.",
+      );
+      return;
+    }
+    setSaveMsg(
+      visibility === "group"
+        ? "Saved and shared with Group 13."
+        : "Saved. Only you can see it.",
+    );
+    setReload((n) => n + 1);
+  };
+
   const textual =
     turn?.result &&
     (turn.task.feature === "summarize" || turn.task.feature === "notes");
@@ -272,7 +330,166 @@ export function TranscriptAI({
               )}
             </div>
           )}
+          {textual && !busy && userId && (
+            <div className="ta-share">
+              <div className="ta-share-choice" role="radiogroup">
+                <label className={visibility === "private" ? "on" : ""}>
+                  <input
+                    type="radio"
+                    name={`vis-${transcriptId}`}
+                    checked={visibility === "private"}
+                    onChange={() => setVisibility("private")}
+                  />
+                  <Lock size={13} /> Only me
+                </label>
+                <label className={visibility === "group" ? "on" : ""}>
+                  <input
+                    type="radio"
+                    name={`vis-${transcriptId}`}
+                    checked={visibility === "group"}
+                    onChange={() => setVisibility("group")}
+                  />
+                  <Globe size={13} /> Share with Group 13
+                </label>
+              </div>
+              <button
+                type="button"
+                className="primary-button"
+                disabled={saving}
+                onClick={() => void saveNote()}
+              >
+                {saving ? "Saving…" : "Save"}{" "}
+                {turn.task.feature === "notes" ? "notes" : "summary"}
+              </button>
+              {saveMsg && <span className="field-hint">{saveMsg}</span>}
+            </div>
+          )}
         </div>
+      )}
+      <SavedNotes
+        transcriptId={transcriptId}
+        userId={userId}
+        reload={reload}
+      />
+    </div>
+  );
+}
+
+const KIND_LABEL: Record<NoteKind, string> = {
+  notes: "Notes",
+  summary: "Summary",
+};
+
+/** Notes and summaries saved for this transcript: your own plus anything others shared. */
+function SavedNotes({
+  transcriptId,
+  userId,
+  reload,
+}: {
+  transcriptId: string;
+  userId: string | null;
+  reload: number;
+}) {
+  const [rows, setRows] = useState<SavedNote[]>([]);
+  const [open, setOpen] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!supabase) return;
+    const { data, error } = await supabase
+      .from("transcript_notes")
+      .select("id,owner,owner_name,kind,content,visibility,created_at,updated_at")
+      .eq("transcript_id", transcriptId)
+      .order("updated_at", { ascending: false });
+    setFailed(Boolean(error));
+    setRows((data as SavedNote[] | null) ?? []);
+  }, [transcriptId]);
+
+  useEffect(() => {
+    void load();
+  }, [load, reload]);
+
+  const setVis = async (row: SavedNote, visibility: Visibility) => {
+    if (!supabase) return;
+    await supabase
+      .from("transcript_notes")
+      .update({ visibility })
+      .eq("id", row.id);
+    void load();
+  };
+
+  const remove = async (row: SavedNote) => {
+    if (!supabase || !window.confirm("Delete these saved notes?")) return;
+    await supabase.from("transcript_notes").delete().eq("id", row.id);
+    void load();
+  };
+
+  if (failed || rows.length === 0) return null;
+  const mine = rows.filter((r) => r.owner === userId);
+  const shared = rows.filter((r) => r.owner !== userId);
+
+  const renderRow = (row: SavedNote) => {
+    const isMine = row.owner === userId;
+    return (
+      <div className="ta-note" key={row.id}>
+        <div className="ta-note-head">
+          <button
+            type="button"
+            className="ta-note-title"
+            onClick={() => setOpen(open === row.id ? null : row.id)}
+          >
+            {KIND_LABEL[row.kind]} by {isMine ? "you" : row.owner_name || "a member"}
+          </button>
+          <span className="chip">
+            {row.visibility === "group" ? "Shared with Group 13" : "Only you"}
+          </span>
+          <span className="quiet">
+            {new Date(row.updated_at).toLocaleDateString()}
+          </span>
+          {isMine && (
+            <>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() =>
+                  void setVis(row, row.visibility === "group" ? "private" : "group")
+                }
+              >
+                {row.visibility === "group" ? "Make private" : "Share"}
+              </button>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="Delete saved notes"
+                onClick={() => void remove(row)}
+              >
+                <Trash2 size={14} />
+              </button>
+            </>
+          )}
+        </div>
+        {open === row.id && (
+          <div className="ta-note-body">
+            <Markdown text={row.content} />
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="ta-saved">
+      {shared.length > 0 && (
+        <>
+          <div className="section-label">Shared by the group</div>
+          {shared.map(renderRow)}
+        </>
+      )}
+      {mine.length > 0 && (
+        <>
+          <div className="section-label">Your saved notes</div>
+          {mine.map(renderRow)}
+        </>
       )}
     </div>
   );
