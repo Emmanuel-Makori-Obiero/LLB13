@@ -29,6 +29,7 @@ export type Group13Repository = {
   adminUpdateUnitLead: (id: string, lead: string) => Promise<void>
   getTimetable: () => Promise<Lesson[]>
   createLesson: (lesson: Omit<Lesson, 'id' | 'created_by'>) => Promise<Lesson>
+  updateLesson: (id: string, lesson: Omit<Lesson, 'id' | 'created_by'>) => Promise<Lesson>
   deleteLesson: (id: string) => Promise<void>
   adminCreateUnit: (unit: Pick<Unit, 'name' | 'code' | 'lead'>) => Promise<Unit>
   adminDeleteUnit: (id: string) => Promise<void>
@@ -84,6 +85,12 @@ const supabaseRepository: Group13Repository = {
     if (!supabase) throw new Error('Not connected.')
     const { data, error } = await supabase.from('timetable').insert(lesson).select('id,unit,topic,lesson_date,start_time,end_time,representative,venue,created_by').single()
     if (error) throw new Error(`Could not add lesson: ${error.message}`)
+    return data as Lesson
+  },
+  updateLesson: async (id, lesson) => {
+    if (!supabase) throw new Error('Not connected.')
+    const { data, error } = await supabase.from('timetable').update(lesson).eq('id', id).select('id,unit,topic,lesson_date,start_time,end_time,representative,venue,created_by').single()
+    if (error) throw new Error(`Could not update lesson: ${error.message}`)
     return data as Lesson
   },
   deleteLesson: async id => {

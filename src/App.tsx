@@ -224,8 +224,11 @@ function UnitsPage({ units, selected, selectedUnit, setSelectedUnit, materials, 
 function DiscussionsPage({ discussions, openMeeting, onStart, onEnd, onCopy, canEnd }: { discussions: Discussion[]; openMeeting: (discussion: Discussion) => void; onStart: (title: string) => Promise<void>; onEnd: (discussion: Discussion) => Promise<void>; onCopy: (discussion: Discussion) => Promise<void>; canEnd: (discussion: Discussion) => boolean }) {
   const [title, setTitle] = useState('')
   const [starting, setStarting] = useState(false)
+  const [viewerName, setViewerName] = useState('')
+  useEffect(() => { void supabase?.auth.getUser().then(({ data }) => { const name = data.user?.user_metadata?.display_name; if (typeof name === 'string') setViewerName(name) }) }, [])
   const scheduled = discussions.filter(discussion => !discussion.instant)
   const live = discussions.filter(discussion => discussion.instant)
+  const canManage = (discussion: Discussion) => canEnd(discussion) || (!!viewerName && discussion.leader === viewerName)
   const start = async (event: React.FormEvent) => { event.preventDefault(); setStarting(true); await onStart(title); setTitle(''); setStarting(false) }
   return <>
     <PageHeading eyebrow="Talk it through" title="Discussions." subtitle="Scheduled discussions and quick live rooms, all in one place." />
@@ -255,7 +258,7 @@ function DiscussionsPage({ discussions, openMeeting, onStart, onEnd, onCopy, can
           <div className="row-list">{live.map(d => <div className="row" key={d.id}>
             <div className="type-mark"><Video size={14} /></div>
             <div className="row-main"><div className="row-title">{d.title}</div><div className="row-meta">Started by {d.leader} · {d.day} · {d.time}</div></div>
-            <div className="row-end"><div className="share-actions"><button className="secondary-button" onClick={() => openMeeting(d)}>Join</button><button className="secondary-button" onClick={() => void onCopy(d)}>Copy link</button><a className="secondary-button" href={whatsappLink(d)} target="_blank" rel="noreferrer">WhatsApp</a>{canEnd(d) && <button className="small-danger" onClick={() => void onEnd(d)}>End</button>}</div></div>
+            <div className="row-end"><div className="share-actions"><button className="secondary-button" onClick={() => openMeeting(d)}>Join</button><button className="secondary-button" onClick={() => void onCopy(d)}>Copy link</button><a className="secondary-button" href={whatsappLink(d)} target="_blank" rel="noreferrer">WhatsApp</a>{canManage(d) && <button className="small-danger" onClick={() => void onEnd(d)}>End</button>}</div></div>
           </div>)}</div>
           {!live.length && <div className="empty">No live rooms. Start one above.</div>}
         </div>
