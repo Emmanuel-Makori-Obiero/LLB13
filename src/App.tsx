@@ -69,6 +69,8 @@ import { CounsellorChat } from "./CounsellorChat";
 import { StudyAssistant } from "./StudyAssistant";
 import { ResearchWriter } from "./ResearchWriter";
 import { TranscriptAI } from "./TranscriptAI";
+import { askAI, type AIFeature } from "./lib/ai";
+import { Markdown } from "./Markdown";
 
 const nav = [
   { id: "dashboard", label: "Home", icon: LayoutDashboard },
@@ -1716,16 +1718,14 @@ function AnnouncementPanel({
           .filter((id): id is string => Boolean(id)),
       ]),
     ];
-    const { error: notifyError } = await supabase
-      .from("notifications")
-      .insert(
-        recipients.map((recipient_id) => ({
-          recipient_id,
-          announcement_id: announcement.id,
-          title: title.trim(),
-          body: message.trim(),
-        })),
-      );
+    const { error: notifyError } = await supabase.from("notifications").insert(
+      recipients.map((recipient_id) => ({
+        recipient_id,
+        announcement_id: announcement.id,
+        title: title.trim(),
+        body: message.trim(),
+      })),
+    );
     setTitle("");
     setMessage("");
     setSending(false);
@@ -2623,6 +2623,7 @@ function ArenaPage({
         title="Legal Arena."
         subtitle="Practice only from sources you or your group have uploaded. No preloaded cases or invented scenarios."
       />
+      <PracticeCoach />
       {materials.length === 0 ? (
         <div className="card card-pad empty-state">
           <div className="section-label">Arena is waiting for research</div>
@@ -2752,6 +2753,146 @@ function ArenaPage({
         </>
       )}
     </>
+  );
+}
+
+function PracticeCoach() {
+  const [kind, setKind] = useState<"moot" | "kmun">("moot");
+  const [mode, setMode] = useState<"guide" | "practice" | "judge">("guide");
+  const [brief, setBrief] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [answer, setAnswer] = useState("");
+  const [error, setError] = useState("");
+  const feature: AIFeature =
+    kind === "moot"
+      ? mode === "judge"
+        ? "moot_judge"
+        : mode === "guide"
+          ? "moot_guide"
+          : "moot"
+      : mode === "guide"
+        ? "kmun_guide"
+        : "kmun";
+  const run = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await askAI({
+        feature,
+        mode: "general",
+        messages: [
+          {
+            role: "user",
+            content:
+              brief.trim() ||
+              (kind === "moot"
+                ? "Teach me the basics and give me a short practice drill."
+                : "Teach me the basics and give me a short delegate practice drill."),
+          },
+        ],
+      });
+      setAnswer(result.answer);
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "The coach is unavailable right now.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="card card-pad practice-coach">
+      <div className="card-header">
+        <div>
+          <div className="section-label">Personal practice studio</div>
+          <p className="subheading">
+            Learn the rules, practise under pressure, then receive judge-style
+            feedback.
+          </p>
+        </div>
+        <span className="chip">Moot Court + KMUN</span>
+      </div>
+      <div className="segmented practice-tabs" role="tablist">
+        <button
+          className={kind === "moot" ? "active" : ""}
+          onClick={() => {
+            setKind("moot");
+            setAnswer("");
+          }}
+        >
+          Moot Court
+        </button>
+        <button
+          className={kind === "kmun" ? "active" : ""}
+          onClick={() => {
+            setKind("kmun");
+            setAnswer("");
+          }}
+        >
+          KMUN
+        </button>
+      </div>
+      <div className="practice-modes">
+        <button
+          className={mode === "guide" ? "active" : ""}
+          onClick={() => setMode("guide")}
+        >
+          Guide me
+        </button>
+        <button
+          className={mode === "practice" ? "active" : ""}
+          onClick={() => setMode("practice")}
+        >
+          Practice drill
+        </button>
+        {kind === "moot" && (
+          <button
+            className={mode === "judge" ? "active" : ""}
+            onClick={() => setMode("judge")}
+          >
+            AI judge
+          </button>
+        )}
+      </div>
+      <form className="data-form" onSubmit={run}>
+        <label>
+          {mode === "judge"
+            ? "Your submission or moot problem"
+            : kind === "moot"
+              ? "What do you want to work on?"
+              : "Country, committee, agenda, or speech"}
+          <textarea
+            value={brief}
+            onChange={(event) => setBrief(event.target.value)}
+            rows={4}
+            placeholder={
+              kind === "moot"
+                ? "Example: I represent the appellant in a judicial review moot…"
+                : "Example: Kenya, UNHRC, digital privacy and surveillance…"
+            }
+          />
+        </label>
+        <button className="primary-button" type="submit" disabled={busy}>
+          {busy
+            ? "Coach is preparing…"
+            : mode === "judge"
+              ? "Judge my submission"
+              : "Start practice"}
+        </button>
+      </form>
+      {error && (
+        <div className="connection-error" style={{ marginTop: 14 }}>
+          {error}
+        </div>
+      )}
+      {answer && (
+        <div className="practice-answer">
+          <Markdown text={answer} />
+        </div>
+      )}
+    </div>
   );
 }
 

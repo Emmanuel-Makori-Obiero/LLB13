@@ -57,6 +57,26 @@ const TASKS: Task[] = [
     placeholder: "Describe the moot problem and which side you are on",
   },
   {
+    feature: "moot_judge",
+    label: "AI judge",
+    placeholder: "Paste your submission or describe the moot problem",
+  },
+  {
+    feature: "moot_guide",
+    label: "Moot guide",
+    placeholder: "Ask how a moot works, e.g. how to address the bench",
+  },
+  {
+    feature: "kmun",
+    label: "KMUN practice",
+    placeholder: "Choose a country, committee, agenda, or speech to practise",
+  },
+  {
+    feature: "kmun_guide",
+    label: "KMUN guide",
+    placeholder: "Ask how Model United Nations works",
+  },
+  {
     feature: "summarize",
     label: "Summarise",
     needsDoc: true,
