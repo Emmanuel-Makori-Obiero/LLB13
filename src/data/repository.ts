@@ -227,6 +227,19 @@ const supabaseRepository: Group13Repository = {
     });
     if (error)
       throw new Error(`Could not approve timetable proposal: ${error.message}`);
+    const { data: record, error: verifyError } = await db()
+      .from("timetable_proposals")
+      .select("status")
+      .eq("id", id)
+      .single();
+    if (verifyError)
+      throw new Error(
+        `Approval completed but could not be verified: ${verifyError.message}`,
+      );
+    if (record?.status !== "approved")
+      throw new Error(
+        `Approval did not complete. The proposal is still ${record?.status ?? "unknown"}.`,
+      );
     return Number(data ?? 0);
   },
   rollbackTimetableProposal: async (id) => {
