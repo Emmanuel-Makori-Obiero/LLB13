@@ -74,6 +74,7 @@ import { Markdown } from "./Markdown";
 import GrowthPage from "./GrowthPage";
 import PracticeRoom from "./PracticeRoom";
 import RealtimeJudgeRoom from "./RealtimeJudgeRoom";
+import BookReader from "./BookReader";
 
 const nav = [
   { id: "dashboard", label: "Home", icon: LayoutDashboard },
@@ -2188,82 +2189,7 @@ function MaterialReader({
   material: Material;
   onClose: () => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const link = safeUrl(material.url);
-  const frame = readerUrl(material);
-  const info = downloadInfo(material);
-  const isPdf = /\.pdf(\?|$)/i.test(
-    material.storage_path ?? material.url ?? "",
-  );
-  return (
-    <div className={`reader-page ${expanded ? "reader-page-expanded" : ""}`}>
-      <div className="reader-toolbar">
-        <button className="secondary-button" onClick={onClose}>
-          ← Back to library
-        </button>
-        <div className="reader-heading">
-          <strong>{material.title}</strong>
-          <span>
-            {material.unit} · {material.topic}
-          </span>
-        </div>
-        <div className="reader-actions">
-          <button
-            className="secondary-button reader-size-button"
-            onClick={() => setExpanded((value) => !value)}
-            title={expanded ? "Minimize reader" : "Maximize reader"}
-          >
-            {expanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-            <span>{expanded ? "Minimize" : "Maximize"}</span>
-          </button>
-          <DownloadLink material={material} className="primary-button" icon />
-          {link && info?.file && (
-            <a
-              className="secondary-button"
-              href={link}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Open in new tab
-            </a>
-          )}
-        </div>
-      </div>
-      {frame ? (
-        <>
-          <div className="reader-frame">
-            {isPdf ? (
-              <object
-                data={frame}
-                type="application/pdf"
-                aria-label={`Reading ${material.title}`}
-              >
-                <iframe
-                  src={frame}
-                  title={`Reading ${material.title}`}
-                  referrerPolicy="no-referrer"
-                />
-              </object>
-            ) : (
-              <iframe
-                src={frame}
-                title={`Reading ${material.title}`}
-                referrerPolicy="no-referrer"
-              />
-            )}
-          </div>
-          <p className="reader-hint">
-            Page blank or refused to load? Some websites do not allow embedding.
-            Use “{info?.file ? "Download" : "Open link"}” instead.
-          </p>
-        </>
-      ) : (
-        <div className="card card-pad empty">
-          This material has no valid link.
-        </div>
-      )}
-    </div>
-  );
+  return <BookReader material={material} onClose={onClose} />;
 }
 
 function TodoPage({
