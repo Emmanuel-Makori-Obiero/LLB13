@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, FileUp, Lightbulb, RefreshCw, X } from "lucide-react";
-import { askAI } from "./lib/ai";
+import { askAI, extractText } from "./lib/ai";
 import { repository } from "./data/repository";
 import type { Lesson, TimetableProposal, Unit } from "./data/types";
 
@@ -73,6 +73,48 @@ function parseCsv(text: string): DraftLesson[] {
     .filter((lesson) => lesson.unit && lesson.topic && lesson.lesson_date);
 }
 
+function parseDocumentRows(text: string): DraftLesson[] {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  const datePattern = /(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4})/;
+  const timePattern =
+    /(\d{1,2}:\d{2}\s*(?:am|pm)?)(?:\s*(?:-|to|–)\s*(\d{1,2}:\d{2}\s*(?:am|pm)?))?/i;
+  return lines.flatMap((line) => {
+    const dateMatch = line.match(datePattern);
+    const times = line.match(timePattern);
+    if (!dateMatch || !times) return [];
+    const date = dateMatch[1];
+    const normalizedDate = /^\d{4}-/.test(date)
+      ? date
+      : (() => {
+          const [day, month, year] = date.split(/[/-]/);
+          return `${year.length === 2 ? `20${year}` : year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+        })();
+    const beforeDate = line.slice(0, dateMatch.index).trim();
+    const columns = beforeDate
+      .split(/\s{2,}|\||,/)
+      .map((value) => value.trim())
+      .filter(Boolean);
+    return [
+      {
+        unit: columns[0] ?? "",
+        topic: columns.slice(1).join(" ") || beforeDate,
+        lesson_date: normalizedDate,
+        start_time: times[1]?.trim() ?? "",
+        end_time: times[2]?.trim() ?? "",
+        representative: "",
+        representatives: [],
+        venue: line
+          .slice((times.index ?? 0) + times[0].length)
+          .replace(/^\s*[|,-]\s*/, "")
+          .trim(),
+      },
+    ];
+  });
+}
+
 function cleanLessons(input: unknown, units: Unit[] | string[]): DraftLesson[] {
   if (!Array.isArray(input)) return [];
   const allowed = new Set(
@@ -121,6 +163,7 @@ export default function AdminTimetablePlanner({
   const [classTimetable, setClassTimetable] = useState<DraftLesson[] | null>(
     null,
   );
+  const [classSourceText, setClassSourceText] = useState("");
   const [proposals, setProposals] = useState<TimetableProposal[]>([]);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -180,11 +223,18 @@ export default function AdminTimetablePlanner({
     if (!file) return;
     setBusy(true);
     try {
-      const text = await file.text();
-      const parsed = parseCsv(text);
+      const lowerName = file.name.toLowerCase();
+      const text =
+        lowerName.endsWith(".csv") || lowerName.endsWith(".txt")
+          ? await file.text()
+          : await extractText(file);
+      const parsed = lowerName.endsWith(".csv")
+        ? parseCsv(text)
+        : parseDocumentRows(text);
       setClassTimetable(parsed);
+      setClassSourceText(text);
       setNotice(
-        `Official class timetable loaded: ${parsed.length} lessons. Now describe how to turn it into the Group 13 timetable, then press Propose timetable.`,
+        `Official class timetable loaded: ${parsed.length} structured rows${parsed.length ? "" : " (the AI will read the extracted document text directly)"}. Now describe how to turn it into the Group 13 timetable.`,
       );
     } catch (error) {
       setNotice(
@@ -213,7 +263,7 @@ export default function AdminTimetablePlanner({
         messages: [
           {
             role: "user",
-            content: `Today is ${today}. Available units: ${JSON.stringify(units.map((unit) => unit.name))}\n\nOFFICIAL CLASS TIMETABLE (source of class dates, topics and times):\n${JSON.stringify(classTimetable)}\n\nCURRENT GROUP 13 TIMETABLE (context only):\n${JSON.stringify(lessons)}\n\nADMIN INSTRUCTION FOR THE GROUP TIMETABLE:\n${instruction.trim()}`,
+            content: `Today is ${today}. Available units: ${JSON.stringify(units.map((unit) => unit.name))}\n\nOFFICIAL CLASS TIMETABLE (source; extracted from PDF, Word or CSV):\n${classSourceText}\n\nBEST-EFFORT STRUCTURED ROWS:\n${JSON.stringify(classTimetable)}\n\nCURRENT GROUP 13 TIMETABLE (context only):\n${JSON.stringify(lessons)}\n\nADMIN INSTRUCTION FOR THE GROUP TIMETABLE:\n${instruction.trim()}`,
           },
         ],
       });
@@ -356,13 +406,13 @@ export default function AdminTimetablePlanner({
             <span>
               <strong>Upload official class timetable</strong>
               <small>
-                Columns: unit, topic, lesson_date, start_time, end_time, venue,
-                representative
+                PDF, Word (.docx), CSV or text. PDF/Word tables are read in the
+                browser.
               </small>
             </span>
             <input
               type="file"
-              accept=".csv,text/csv,.txt"
+              accept=".pdf,application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.csv,text/csv,.txt"
               onChange={(event) => void onFile(event.target.files?.[0])}
               disabled={busy}
             />
@@ -386,17 +436,18 @@ export default function AdminTimetablePlanner({
           <button
             className="primary-button"
             onClick={() => void propose()}
-            disabled={busy || !classTimetable}
+            disabled={busy || !classSourceText}
           >
             <Lightbulb size={14} />{" "}
             {busy ? "Working…" : "Make Group 13 proposal"}
           </button>
         </div>
       </div>
-      {classTimetable ? (
+      {classSourceText ? (
         <p className="field-hint">
-          Official class timetable ready: {classTimetable.length} lessons will
-          be used as the source.
+          Official class timetable ready: {classTimetable?.length ?? 0}{" "}
+          structured rows plus extracted document text will be used as the
+          source.
         </p>
       ) : (
         <p className="field-hint">
