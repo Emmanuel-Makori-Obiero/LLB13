@@ -72,14 +72,22 @@ export async function askAI(args: {
   messages: AIMessage[];
   docIds?: string[];
   part?: number; // 'notes' only: which block of a document to read
+  size?: number; // 'notes' only: how many sections per block
 }): Promise<AIResult> {
   const { data, error } = await db().functions.invoke("ai", { body: args });
   if (error) {
     // supabase-js wraps non-2xx; try to surface the function's own message
     let msg = "The assistant is unavailable right now.";
     try {
-      msg =
-        (await (error as { context?: Response }).context?.json())?.error ?? msg;
+      const body = await (error as { context?: Response }).context?.json();
+      msg = body?.error ?? msg;
+      if (Array.isArray(body?.attempts) && body.attempts.length)
+        msg += ` [${body.attempts
+          .map(
+            (a: { id: string; status: string; detail?: string }) =>
+              `${a.id} ${a.status}${a.detail ? ` ${String(a.detail).slice(0, 70)}` : ""}`,
+          )
+          .join("; ")}]`;
     } catch {
       /* keep default */
     }

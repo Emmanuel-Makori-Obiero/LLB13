@@ -16,7 +16,9 @@ import {
 import { Answer, type Turn } from "./StudyAssistant";
 import "./assistant.css";
 
-const SECTIONS_PER_PART = 10; // must match CHUNKS_PART in the ai function
+const SECTIONS_PER_PART = 6; // sections read per request: small enough for free-tier token limits
+const WAITS = [0, 25_000, 50_000]; // retry pauses when every AI provider is busy
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 type Action = {
   feature: AIFeature;
@@ -125,13 +127,37 @@ export function TranscriptAI({
         for (let i = 0; i < parts; i++) {
           setStep(`Writing notes, part ${i + 1} of ${parts}`);
           try {
-            last = await askAI({
-              feature: "notes",
-              mode: "materials",
-              messages: [{ role: "user", content: action.prompt }],
-              docIds: [doc.id],
-              part: i,
-            });
+            let got: AIResult | null = null;
+            let failure: Error | null = null;
+            for (let attempt = 0; attempt < WAITS.length && !got; attempt++) {
+              if (attempt > 0) {
+                setStep(
+                  `Part ${i + 1} of ${parts}: the AI is busy, retrying in ${WAITS[attempt] / 1000}s`,
+                );
+                await sleep(WAITS[attempt]);
+                setStep(
+                  `Writing notes, part ${i + 1} of ${parts} (attempt ${attempt + 1})`,
+                );
+              }
+              try {
+                got = await askAI({
+                  feature: "notes",
+                  mode: "materials",
+                  messages: [{ role: "user", content: action.prompt }],
+                  docIds: [doc.id],
+                  part: i,
+                  size: SECTIONS_PER_PART,
+                });
+              } catch (err) {
+                failure = err as Error;
+                if (!/busy|unavailable/i.test(failure.message)) break; // retrying will not help
+              }
+            }
+            if (!got)
+              throw (
+                failure ?? new Error("The assistant is unavailable right now.")
+              );
+            last = got;
           } catch (e) {
             const shown = done.join("\n\n---\n\n");
             setNotesText(shown);
