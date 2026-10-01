@@ -5,9 +5,22 @@ import { AI_MODES, askAI, type AIFeature, type AIMode } from "./lib/ai";
 import { Answer, type Turn } from "./StudyAssistant";
 import { useDocuments } from "./useDocuments";
 import "./assistant.css";
+import { downloadPdf, downloadWord } from "./export";
 
-type Project = { title: string; topic: string; kind: string; style: string; words: string };
-const EMPTY: Project = { title: "", topic: "", kind: "Research paper", style: "OSCOLA", words: "5000" };
+type Project = {
+  title: string;
+  topic: string;
+  kind: string;
+  style: string;
+  words: string;
+};
+const EMPTY: Project = {
+  title: "",
+  topic: "",
+  kind: "Research paper",
+  style: "OSCOLA",
+  words: "5000",
+};
 const KINDS = [
   "Research paper",
   "Essay",
@@ -46,7 +59,8 @@ const TOOLS: Tool[] = [
   {
     feature: "rw_draft",
     label: "Draft a section",
-    placeholder: "Which section, and what must it argue? e.g. Literature review: show the gap on data protection",
+    placeholder:
+      "Which section, and what must it argue? e.g. Literature review: show the gap on data protection",
     needsInput: true,
     useDraft: true,
     request: (i) => `Draft this section: ${i}`,
@@ -54,9 +68,11 @@ const TOOLS: Tool[] = [
   {
     feature: "rw_improve",
     label: "Improve text",
-    placeholder: "Paste the passage to improve. Leave empty to improve the whole draft.",
+    placeholder:
+      "Paste the passage to improve. Leave empty to improve the whole draft.",
     useDraft: true,
-    request: (i) => (i ? `Improve this passage:\n\n${i}` : "Improve the whole draft."),
+    request: (i) =>
+      i ? `Improve this passage:\n\n${i}` : "Improve the whole draft.",
   },
   {
     feature: "rw_critique",
@@ -76,14 +92,17 @@ const TOOLS: Tool[] = [
   {
     feature: "rw_citations",
     label: "Citations",
-    placeholder: "Paste the cases, statutes, books and articles you want formatted, one per line",
+    placeholder:
+      "Paste the cases, statutes, books and articles you want formatted, one per line",
     needsInput: true,
     request: (i) => `Format these authorities:\n\n${i}`,
   },
 ];
 
 const clip = (text: string, max = 12000) =>
-  text.length <= max ? text : `${text.slice(0, max / 2)}\n[... middle of draft omitted ...]\n${text.slice(-max / 2)}`;
+  text.length <= max
+    ? text
+    : `${text.slice(0, max / 2)}\n[... middle of draft omitted ...]\n${text.slice(-max / 2)}`;
 const count = (text: string) => text.trim().split(/\s+/).filter(Boolean).length;
 
 export function ResearchWriter() {
@@ -126,8 +145,14 @@ export function ResearchWriter() {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [turns, busy]);
 
-  const set = (k: keyof Project) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
-    setProject((p) => ({ ...p, [k]: e.target.value }));
+  const set =
+    (k: keyof Project) =>
+    (
+      e: React.ChangeEvent<
+        HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+      >,
+    ) =>
+      setProject((p) => ({ ...p, [k]: e.target.value }));
 
   const send = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -141,13 +166,18 @@ export function ResearchWriter() {
       setNote("Write or paste some of your draft first.");
       return;
     }
-    if (!project.topic.trim() && !project.title.trim() && tool.feature !== "rw_citations") {
+    if (
+      !project.topic.trim() &&
+      !project.title.trim() &&
+      tool.feature !== "rw_citations"
+    ) {
       setNote("Add your paper title or topic in Project details first.");
       return;
     }
     setNote("");
 
-    const usesDraft = tool.useDraft && draft.trim() && !(tool.feature === "rw_improve" && text);
+    const usesDraft =
+      tool.useDraft && draft.trim() && !(tool.feature === "rw_improve" && text);
     const message = [
       tool.request(text),
       `Topic: ${project.topic || project.title}`,
@@ -173,23 +203,35 @@ export function ResearchWriter() {
         messages: [{ role: "user", content: message }],
         docIds: d.selected.length ? d.selected : undefined,
       });
-      setTurns((all) => all.map((t) => (t.id === turn.id ? { ...t, result } : t)));
+      setTurns((all) =>
+        all.map((t) => (t.id === turn.id ? { ...t, result } : t)),
+      );
     } catch (e) {
-      setTurns((all) => all.map((t) => (t.id === turn.id ? { ...t, error: (e as Error).message } : t)));
+      setTurns((all) =>
+        all.map((t) =>
+          t.id === turn.id ? { ...t, error: (e as Error).message } : t,
+        ),
+      );
     } finally {
       setBusy(false);
     }
   };
 
   const addToDraft = (answer: string) => {
-    const clean = answer.replace(/^\s*Not drawn from your materials\.?\s*/i, "").trim();
-    setDraft((cur) => (cur.trim() ? `${cur.trimEnd()}\n\n${clean}\n` : `${clean}\n`));
+    const clean = answer
+      .replace(/^\s*Not drawn from your materials\.?\s*/i, "")
+      .trim();
+    setDraft((cur) =>
+      cur.trim() ? `${cur.trimEnd()}\n\n${clean}\n` : `${clean}\n`,
+    );
     setNote("Added to the end of your draft.");
   };
 
   const download = () => {
     const url = URL.createObjectURL(
-      new Blob([`# ${project.title || "Untitled paper"}\n\n${draft}`], { type: "text/markdown" }),
+      new Blob([`# ${project.title || "Untitled paper"}\n\n${draft}`], {
+        type: "text/markdown",
+      }),
     );
     const link = document.createElement("a");
     link.href = url;
@@ -197,12 +239,26 @@ export function ResearchWriter() {
     link.click();
     URL.revokeObjectURL(url);
   };
+  const downloadDraftPdf = () =>
+    downloadPdf(
+      project.title || "Untitled paper",
+      draft,
+      `${(project.title || "paper").replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "paper"}.pdf`,
+    );
+  const downloadDraftWord = () =>
+    downloadWord(
+      project.title || "Untitled paper",
+      draft,
+      `${(project.title || "paper").replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "paper"}.doc`,
+    );
 
   if (!isSupabaseConfigured)
     return (
       <div className="card card-pad">
         <h2>Research writer</h2>
-        <p className="subheading">Connect Supabase to use the research writer.</p>
+        <p className="subheading">
+          Connect Supabase to use the research writer.
+        </p>
       </div>
     );
 
@@ -216,12 +272,15 @@ export function ResearchWriter() {
           <div className="sa-docs-head">
             <div className="section-label">Your draft</div>
             <span className="quiet">
-              {words.toLocaleString()} words{target ? ` of ${target.toLocaleString()}` : ""}
+              {words.toLocaleString()} words
+              {target ? ` of ${target.toLocaleString()}` : ""}
             </span>
           </div>
           {target > 0 && (
             <div className="progress" style={{ margin: "8px 0 12px" }}>
-              <span style={{ width: `${Math.min(100, (words / target) * 100)}%` }} />
+              <span
+                style={{ width: `${Math.min(100, (words / target) * 100)}%` }}
+              />
             </div>
           )}
           <textarea
@@ -231,17 +290,46 @@ export function ResearchWriter() {
             onChange={(e) => setDraft(e.target.value)}
           />
           <div className="ta-after">
-            <button type="button" className="secondary-button" onClick={() => void navigator.clipboard?.writeText(draft)}>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => void navigator.clipboard?.writeText(draft)}
+            >
               Copy
             </button>
-            <button type="button" className="secondary-button" onClick={download} disabled={!draft.trim()}>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={download}
+              disabled={!draft.trim()}
+            >
               Download .md
             </button>
             <button
               type="button"
               className="secondary-button"
+              onClick={downloadDraftPdf}
               disabled={!draft.trim()}
-              onClick={() => window.confirm("Clear the whole draft? This cannot be undone.") && setDraft("")}
+            >
+              Download PDF
+            </button>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={downloadDraftWord}
+              disabled={!draft.trim()}
+            >
+              Download Word
+            </button>
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={!draft.trim()}
+              onClick={() =>
+                window.confirm(
+                  "Clear the whole draft? This cannot be undone.",
+                ) && setDraft("")
+              }
             >
               Clear
             </button>
@@ -254,9 +342,10 @@ export function ResearchWriter() {
               <div className="sa-empty">
                 <h2>Writing assistant.</h2>
                 <p className="subheading">
-                  Fill in Project details, then work through the tools in order: research question, outline, draft
-                  each section, critique, then citations. Every authority from general knowledge is marked (verify):
-                  check it in the original before you cite it.
+                  Fill in Project details, then work through the tools in order:
+                  research question, outline, draft each section, critique, then
+                  citations. Every authority from general knowledge is marked
+                  (verify): check it in the original before you cite it.
                 </p>
               </div>
             )}
@@ -275,13 +364,21 @@ export function ResearchWriter() {
                     <Answer turn={t} />
                     {t.result && t.task.feature !== "rw_citations" && (
                       <div className="ta-after">
-                        <button type="button" className="secondary-button" onClick={() => addToDraft(t.result!.answer)}>
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() => addToDraft(t.result!.answer)}
+                        >
                           Add to draft
                         </button>
                         <button
                           type="button"
                           className="secondary-button"
-                          onClick={() => void navigator.clipboard?.writeText(t.result!.answer)}
+                          onClick={() =>
+                            void navigator.clipboard?.writeText(
+                              t.result!.answer,
+                            )
+                          }
                         >
                           Copy
                         </button>
@@ -316,13 +413,21 @@ export function ResearchWriter() {
                 placeholder={tool.placeholder}
                 onChange={(e) => setInput(e.target.value)}
               />
-              <button className="primary-button sa-send" type="submit" disabled={busy}>
+              <button
+                className="primary-button sa-send"
+                type="submit"
+                disabled={busy}
+              >
                 <Send size={14} /> {busy ? "Working" : "Send"}
               </button>
             </div>
             {note && <p className="sa-note">{note}</p>}
             {turns.length > 0 && (
-              <button type="button" className="sa-clear" onClick={() => setTurns([])}>
+              <button
+                type="button"
+                className="sa-clear"
+                onClick={() => setTurns([])}
+              >
                 Clear conversation
               </button>
             )}
@@ -336,7 +441,11 @@ export function ResearchWriter() {
           <div className="data-form">
             <label>
               Paper title
-              <input value={project.title} onChange={set("title")} placeholder="Working title" />
+              <input
+                value={project.title}
+                onChange={set("title")}
+                placeholder="Working title"
+              />
             </label>
             <label>
               Topic or research area
@@ -365,7 +474,11 @@ export function ResearchWriter() {
             </label>
             <label>
               Target words
-              <input inputMode="numeric" value={project.words} onChange={set("words")} />
+              <input
+                inputMode="numeric"
+                value={project.words}
+                onChange={set("words")}
+              />
             </label>
           </div>
         </div>
@@ -374,13 +487,23 @@ export function ResearchWriter() {
           <div className="section-label">Answer from</div>
           <div className="sa-modes">
             {AI_MODES.map((m) => (
-              <label key={m.value} className={`sa-mode ${mode === m.value ? "on" : ""}`}>
-                <input type="radio" name="rw-mode" checked={mode === m.value} onChange={() => setMode(m.value)} />
+              <label
+                key={m.value}
+                className={`sa-mode ${mode === m.value ? "on" : ""}`}
+              >
+                <input
+                  type="radio"
+                  name="rw-mode"
+                  checked={mode === m.value}
+                  onChange={() => setMode(m.value)}
+                />
                 {m.label}
               </label>
             ))}
           </div>
-          <p className="field-hint">{AI_MODES.find((m) => m.value === mode)?.hint}</p>
+          <p className="field-hint">
+            {AI_MODES.find((m) => m.value === mode)?.hint}
+          </p>
         </div>
 
         <div className="card card-pad">
@@ -392,7 +515,12 @@ export function ResearchWriter() {
               disabled={d.uploading}
               onClick={() => d.fileRef.current?.click()}
             >
-              {d.uploading ? <Loader2 size={13} className="sa-spin" /> : <Upload size={13} />} Upload
+              {d.uploading ? (
+                <Loader2 size={13} className="sa-spin" />
+              ) : (
+                <Upload size={13} />
+              )}{" "}
+              Upload
             </button>
             <input
               ref={d.fileRef}
@@ -404,7 +532,8 @@ export function ResearchWriter() {
             />
           </div>
           <p className="field-hint">
-            Upload the cases, articles and notes you want used, and tick them. Answers will draw on them first.
+            Upload the cases, articles and notes you want used, and tick them.
+            Answers will draw on them first.
           </p>
           {d.note && <p className="sa-note">{d.note}</p>}
           {d.mine.length === 0 ? (
@@ -414,7 +543,11 @@ export function ResearchWriter() {
               {d.mine.map((doc) => (
                 <div className="sa-doc" key={doc.id}>
                   <label>
-                    <input type="checkbox" checked={d.selected.includes(doc.id)} onChange={() => d.toggle(doc.id)} />
+                    <input
+                      type="checkbox"
+                      checked={d.selected.includes(doc.id)}
+                      onChange={() => d.toggle(doc.id)}
+                    />
                     <FileText size={14} />
                     <span>{doc.title}</span>
                   </label>
@@ -439,7 +572,11 @@ export function ResearchWriter() {
               {d.shared.map((doc) => (
                 <div className="sa-doc" key={doc.id}>
                   <label>
-                    <input type="checkbox" checked={d.selected.includes(doc.id)} onChange={() => d.toggle(doc.id)} />
+                    <input
+                      type="checkbox"
+                      checked={d.selected.includes(doc.id)}
+                      onChange={() => d.toggle(doc.id)}
+                    />
                     <Library size={14} />
                     <span>{doc.title}</span>
                   </label>

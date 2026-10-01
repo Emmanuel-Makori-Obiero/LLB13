@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { Download, Mic, MicOff, Upload, X } from "lucide-react";
 import type { Discussion } from "./data/types";
 import { supabase } from "./data/repository";
+import { downloadPdf, downloadWord } from "./export";
 
 type SpeechRecognitionLike = {
   continuous: boolean;
@@ -86,6 +87,18 @@ export default function MeetingRoom({
     link.click();
     URL.revokeObjectURL(url);
   };
+  const downloadTranscriptPdf = () =>
+    downloadPdf(
+      discussion.title,
+      transcript || "No transcript yet.",
+      `${discussion.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "meeting"}-transcript.pdf`,
+    );
+  const downloadTranscriptWord = () =>
+    downloadWord(
+      discussion.title,
+      transcript || "No transcript yet.",
+      `${discussion.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "meeting"}-transcript.doc`,
+    );
   const uploadAudio = async (file?: File) => {
     if (!file) return;
     setStatus("Checking audio length…");
@@ -200,6 +213,20 @@ export default function MeetingRoom({
               disabled={!transcript}
             >
               <Download size={14} /> Download .txt
+            </button>
+            <button
+              className="secondary-button"
+              onClick={downloadTranscriptPdf}
+              disabled={!transcript}
+            >
+              <Download size={14} /> Download PDF
+            </button>
+            <button
+              className="secondary-button"
+              onClick={downloadTranscriptWord}
+              disabled={!transcript}
+            >
+              <Download size={14} /> Download Word
             </button>
           </div>
           {status && <p className="transcript-status">{status}</p>}

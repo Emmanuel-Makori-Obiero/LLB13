@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import {
   BookOpen,
   CalendarDays,
@@ -61,6 +67,7 @@ import TranscribePage from "./TranscribePage";
 import { CounsellorChat } from "./CounsellorChat";
 import { StudyAssistant } from "./StudyAssistant";
 import { ResearchWriter } from "./ResearchWriter";
+import { TranscriptAI } from "./TranscriptAI";
 
 const nav = [
   { id: "dashboard", label: "Home", icon: LayoutDashboard },
@@ -149,6 +156,7 @@ function App() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [media, setMedia] = useState<MediaResource[]>([]);
   const [selectedUnit, setSelectedUnit] = useState("");
+  const [transcribeUnit, setTranscribeUnit] = useState<string | undefined>();
   const [selectedAssignment, setSelectedAssignment] = useState("");
   const [search, setSearch] = useState("");
   const [notice, setNotice] = useState("");
@@ -164,6 +172,7 @@ function App() {
       setAuthLoading(false);
       return;
     }
+    let active = true;
     const applySession = (
       session: {
         user?: {
@@ -191,17 +200,37 @@ function App() {
             : "",
       });
     };
-    supabase.auth.getSession().then(({ data }) => {
-      applySession(data.session);
+    const finishAuthCallback = async () => {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get("code");
+      if (code) {
+        const { error } = await supabase!.auth.exchangeCodeForSession(code);
+        if (error)
+          console.error(
+            "Could not complete the email confirmation:",
+            error.message,
+          );
+      }
+      const sessionResult = await supabase!.auth.getSession();
+      if (!active) return;
+      applySession(sessionResult.data.session);
+      if (code || window.location.hash.includes("access_token")) {
+        window.history.replaceState({}, "", window.location.pathname);
+      }
       setAuthLoading(false);
-    });
+    };
+    void finishAuthCallback();
+    /* Keep this listener active after the initial callback has been processed. */
     const { data: listener } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (event === "PASSWORD_RECOVERY") setRecovering(true);
         applySession(session);
       },
     );
-    return () => listener.subscription.unsubscribe();
+    return () => {
+      active = false;
+      listener.subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -335,6 +364,12 @@ function App() {
       window.history.pushState({}, "", path);
     setView(target);
     setSearch("");
+    if (target !== "transcribe") setTranscribeUnit(undefined);
+  };
+  const openTranscribeForUnit = (unitName: string) => {
+    window.history.pushState({}, "", "/transcribe");
+    setTranscribeUnit(unitName);
+    setView("transcribe");
   };
   useEffect(() => {
     if (
@@ -750,6 +785,7 @@ function App() {
               units={units}
               userId={userId}
               isAdmin={isAdmin}
+              initialUnit={transcribeUnit}
               displayName={
                 profile.displayName || userEmail?.split("@")[0] || "Member"
               }
@@ -799,6 +835,8 @@ function App() {
               discussions={discussions}
               openReader={openReader}
               openMeeting={openMeeting}
+              userId={userId}
+              onTranscribe={openTranscribeForUnit}
             />
           )}
           {view === "library" && (
@@ -1514,6 +1552,167 @@ function DiscussionsPage({
   );
 }
 
+type UnitRecording = {
+  id: string;
+  title: string;
+  unit: string | null;
+  lesson_number: number | null;
+  lesson_title: string | null;
+  status: "processing" | "done" | "failed";
+  duration_seconds: number | null;
+  created_at: string;
+};
+const recordingClock = (seconds: number) => {
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
+};
+
+function UnitRecordings({
+  unit,
+  userId,
+  onTranscribe,
+}: {
+  unit: Unit;
+  userId: string | null;
+  onTranscribe: (unitName: string) => void;
+}) {
+  const [recordings, setRecordings] = useState<UnitRecording[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [chunks, setChunks] = useState<{ text: string }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      if (!supabase) {
+        setLoading(false);
+        return;
+      }
+      const { data, error } = await supabase
+        .from("transcripts")
+        .select(
+          "id,title,unit,lesson_number,lesson_title,status,duration_seconds,created_at",
+        )
+        .eq("unit", unit.name)
+        .order("lesson_number", { ascending: true, nullsFirst: false })
+        .order("created_at", { ascending: true });
+      if (!active) return;
+      if (error) {
+        setMessage(
+          "Run supabase/transcript-lessons.sql to enable lesson recordings.",
+        );
+      } else {
+        setRecordings((data ?? []) as UnitRecording[]);
+      }
+      setLoading(false);
+    };
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [unit.name]);
+
+  const openRecording = async (recording: UnitRecording) => {
+    if (!supabase || recording.status !== "done") return;
+    setSelectedId(recording.id);
+    setChunks([]);
+    const { data, error } = await supabase
+      .from("transcript_chunks")
+      .select("text")
+      .eq("transcript_id", recording.id)
+      .order("idx");
+    if (error) {
+      setMessage("Could not load this lesson recording.");
+      return;
+    }
+    setChunks((data ?? []) as { text: string }[]);
+  };
+  const selected = recordings.find((recording) => recording.id === selectedId);
+  return (
+    <div className="card card-pad unit-recordings">
+      <div className="card-header">
+        <div>
+          <div className="section-label">Lesson recordings</div>
+          <p className="subheading">
+            Keep each lecture under {unit.name}, then make notes or a summary
+            from its transcript.
+          </p>
+        </div>
+        <button
+          className="primary-button"
+          onClick={() => onTranscribe(unit.name)}
+        >
+          <Mic size={14} /> Add recording
+        </button>
+      </div>
+      {message && (
+        <p className="field-hint" style={{ marginTop: 12 }}>
+          {message}
+        </p>
+      )}
+      {loading && (
+        <p className="field-hint" style={{ marginTop: 12 }}>
+          Loading recordings…
+        </p>
+      )}
+      {!loading && !recordings.length && !message && (
+        <div className="empty">
+          No recordings yet. Add Lesson 1 above to start this unit’s archive.
+        </div>
+      )}
+      <div className="row-list">
+        {recordings.map((recording) => (
+          <div className="row" key={recording.id}>
+            <div className="type-mark">
+              <Mic size={14} />
+            </div>
+            <div className="row-main">
+              <div className="row-title">
+                {recording.lesson_number
+                  ? `Lesson ${recording.lesson_number}: `
+                  : ""}
+                {recording.lesson_title || recording.title}
+              </div>
+              <div className="row-meta">
+                {recording.status === "done"
+                  ? "Ready for notes and summary"
+                  : recording.status}
+                {recording.duration_seconds
+                  ? ` · ${recordingClock(recording.duration_seconds)}`
+                  : ""}
+              </div>
+            </div>
+            {recording.status === "done" && (
+              <button
+                className="secondary-button"
+                onClick={() => void openRecording(recording)}
+              >
+                {selectedId === recording.id ? "Selected" : "Open lesson"}
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+      {selected && chunks.length > 0 && (
+        <div style={{ marginTop: 18 }}>
+          <div className="section-label">
+            {selected.lesson_title || selected.title} study actions
+          </div>
+          <TranscriptAI
+            key={selected.id}
+            transcriptId={selected.id}
+            userId={userId}
+            title={selected.lesson_title || selected.title}
+            ready
+            getText={() => chunks.map((chunk) => chunk.text).join("\n\n")}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function UnitWorkspacePage({
   unit,
   materials,
@@ -1521,6 +1720,8 @@ function UnitWorkspacePage({
   discussions,
   openReader,
   openMeeting,
+  userId,
+  onTranscribe,
 }: {
   unit: Unit;
   materials: Material[];
@@ -1528,6 +1729,8 @@ function UnitWorkspacePage({
   discussions: Discussion[];
   openReader: (material: Material) => void;
   openMeeting: (discussion: Discussion) => void;
+  userId: string | null;
+  onTranscribe: (unitName: string) => void;
 }) {
   const unitMaterials = materials.filter(
     (material) => material.unit === unit.name,
@@ -1555,6 +1758,7 @@ function UnitWorkspacePage({
         </div>
         <span className="chip">{unit.progress}% progress</span>
       </div>
+      <UnitRecordings unit={unit} userId={userId} onTranscribe={onTranscribe} />
       <div className="grid grid-two unit-workspace-grid">
         <div className="card card-pad">
           <CardHeader
@@ -1663,10 +1867,34 @@ function DownloadLink({
 }) {
   const info = downloadInfo(material);
   if (!info) return null;
+  const download = async (event: MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+    try {
+      // Fetching the Supabase file first gives the browser a real Blob to save,
+      // rather than navigating to a preview page when the URL is cross-origin.
+      const response = await fetch(info.href, { credentials: "omit" });
+      if (!response.ok)
+        throw new Error(`Download failed with ${response.status}`);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${material.title.replace(/[^\w\-. ]+/g, "").trim() || "material"}.${material.type.toLowerCase().replace(/[^a-z0-9]+/g, "") || "file"}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      // Some third-party hosts disallow CORS. Their direct URL is still opened
+      // immediately, without routing through the in-app reader.
+      window.location.assign(info.href);
+    }
+  };
   return (
     <a
       className={className}
       href={info.href}
+      onClick={info.file ? download : undefined}
       {...(info.file
         ? { download: "" }
         : { target: "_blank", rel: "noreferrer" })}
@@ -2040,8 +2268,8 @@ function CounsellorPage() {
             </p>
             <p>
               In Kenya: Kenya Red Cross free helpline <strong>1199</strong>,
-              Befrienders Kenya <strong>+254 722 178 177</strong> (call, SMS
-              or WhatsApp), emergencies <strong>999</strong> or{" "}
+              Befrienders Kenya <strong>+254 722 178 177</strong> (call, SMS or
+              WhatsApp), emergencies <strong>999</strong> or{" "}
               <strong>112</strong>.
             </p>
           </div>

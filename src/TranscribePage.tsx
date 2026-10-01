@@ -4,6 +4,7 @@ import { supabase } from "./data/repository";
 import type { Unit } from "./data/types";
 import "./transcribe.css";
 import { TranscriptAI } from "./TranscriptAI";
+import { downloadPdf, downloadWord } from "./export";
 
 type Props = {
   units: Unit[];
@@ -11,6 +12,7 @@ type Props = {
   isAdmin: boolean;
   displayName: string;
   setNotice: (notice: string) => void;
+  initialUnit?: string;
 };
 
 type TranscriptRow = {
@@ -23,6 +25,8 @@ type TranscriptRow = {
   duration_seconds: number | null;
   total_chunks: number | null;
   status: "processing" | "done" | "failed";
+  lesson_number: number | null;
+  lesson_title: string | null;
   created_at: string;
 };
 type Segment = { start: number; end: number; text: string };
@@ -37,7 +41,7 @@ type Progress = { phase: string; done: number; total: number };
 const CHUNK_SECONDS = 600; // 10-minute pieces, about 2.4 MB each at 32 kbps
 const CORE_BASE = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm";
 const COLUMNS =
-  "id,title,unit,language,uploader_name,created_by,duration_seconds,total_chunks,status,created_at";
+  "id,title,unit,lesson_number,lesson_title,language,uploader_name,created_by,duration_seconds,total_chunks,status,created_at";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const clock = (seconds: number) => {
@@ -157,11 +161,13 @@ export default function TranscribePage({
   isAdmin,
   displayName,
   setNotice,
+  initialUnit,
 }: Props) {
   const [rows, setRows] = useState<TranscriptRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [title, setTitle] = useState("");
-  const [unit, setUnit] = useState("");
+  const [unit, setUnit] = useState(initialUnit ?? "");
+  const [lessonNumber, setLessonNumber] = useState("");
   const [language, setLanguage] = useState("en");
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -174,6 +180,10 @@ export default function TranscribePage({
   const cancelRef = useRef(false);
   const resumeInput = useRef<HTMLInputElement>(null);
   const endpoint = import.meta.env.VITE_TRANSCRIBE_URL as string | undefined;
+
+  useEffect(() => {
+    if (initialUnit) setUnit(initialUnit);
+  }, [initialUnit]);
 
   const load = useCallback(async () => {
     if (!supabase) {
@@ -347,6 +357,8 @@ export default function TranscribePage({
           .insert({
             title: title.trim(),
             unit: unit || null,
+            lesson_number: lessonNumber ? Number(lessonNumber) : null,
+            lesson_title: title.trim() || null,
             language,
             uploader_name: displayName,
             duration_seconds: Math.round(splitter.duration),
@@ -390,6 +402,7 @@ export default function TranscribePage({
       setProgress(null);
       setFile(null);
       setTitle("");
+      setLessonNumber("");
       setNotice("Transcript ready for everyone in the group.");
       await load();
       void openTranscript(record.id);
@@ -481,6 +494,22 @@ export default function TranscribePage({
     link.click();
     URL.revokeObjectURL(url);
   };
+  const downloadTranscriptPdf = () => {
+    const title = opened?.title ?? "Transcript";
+    downloadPdf(
+      title,
+      `${title}\n${opened?.unit ?? ""}\n\n${fullText()}`,
+      `${title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "transcript"}.pdf`,
+    );
+  };
+  const downloadTranscriptWord = () => {
+    const title = opened?.title ?? "Transcript";
+    downloadWord(
+      title,
+      `${title}\n${opened?.unit ?? ""}\n\n${fullText()}`,
+      `${title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "transcript"}.doc`,
+    );
+  };
 
   return (
     <>
@@ -502,7 +531,19 @@ export default function TranscribePage({
             <input
               value={title}
               onChange={(event) => setTitle(event.target.value)}
-              placeholder="e.g. Constitutional Law, Week 3"
+              placeholder="e.g. Separation of powers"
+              disabled={busy}
+            />
+          </label>
+          <label>
+            Lesson number <span className="field-hint">(optional)</span>
+            <input
+              type="number"
+              min="1"
+              step="1"
+              value={lessonNumber}
+              onChange={(event) => setLessonNumber(event.target.value)}
+              placeholder="e.g. 1"
               disabled={busy}
             />
           </label>
@@ -621,7 +662,10 @@ export default function TranscribePage({
                   style={{ cursor: "pointer" }}
                   onClick={() => void openTranscript(row.id)}
                 >
-                  <div className="row-title">{row.title}</div>
+                  <div className="row-title">
+                    {row.lesson_number ? `Lesson ${row.lesson_number}: ` : ""}
+                    {row.lesson_title || row.title}
+                  </div>
                   <div className="row-meta">
                     {[
                       row.unit,
@@ -693,6 +737,20 @@ export default function TranscribePage({
             <button className="secondary-button" onClick={download}>
               <Download size={13} style={{ verticalAlign: "middle" }} />{" "}
               Download .txt
+            </button>
+            <button
+              className="secondary-button"
+              onClick={downloadTranscriptPdf}
+            >
+              <Download size={13} style={{ verticalAlign: "middle" }} />{" "}
+              Download PDF
+            </button>
+            <button
+              className="secondary-button"
+              onClick={downloadTranscriptWord}
+            >
+              <Download size={13} style={{ verticalAlign: "middle" }} />{" "}
+              Download Word
             </button>
             <button
               className="secondary-button"

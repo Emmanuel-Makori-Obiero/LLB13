@@ -20,6 +20,7 @@ import {
 } from "./lib/ai";
 import { Answer, type Turn } from "./StudyAssistant";
 import "./assistant.css";
+import { downloadPdf, downloadWord } from "./export";
 
 const SECTIONS_PER_PART = 6; // sections read per request: small enough for free-tier token limits
 const WAITS = [0, 25_000, 50_000]; // retry pauses when every AI provider is busy
@@ -111,14 +112,29 @@ export function TranscriptAI({
 
   const download = () => {
     const url = URL.createObjectURL(
-      new Blob([`# ${title}\n\n${notesText}`], { type: "text/markdown" }),
+      new Blob([`# ${title}\n\n${notesText || turn?.result?.answer || ""}`], {
+        type: "text/markdown",
+      }),
     );
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${title.replace(/[^\w\- ]+/g, "").trim() || "lecture"} - notes.md`;
+    link.download = `${title.replace(/[^\w\- ]+/g, "").trim() || "lecture"} - ${turn?.task.feature === "summarize" ? "summary" : "notes"}.md`;
     link.click();
     URL.revokeObjectURL(url);
   };
+  const generatedText = notesText || turn?.result?.answer || "";
+  const downloadNotesPdf = () =>
+    downloadPdf(
+      title,
+      generatedText,
+      `${title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "lecture"}-${turn?.task.feature === "summarize" ? "summary" : "notes"}.pdf`,
+    );
+  const downloadNotesWord = () =>
+    downloadWord(
+      title,
+      generatedText,
+      `${title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "lecture"}-${turn?.task.feature === "summarize" ? "summary" : "notes"}.doc`,
+    );
 
   const run = async (action: Action) => {
     if (busy) return;
@@ -319,14 +335,30 @@ export function TranscriptAI({
               >
                 Copy {turn.task.feature === "notes" ? "notes" : "summary"}
               </button>
-              {turn.task.feature === "notes" && (
-                <button
-                  type="button"
-                  className="secondary-button ta-btn"
-                  onClick={download}
-                >
-                  <Download size={13} /> Download .md
-                </button>
+              {textual && (
+                <>
+                  <button
+                    type="button"
+                    className="secondary-button ta-btn"
+                    onClick={download}
+                  >
+                    <Download size={13} /> Download .md
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button ta-btn"
+                    onClick={downloadNotesPdf}
+                  >
+                    <Download size={13} /> Download PDF
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button ta-btn"
+                    onClick={downloadNotesWord}
+                  >
+                    <Download size={13} /> Download Word
+                  </button>
+                </>
               )}
             </div>
           )}
@@ -366,11 +398,7 @@ export function TranscriptAI({
           )}
         </div>
       )}
-      <SavedNotes
-        transcriptId={transcriptId}
-        userId={userId}
-        reload={reload}
-      />
+      <SavedNotes transcriptId={transcriptId} userId={userId} reload={reload} />
     </div>
   );
 }
@@ -398,7 +426,9 @@ function SavedNotes({
     if (!supabase) return;
     const { data, error } = await supabase
       .from("transcript_notes")
-      .select("id,owner,owner_name,kind,content,visibility,created_at,updated_at")
+      .select(
+        "id,owner,owner_name,kind,content,visibility,created_at,updated_at",
+      )
       .eq("transcript_id", transcriptId)
       .order("updated_at", { ascending: false });
     setFailed(Boolean(error));
@@ -438,7 +468,8 @@ function SavedNotes({
             className="ta-note-title"
             onClick={() => setOpen(open === row.id ? null : row.id)}
           >
-            {KIND_LABEL[row.kind]} by {isMine ? "you" : row.owner_name || "a member"}
+            {KIND_LABEL[row.kind]} by{" "}
+            {isMine ? "you" : row.owner_name || "a member"}
           </button>
           <span className="chip">
             {row.visibility === "group" ? "Shared with Group 13" : "Only you"}
@@ -452,7 +483,10 @@ function SavedNotes({
                 type="button"
                 className="secondary-button"
                 onClick={() =>
-                  void setVis(row, row.visibility === "group" ? "private" : "group")
+                  void setVis(
+                    row,
+                    row.visibility === "group" ? "private" : "group",
+                  )
                 }
               >
                 {row.visibility === "group" ? "Make private" : "Share"}
