@@ -910,3 +910,19 @@ h2 {
   color: var(--oxblood);
   border: 1px solid #e5b9ad;
 }
+
+.generated-image-result {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+  max-width: 720px;
+}
+.generated-image-result img {
+  display: block;
+  width: min(100%, 720px);
+  max-height: 520px;
+  object-fit: contain;
+  background: var(--soft, #f5f0e8);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
