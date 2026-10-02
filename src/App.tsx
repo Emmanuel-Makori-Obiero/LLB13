@@ -76,6 +76,15 @@ import PracticeRoom from "./PracticeRoom";
 import RealtimeJudgeRoom from "./RealtimeJudgeRoom";
 import BookReader from "./BookReader";
 import LearningStudio from "./LearningStudio";
+import {
+  createFilmProject,
+  createMediaShare,
+  deleteMediaAsset,
+  getMediaAssetUrl,
+  listMediaAssets,
+  saveFilmShots,
+  type MediaAsset,
+} from "./lib/cloudMedia";
 
 const nav = [
   { id: "dashboard", label: "Home", icon: LayoutDashboard },
@@ -2307,14 +2316,90 @@ function MediaPage({
     topic: "",
     source: "YouTube",
   });
+  const [cloudAssets, setCloudAssets] = useState<MediaAsset[]>([]);
+  const [cloudError, setCloudError] = useState("");
+  const [filmTitle, setFilmTitle] = useState("");
+  const [filmBrief, setFilmBrief] = useState("");
+  const [filmBusy, setFilmBusy] = useState(false);
+  const [filmNote, setFilmNote] = useState("");
   const change = (key: keyof typeof form, value: string) =>
     setForm((current) => ({ ...current, [key]: value }));
+
+  useEffect(() => {
+    void listMediaAssets()
+      .then(setCloudAssets)
+      .catch((error) => setCloudError(error instanceof Error ? error.message : "Could not load cloud media."));
+  }, []);
+
+  const openCloudAsset = async (asset: MediaAsset) => {
+    try {
+      const url = await getMediaAssetUrl(asset);
+      if (url) window.open(url, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      setCloudError(error instanceof Error ? error.message : "Could not open cloud media.");
+    }
+  };
+
+  const shareCloudAsset = async (asset: MediaAsset) => {
+    try {
+      const share = await createMediaShare({ assetId: asset.id });
+      await navigator.clipboard.writeText(share.url);
+      setFilmNote("A 7-day share link was copied to your clipboard.");
+    } catch (error) {
+      setCloudError(error instanceof Error ? error.message : "Could not share cloud media.");
+    }
+  };
+
+  const removeCloudAsset = async (asset: MediaAsset) => {
+    if (!window.confirm(`Delete “${asset.title}” and its stored file?`)) return;
+    try {
+      await deleteMediaAsset(asset);
+      setCloudAssets((current) => current.filter((item) => item.id !== asset.id));
+    } catch (error) {
+      setCloudError(error instanceof Error ? error.message : "Could not delete cloud media.");
+    }
+  };
+
+  const buildFilmPlan = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!filmTitle.trim() || !filmBrief.trim() || filmBusy) return;
+    setFilmBusy(true);
+    setFilmNote("");
+    try {
+      const project = await createFilmProject({
+        title: filmTitle.trim(),
+        brief: filmBrief.trim(),
+        targetDurationSeconds: 900,
+        providerStrategy: "fallback",
+        continuity: {
+          segments: 5,
+          segmentDurationSeconds: 180,
+          generationUnit: "short provider clips assembled with FFmpeg",
+          providerOrder: ["self-hosted-comfyui", "huggingface-space", "hosted-api-if-configured"],
+        },
+      });
+      await saveFilmShots(project.id, Array.from({ length: 5 }, (_, index) => ({
+        shot_index: index,
+        duration_seconds: 180,
+        prompt: `${filmBrief.trim()}\nThis is segment ${index + 1} of 5. Preserve the same characters, setting, visual style, narration, and story continuity from the previous and next segments.`,
+        continuity_notes: `Segment ${index + 1}/5. Keep the ending state ready for segment ${index + 2}. The provider worker should subdivide this 3-minute plan into supported short shots and stitch them.`,
+      })));
+      setFilmNote("Film plan saved to Supabase: five connected 3-minute segments. Generation providers can now be assigned by the worker.");
+      setFilmTitle("");
+      setFilmBrief("");
+    } catch (error) {
+      setFilmNote(error instanceof Error ? error.message : "Could not save film plan.");
+    } finally {
+      setFilmBusy(false);
+    }
+  };
+
   return (
     <>
       <PageHeading
         eyebrow="Law in every format"
         title="Media."
-        subtitle="Add law-related films, YouTube lectures, music, and court-case recordings. Nothing is preloaded."
+        subtitle="Keep links, generated lessons, and long-form film plans in one cloud-backed media space."
       />
       <div className="card card-pad media-form-card">
         <CardHeader label="Add a resource" action="Your private collection" />
@@ -2324,122 +2409,41 @@ function MediaPage({
             event.preventDefault();
             if (!/^https:\/\//i.test(form.url)) return;
             await onCreate(form);
-            setForm({
-              kind: "youtube",
-              title: "",
-              url: "",
-              topic: "",
-              source: "YouTube",
-            });
+            setForm({ kind: "youtube", title: "", url: "", topic: "", source: "YouTube" });
           }}
         >
-          <label>
-            Type
-            <select
-              value={form.kind}
-              onChange={(event) =>
-                change("kind", event.target.value as MediaResource["kind"])
-              }
-            >
-              <option value="movie">Movie · MovieFree link</option>
-              <option value="youtube">YouTube video</option>
-              <option value="music">Music</option>
-              <option value="court">Court case / lecture</option>
-            </select>
-          </label>
-          <label>
-            Title
-            <input
-              required
-              value={form.title}
-              onChange={(event) => change("title", event.target.value)}
-            />
-          </label>
-          <label>
-            URL
-            <input
-              required
-              type="url"
-              pattern="https://.+"
-              title="Link must start with https://"
-              value={form.url}
-              onChange={(event) => change("url", event.target.value)}
-              placeholder="https://…"
-            />
-          </label>
-          <label>
-            Law topic
-            <input
-              required
-              value={form.topic}
-              onChange={(event) => change("topic", event.target.value)}
-              placeholder="Evidence, advocacy, constitutional law…"
-            />
-          </label>
-          <label>
-            Source
-            <input
-              required
-              value={form.source}
-              onChange={(event) => change("source", event.target.value)}
-            />
-          </label>
-          <button className="primary-button" type="submit">
-            Add resource
-          </button>
+          <label>Type<select value={form.kind} onChange={(event) => change("kind", event.target.value as MediaResource["kind"])}><option value="movie">Movie · MovieFree link</option><option value="youtube">YouTube video</option><option value="music">Music</option><option value="court">Court case / lecture</option></select></label>
+          <label>Title<input required value={form.title} onChange={(event) => change("title", event.target.value)} /></label>
+          <label>URL<input required type="url" pattern="https://.+" title="Link must start with https://" value={form.url} onChange={(event) => change("url", event.target.value)} placeholder="https://…" /></label>
+          <label>Law topic<input required value={form.topic} onChange={(event) => change("topic", event.target.value)} placeholder="Evidence, advocacy, constitutional law…" /></label>
+          <label>Source<input required value={form.source} onChange={(event) => change("source", event.target.value)} /></label>
+          <button className="primary-button" type="submit">Add resource</button>
         </form>
       </div>
+
+      <div className="card card-pad" style={{ marginTop: 18 }}>
+        <CardHeader label="Long-form film planner" action="Supabase cloud plan" />
+        <p className="field-hint">Create a connected 15-minute plan as five 3-minute segments. The eventual worker will split each segment into provider-supported short clips, preserve continuity, and stitch the result.</p>
+        <form className="data-form" onSubmit={(event) => void buildFilmPlan(event)}>
+          <label>Film title<input required value={filmTitle} onChange={(event) => setFilmTitle(event.target.value)} placeholder="e.g. The rule of law in Kenya" /></label>
+          <label>Film brief<textarea required rows={4} value={filmBrief} onChange={(event) => setFilmBrief(event.target.value)} placeholder="Describe the story, lesson, characters, visual style, and narration." /></label>
+          <button className="primary-button" type="submit" disabled={filmBusy}>{filmBusy ? "Saving plan…" : "Save 15-minute film plan"}</button>
+          {filmNote && <p className="field-hint">{filmNote}</p>}
+        </form>
+      </div>
+
+      {cloudError && <div className="connection-error" style={{ marginTop: 18 }}>{cloudError}</div>}
+      {cloudAssets.length > 0 && <><PageHeading eyebrow="Generated and uploaded" title="Cloud media." subtitle="Files are stored privately in Supabase Storage and can be opened from any signed-in device." /><div className="media-grid">{cloudAssets.map((asset) => <article className="card media-card" key={asset.id}><div className="media-link-card"><Film size={24} /><strong>{asset.title}</strong><span className="chip">{asset.kind} · {asset.status}</span><div className="media-actions"><button className="secondary-button" onClick={() => void openCloudAsset(asset)}>Open cloud file</button><button className="secondary-button" onClick={() => void shareCloudAsset(asset)}>Copy 7-day link</button><button className="danger-button" onClick={() => void removeCloudAsset(asset)}>Delete</button></div></div></article>)}</div></>}
+
       <div className="media-grid">
         {media.map((item) => (
           <article className="card media-card" key={item.id}>
-            <div className="media-frame">
-              {item.kind === "youtube" || item.kind === "court" ? (
-                <iframe
-                  src={toEmbedUrl(item.url)}
-                  title={item.title}
-                  loading="lazy"
-                  allowFullScreen
-                />
-              ) : (
-                <div className="media-link-card">
-                  <Film size={24} />
-                  <strong>{item.title}</strong>
-                  <a
-                    href={safeUrl(item.url) || undefined}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Open resource
-                  </a>
-                </div>
-              )}
-            </div>
-            <div className="card-pad">
-              <span className="chip">{item.kind}</span>
-              <h3>{item.title}</h3>
-              <p>
-                {item.topic} · {item.source}
-              </p>
-              {safeUrl(item.url) && (
-                <a
-                  className="material-link"
-                  href={safeUrl(item.url)}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Open in new tab
-                </a>
-              )}
-            </div>
+            <div className="media-frame">{item.kind === "youtube" || item.kind === "court" ? <iframe src={toEmbedUrl(item.url)} title={item.title} loading="lazy" allowFullScreen /> : <div className="media-link-card"><Film size={24} /><strong>{item.title}</strong><a href={safeUrl(item.url) || undefined} target="_blank" rel="noreferrer">Open resource</a></div>}</div>
+            <div className="card-pad"><span className="chip">{item.kind}</span><h3>{item.title}</h3><p>{item.topic} · {item.source}</p>{safeUrl(item.url) && <a className="material-link" href={safeUrl(item.url)} target="_blank" rel="noreferrer">Open in new tab</a>}</div>
           </article>
         ))}
       </div>
-      {!media.length && (
-        <div className="card card-pad empty">
-          Your collection is empty. Add a law movie, YouTube video, music link,
-          or court recording above.
-        </div>
-      )}
+      {!media.length && !cloudAssets.length && <div className="card card-pad empty">Your collection is empty. Add a link or create a cloud film plan above.</div>}
     </>
   );
 }
@@ -3114,6 +3118,7 @@ function MaterialForm({
   onUpdated?: (material: Omit<Material, "id">) => Promise<void>;
 }) {
   const [file, setFile] = useState<File>();
+  const [dragActive, setDragActive] = useState(false);
   const [extracting, setExtracting] = useState(false);
   const [extractNote, setExtractNote] = useState("");
   const [form, setForm] = useState<Omit<Material, "id">>(() =>
@@ -3203,6 +3208,9 @@ function MaterialForm({
       setExtracting(false);
     }
   };
+  const chooseFile = (selectedFile: File | undefined) => {
+    if (selectedFile) void inspectBook(selectedFile);
+  };
   return (
     <FormShell
       title={initial ? "Edit book details" : "Add library material"}
@@ -3210,6 +3218,19 @@ function MaterialForm({
     >
       <form
         className="data-form"
+        onDragOver={(event) => {
+          event.preventDefault();
+          if (!initial) setDragActive(true);
+        }}
+        onDragLeave={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null))
+            setDragActive(false);
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          setDragActive(false);
+          if (!initial) chooseFile(event.dataTransfer.files?.[0]);
+        }}
         onSubmit={(event) => {
           event.preventDefault();
           void (initial ? onUpdated?.(form) : onCreated?.(form, file));
@@ -3282,11 +3303,15 @@ function MaterialForm({
         <label>
           Upload file{" "}
           <span className="field-hint">Optional PDF, DOCX, or image</span>
-          <input
-            type="file"
-            accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg"
-            onChange={(event) => void inspectBook(event.target.files?.[0])}
-          />
+          <span className={`material-dropzone ${dragActive ? "active" : ""} ${file ? "has-file" : ""}`}>
+            <strong>{file ? file.name : "Drag and drop a book here"}</strong>
+            <small>{file ? "AI details are ready to review below." : "or choose a PDF, DOCX, PPTX, TXT, PNG, or JPG"}</small>
+            <input
+              type="file"
+              accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg"
+              onChange={(event) => chooseFile(event.target.files?.[0])}
+            />
+          </span>
           {extracting && (
             <span className="field-hint">
               AI is analysing the readable text…

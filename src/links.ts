@@ -7,7 +7,7 @@ export function readerUrl(material: Material) {
   const url = safeUrl(material.url)
   if (!url) return ''
   const path = new URL(url).pathname
-  if (/\.pdf(\?|$)/i.test(path)) return url
+  if (/\.pdf(\?|$)/i.test(path)) return `${url.split('#')[0]}#page=1&zoom=page-width`
   if (/\.(docx?|pptx?|xlsx?)(\?|$)/i.test(path) || (material.storage_path && !/\.pdf(\?|$)/i.test(material.storage_path))) return `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(url)}`
   return toEmbedUrl(url)
 }

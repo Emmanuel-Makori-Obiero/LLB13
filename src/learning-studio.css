@@ -27,3 +27,43 @@
 .studio-panel .md { margin-top: 8px; font-size: 12px; }
 @media (max-width: 820px) { .studio-grid { grid-template-columns: 1fr; } .studio-sources { order: -1; } }
 @media (max-width: 600px) { .studio-output-head { flex-direction: column; } .studio-output-actions { justify-content: flex-start; } }
+
+.studio-progress {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+.studio-progress-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--forest);
+  font-size: 12px;
+  font-weight: 600;
+}
+.studio-progress-top strong {
+  color: var(--clay);
+  font-size: 12px;
+}
+.studio-progress-track {
+  height: 8px;
+  margin-top: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e7e2d7;
+}
+.studio-progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--clay);
+  transition: width .35s ease;
+}
+.studio-progress p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
