@@ -1,0 +1,1205 @@
+diff --git a/IMPLEMENTATION_NOTES.md b/IMPLEMENTATION_NOTES.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..ece06af730aee9b63c982e8df8efc9d1edced67c
+--- /dev/null
++++ b/IMPLEMENTATION_NOTES.md
+@@ -0,0 +1,58 @@
++# LLB13 cloud library and media implementation
++
++## Implemented in this pass
++
++- **Library drag-and-drop upload** in `src/App.tsx`.
++  - Drop a PDF, DOCX, PPTX, TXT, PNG, or JPG into the Add library material form.
++  - Existing AI metadata extraction still fills title, type, unit, topic, source, and date for review before saving.
++  - The original file is stored through the existing Supabase `materials` bucket.
++- **Cloud media client** in `src/lib/cloudMedia.ts`.
++  - Lists private media assets.
++  - Uploads media files to Supabase Storage.
++  - Creates seven-day signed share URLs and records share metadata.
++  - Deletes an owned media file and database record.
++  - Creates film projects and ordered film shots.
++- **Media page improvements** in `src/App.tsx`.
++  - Shows cloud media assets alongside existing URL resources.
++  - Opens private assets with a signed URL.
++  - Copies a seven-day friend link.
++  - Deletes cloud assets after an explicit confirmation.
++  - Saves a 15-minute plan as five connected 3-minute segments.
++- **Supabase migration** in `supabase/migrations/002-cloud-media.sql`.
++  - Adds `media_assets`, `media_shares`, `film_projects`, and `film_shots`.
++  - Adds owner/shared RLS policies, indexes, timestamps, and a private `media` bucket.
++
++## Apply the cloud schema
++
++Run `supabase/migrations/002-cloud-media.sql` in the linked Supabase project after the existing base schema and AI migration. The application will not be able to load cloud media or film plans until this migration has been applied.
++
++The migration deliberately uses a private Storage bucket. Sharing is implemented with an expiring signed URL rather than exposing the whole bucket publicly. The share record remains available for auditing/revocation, but a seven-day URL cannot be retroactively invalidated unless the underlying asset is deleted or the storage policy is changed.
++
++## Video generation reality
++
++The film planner is provider-neutral. It stores the requested five connected 3-minute segments, but generation still needs a server-side worker that subdivides each segment into short provider-supported shots, retries failed jobs, preserves reference frames, and stitches the outputs with FFmpeg.
++
++The provider audit found no legitimate unlimited free production API. The practical options are:
++
++1. **Self-hosted ComfyUI + Wan/LTX** — no per-generation vendor fee, but requires GPU, storage, queueing, model licensing review, and operations.
++2. **Hugging Face Spaces/Inference Providers** — good for prototyping and short jobs; free quotas are limited and provider/model availability varies.
++3. **LTX hosted API** — clean async integration, but usage-billed and capped at short clips.
++4. **HunyuanVideo/CogVideoX hosted endpoints** — third-party hosted options exist, but are metered and have model/provider-specific terms.
++
++The app should keep provider keys server-side. Do not put them in React/browser code and do not attempt to bypass quotas or use leaked credentials.
++
++## Validation
++
++- `npm run check` passed.
++- `npm run build` passed.
++- `git diff --check` passed.
++
++## GitHub
++
++These changes are currently local in the cloned repository. They have **not** been pushed to GitHub. Review the diff, apply the Supabase migration, test the signed-in flows, then commit and push from the repository owner’s GitHub credentials.
++
++## Automated video worker
++
++The repository now includes `worker/video_worker.py`. It polls queued film plans, submits short generation jobs to a local ComfyUI server, stitches clips and five segments with FFmpeg, uploads private MP4s to Supabase Storage, and updates `film_projects`, `film_shots`, and `media_assets`.
++
++Configure it with `worker/.env.example`, export a ComfyUI **API-format** workflow containing `__PROMPT__`, `__SEED__`, and `__OUTPUT_PREFIX__`, then follow `worker/README.md`. Use `WORKER_ONCE=1` for the first test. The included `worker/llb13-video-worker.service.example` can keep it running under systemd after the test succeeds.
+diff --git a/src/App.tsx b/src/App.tsx
+index 4e51c4d7cedbee422df6ad839ce52f72cb6664cc..d17db61e76743d5eb5f0b0cac614a72a2df892c6 100644
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -76,6 +76,15 @@ import PracticeRoom from "./PracticeRoom";
+ import RealtimeJudgeRoom from "./RealtimeJudgeRoom";
+ import BookReader from "./BookReader";
+ import LearningStudio from "./LearningStudio";
++import {
++  createFilmProject,
++  createMediaShare,
++  deleteMediaAsset,
++  getMediaAssetUrl,
++  listMediaAssets,
++  saveFilmShots,
++  type MediaAsset,
++} from "./lib/cloudMedia";
+ 
+ const nav = [
+   { id: "dashboard", label: "Home", icon: LayoutDashboard },
+@@ -2307,14 +2316,90 @@ function MediaPage({
+     topic: "",
+     source: "YouTube",
+   });
++  const [cloudAssets, setCloudAssets] = useState<MediaAsset[]>([]);
++  const [cloudError, setCloudError] = useState("");
++  const [filmTitle, setFilmTitle] = useState("");
++  const [filmBrief, setFilmBrief] = useState("");
++  const [filmBusy, setFilmBusy] = useState(false);
++  const [filmNote, setFilmNote] = useState("");
+   const change = (key: keyof typeof form, value: string) =>
+     setForm((current) => ({ ...current, [key]: value }));
++
++  useEffect(() => {
++    void listMediaAssets()
++      .then(setCloudAssets)
++      .catch((error) => setCloudError(error instanceof Error ? error.message : "Could not load cloud media."));
++  }, []);
++
++  const openCloudAsset = async (asset: MediaAsset) => {
++    try {
++      const url = await getMediaAssetUrl(asset);
++      if (url) window.open(url, "_blank", "noopener,noreferrer");
++    } catch (error) {
++      setCloudError(error instanceof Error ? error.message : "Could not open cloud media.");
++    }
++  };
++
++  const shareCloudAsset = async (asset: MediaAsset) => {
++    try {
++      const share = await createMediaShare({ assetId: asset.id });
++      await navigator.clipboard.writeText(share.url);
++      setFilmNote("A 7-day share link was copied to your clipboard.");
++    } catch (error) {
++      setCloudError(error instanceof Error ? error.message : "Could not share cloud media.");
++    }
++  };
++
++  const removeCloudAsset = async (asset: MediaAsset) => {
++    if (!window.confirm(`Delete “${asset.title}” and its stored file?`)) return;
++    try {
++      await deleteMediaAsset(asset);
++      setCloudAssets((current) => current.filter((item) => item.id !== asset.id));
++    } catch (error) {
++      setCloudError(error instanceof Error ? error.message : "Could not delete cloud media.");
++    }
++  };
++
++  const buildFilmPlan = async (event: React.FormEvent) => {
++    event.preventDefault();
++    if (!filmTitle.trim() || !filmBrief.trim() || filmBusy) return;
++    setFilmBusy(true);
++    setFilmNote("");
++    try {
++      const project = await createFilmProject({
++        title: filmTitle.trim(),
++        brief: filmBrief.trim(),
++        targetDurationSeconds: 900,
++        providerStrategy: "fallback",
++        continuity: {
++          segments: 5,
++          segmentDurationSeconds: 180,
++          generationUnit: "short provider clips assembled with FFmpeg",
++          providerOrder: ["self-hosted-comfyui", "huggingface-space", "hosted-api-if-configured"],
++        },
++      });
++      await saveFilmShots(project.id, Array.from({ length: 5 }, (_, index) => ({
++        shot_index: index,
++        duration_seconds: 180,
++        prompt: `${filmBrief.trim()}\nThis is segment ${index + 1} of 5. Preserve the same characters, setting, visual style, narration, and story continuity from the previous and next segments.`,
++        continuity_notes: `Segment ${index + 1}/5. Keep the ending state ready for segment ${index + 2}. The provider worker should subdivide this 3-minute plan into supported short shots and stitch them.`,
++      })));
++      setFilmNote("Film plan saved to Supabase: five connected 3-minute segments. Generation providers can now be assigned by the worker.");
++      setFilmTitle("");
++      setFilmBrief("");
++    } catch (error) {
++      setFilmNote(error instanceof Error ? error.message : "Could not save film plan.");
++    } finally {
++      setFilmBusy(false);
++    }
++  };
++
+   return (
+     <>
+       <PageHeading
+         eyebrow="Law in every format"
+         title="Media."
+-        subtitle="Add law-related films, YouTube lectures, music, and court-case recordings. Nothing is preloaded."
++        subtitle="Keep links, generated lessons, and long-form film plans in one cloud-backed media space."
+       />
+       <div className="card card-pad media-form-card">
+         <CardHeader label="Add a resource" action="Your private collection" />
+@@ -2324,122 +2409,41 @@ function MediaPage({
+             event.preventDefault();
+             if (!/^https:\/\//i.test(form.url)) return;
+             await onCreate(form);
+-            setForm({
+-              kind: "youtube",
+-              title: "",
+-              url: "",
+-              topic: "",
+-              source: "YouTube",
+-            });
++            setForm({ kind: "youtube", title: "", url: "", topic: "", source: "YouTube" });
+           }}
+         >
+-          <label>
+-            Type
+-            <select
+-              value={form.kind}
+-              onChange={(event) =>
+-                change("kind", event.target.value as MediaResource["kind"])
+-              }
+-            >
+-              <option value="movie">Movie · MovieFree link</option>
+-              <option value="youtube">YouTube video</option>
+-              <option value="music">Music</option>
+-              <option value="court">Court case / lecture</option>
+-            </select>
+-          </label>
+-          <label>
+-            Title
+-            <input
+-              required
+-              value={form.title}
+-              onChange={(event) => change("title", event.target.value)}
+-            />
+-          </label>
+-          <label>
+-            URL
+-            <input
+-              required
+-              type="url"
+-              pattern="https://.+"
+-              title="Link must start with https://"
+-              value={form.url}
+-              onChange={(event) => change("url", event.target.value)}
+-              placeholder="https://…"
+-            />
+-          </label>
+-          <label>
+-            Law topic
+-            <input
+-              required
+-              value={form.topic}
+-              onChange={(event) => change("topic", event.target.value)}
+-              placeholder="Evidence, advocacy, constitutional law…"
+-            />
+-          </label>
+-          <label>
+-            Source
+-            <input
+-              required
+-              value={form.source}
+-              onChange={(event) => change("source", event.target.value)}
+-            />
+-          </label>
+-          <button className="primary-button" type="submit">
+-            Add resource
+-          </button>
++          <label>Type<select value={form.kind} onChange={(event) => change("kind", event.target.value as MediaResource["kind"])}><option value="movie">Movie · MovieFree link</option><option value="youtube">YouTube video</option><option value="music">Music</option><option value="court">Court case / lecture</option></select></label>
++          <label>Title<input required value={form.title} onChange={(event) => change("title", event.target.value)} /></label>
++          <label>URL<input required type="url" pattern="https://.+" title="Link must start with https://" value={form.url} onChange={(event) => change("url", event.target.value)} placeholder="https://…" /></label>
++          <label>Law topic<input required value={form.topic} onChange={(event) => change("topic", event.target.value)} placeholder="Evidence, advocacy, constitutional law…" /></label>
++          <label>Source<input required value={form.source} onChange={(event) => change("source", event.target.value)} /></label>
++          <button className="primary-button" type="submit">Add resource</button>
++        </form>
++      </div>
++
++      <div className="card card-pad" style={{ marginTop: 18 }}>
++        <CardHeader label="Long-form film planner" action="Supabase cloud plan" />
++        <p className="field-hint">Create a connected 15-minute plan as five 3-minute segments. The eventual worker will split each segment into provider-supported short clips, preserve continuity, and stitch the result.</p>
++        <form className="data-form" onSubmit={(event) => void buildFilmPlan(event)}>
++          <label>Film title<input required value={filmTitle} onChange={(event) => setFilmTitle(event.target.value)} placeholder="e.g. The rule of law in Kenya" /></label>
++          <label>Film brief<textarea required rows={4} value={filmBrief} onChange={(event) => setFilmBrief(event.target.value)} placeholder="Describe the story, lesson, characters, visual style, and narration." /></label>
++          <button className="primary-button" type="submit" disabled={filmBusy}>{filmBusy ? "Saving plan…" : "Save 15-minute film plan"}</button>
++          {filmNote && <p className="field-hint">{filmNote}</p>}
+         </form>
+       </div>
++
++      {cloudError && <div className="connection-error" style={{ marginTop: 18 }}>{cloudError}</div>}
++      {cloudAssets.length > 0 && <><PageHeading eyebrow="Generated and uploaded" title="Cloud media." subtitle="Files are stored privately in Supabase Storage and can be opened from any signed-in device." /><div className="media-grid">{cloudAssets.map((asset) => <article className="card media-card" key={asset.id}><div className="media-link-card"><Film size={24} /><strong>{asset.title}</strong><span className="chip">{asset.kind} · {asset.status}</span><div className="media-actions"><button className="secondary-button" onClick={() => void openCloudAsset(asset)}>Open cloud file</button><button className="secondary-button" onClick={() => void shareCloudAsset(asset)}>Copy 7-day link</button><button className="danger-button" onClick={() => void removeCloudAsset(asset)}>Delete</button></div></div></article>)}</div></>}
++
+       <div className="media-grid">
+         {media.map((item) => (
+           <article className="card media-card" key={item.id}>
+-            <div className="media-frame">
+-              {item.kind === "youtube" || item.kind === "court" ? (
+-                <iframe
+-                  src={toEmbedUrl(item.url)}
+-                  title={item.title}
+-                  loading="lazy"
+-                  allowFullScreen
+-                />
+-              ) : (
+-                <div className="media-link-card">
+-                  <Film size={24} />
+-                  <strong>{item.title}</strong>
+-                  <a
+-                    href={safeUrl(item.url) || undefined}
+-                    target="_blank"
+-                    rel="noreferrer"
+-                  >
+-                    Open resource
+-                  </a>
+-                </div>
+-              )}
+-            </div>
+-            <div className="card-pad">
+-              <span className="chip">{item.kind}</span>
+-              <h3>{item.title}</h3>
+-              <p>
+-                {item.topic} · {item.source}
+-              </p>
+-              {safeUrl(item.url) && (
+-                <a
+-                  className="material-link"
+-                  href={safeUrl(item.url)}
+-                  target="_blank"
+-                  rel="noreferrer"
+-                >
+-                  Open in new tab
+-                </a>
+-              )}
+-            </div>
++            <div className="media-frame">{item.kind === "youtube" || item.kind === "court" ? <iframe src={toEmbedUrl(item.url)} title={item.title} loading="lazy" allowFullScreen /> : <div className="media-link-card"><Film size={24} /><strong>{item.title}</strong><a href={safeUrl(item.url) || undefined} target="_blank" rel="noreferrer">Open resource</a></div>}</div>
++            <div className="card-pad"><span className="chip">{item.kind}</span><h3>{item.title}</h3><p>{item.topic} · {item.source}</p>{safeUrl(item.url) && <a className="material-link" href={safeUrl(item.url)} target="_blank" rel="noreferrer">Open in new tab</a>}</div>
+           </article>
+         ))}
+       </div>
+-      {!media.length && (
+-        <div className="card card-pad empty">
+-          Your collection is empty. Add a law movie, YouTube video, music link,
+-          or court recording above.
+-        </div>
+-      )}
++      {!media.length && !cloudAssets.length && <div className="card card-pad empty">Your collection is empty. Add a link or create a cloud film plan above.</div>}
+     </>
+   );
+ }
+@@ -3114,6 +3118,7 @@ function MaterialForm({
+   onUpdated?: (material: Omit<Material, "id">) => Promise<void>;
+ }) {
+   const [file, setFile] = useState<File>();
++  const [dragActive, setDragActive] = useState(false);
+   const [extracting, setExtracting] = useState(false);
+   const [extractNote, setExtractNote] = useState("");
+   const [form, setForm] = useState<Omit<Material, "id">>(() =>
+@@ -3203,6 +3208,9 @@ function MaterialForm({
+       setExtracting(false);
+     }
+   };
++  const chooseFile = (selectedFile: File | undefined) => {
++    if (selectedFile) void inspectBook(selectedFile);
++  };
+   return (
+     <FormShell
+       title={initial ? "Edit book details" : "Add library material"}
+@@ -3210,6 +3218,19 @@ function MaterialForm({
+     >
+       <form
+         className="data-form"
++        onDragOver={(event) => {
++          event.preventDefault();
++          if (!initial) setDragActive(true);
++        }}
++        onDragLeave={(event) => {
++          if (!event.currentTarget.contains(event.relatedTarget as Node | null))
++            setDragActive(false);
++        }}
++        onDrop={(event) => {
++          event.preventDefault();
++          setDragActive(false);
++          if (!initial) chooseFile(event.dataTransfer.files?.[0]);
++        }}
+         onSubmit={(event) => {
+           event.preventDefault();
+           void (initial ? onUpdated?.(form) : onCreated?.(form, file));
+@@ -3282,11 +3303,15 @@ function MaterialForm({
+         <label>
+           Upload file{" "}
+           <span className="field-hint">Optional PDF, DOCX, or image</span>
+-          <input
+-            type="file"
+-            accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg"
+-            onChange={(event) => void inspectBook(event.target.files?.[0])}
+-          />
++          <span className={`material-dropzone ${dragActive ? "active" : ""} ${file ? "has-file" : ""}`}>
++            <strong>{file ? file.name : "Drag and drop a book here"}</strong>
++            <small>{file ? "AI details are ready to review below." : "or choose a PDF, DOCX, PPTX, TXT, PNG, or JPG"}</small>
++            <input
++              type="file"
++              accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg"
++              onChange={(event) => chooseFile(event.target.files?.[0])}
++            />
++          </span>
+           {extracting && (
+             <span className="field-hint">
+               AI is analysing the readable text…
+diff --git a/src/lib/cloudMedia.ts b/src/lib/cloudMedia.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..360650df53607cb9b0d178944bc6ace21b1abdad
+--- /dev/null
++++ b/src/lib/cloudMedia.ts
+@@ -0,0 +1,225 @@
++import { supabase } from "../data/repository";
++
++export type MediaAssetKind =
++  | "podcast_script"
++  | "podcast_audio"
++  | "video_lesson"
++  | "film_clip"
++  | "film_export"
++  | "other";
++
++export type MediaAsset = {
++  id: string;
++  owner_id: string;
++  title: string;
++  kind: MediaAssetKind;
++  source_material_id: string | null;
++  source_document_id: string | null;
++  project_id: string | null;
++  storage_path: string | null;
++  mime_type: string | null;
++  public_url: string | null;
++  duration_seconds: number | null;
++  status: "queued" | "processing" | "ready" | "failed" | "deleted";
++  provider: string | null;
++  provider_job_id: string | null;
++  metadata: Record<string, unknown>;
++  created_at: string;
++  updated_at: string;
++};
++
++export type FilmProject = {
++  id: string;
++  owner_id: string;
++  title: string;
++  brief: string;
++  target_duration_seconds: number;
++  aspect_ratio: string;
++  status: "draft" | "queued" | "processing" | "ready" | "failed";
++  provider_strategy: "fallback" | "self_hosted" | "hosted" | "manual";
++  final_asset_id: string | null;
++  continuity: Record<string, unknown>;
++  created_at: string;
++  updated_at: string;
++};
++
++export type FilmShot = {
++  id: string;
++  project_id: string;
++  shot_index: number;
++  prompt: string;
++  continuity_notes: string;
++  duration_seconds: number;
++  provider: string | null;
++  status: "queued" | "processing" | "ready" | "failed";
++  provider_job_id: string | null;
++  asset_id: string | null;
++  first_frame_path: string | null;
++  last_frame_path: string | null;
++  metadata: Record<string, unknown>;
++  created_at: string;
++};
++
++function client() {
++  if (!supabase) throw new Error("Supabase is not configured.");
++  return supabase;
++}
++
++export async function listMediaAssets() {
++  const { data, error } = await client()
++    .from("media_assets")
++    .select("*")
++    .order("created_at", { ascending: false });
++  if (error) throw new Error(`Could not load media: ${error.message}`);
++  return (data ?? []) as MediaAsset[];
++}
++
++export async function getMediaAssetUrl(asset: Pick<MediaAsset, "storage_path" | "public_url">) {
++  if (asset.public_url) return asset.public_url;
++  if (!asset.storage_path) return null;
++  const { data, error } = await client().storage.from("media").createSignedUrl(asset.storage_path, 3600);
++  if (error) throw new Error(`Could not open media: ${error.message}`);
++  return data.signedUrl;
++}
++
++export async function uploadMediaAsset(args: {
++  file: File;
++  title: string;
++  kind: MediaAssetKind;
++  sourceMaterialId?: string;
++  sourceDocumentId?: string;
++  projectId?: string;
++  durationSeconds?: number;
++  provider?: string;
++  metadata?: Record<string, unknown>;
++}) {
++  const db = client();
++  const { data: auth } = await db.auth.getUser();
++  if (!auth.user) throw new Error("Please sign in before uploading media.");
++  const safeName = args.file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
++  const path = `${auth.user.id}/${crypto.randomUUID()}-${safeName}`;
++  const upload = await db.storage.from("media").upload(path, args.file, {
++    upsert: false,
++    contentType: args.file.type || undefined,
++  });
++  if (upload.error) throw new Error(`Could not upload media: ${upload.error.message}`);
++  const { data, error } = await db
++    .from("media_assets")
++    .insert({
++      owner_id: auth.user.id,
++      title: args.title,
++      kind: args.kind,
++      source_material_id: args.sourceMaterialId ?? null,
++      source_document_id: args.sourceDocumentId ?? null,
++      project_id: args.projectId ?? null,
++      storage_path: path,
++      mime_type: args.file.type || "application/octet-stream",
++      duration_seconds: args.durationSeconds ?? null,
++      provider: args.provider ?? null,
++      metadata: args.metadata ?? {},
++    })
++    .select("*")
++    .single();
++  if (error) {
++    await db.storage.from("media").remove([path]);
++    throw new Error(`Could not save media record: ${error.message}`);
++  }
++  return data as MediaAsset;
++}
++
++export async function createMediaShare(args: {
++  assetId: string;
++  recipientEmail?: string;
++  visibility?: "link" | "group" | "private";
++  expiresAt?: string;
++}) {
++  const db = client();
++  const { data: auth } = await db.auth.getUser();
++  if (!auth.user) throw new Error("Please sign in before sharing media.");
++  const { data: asset, error: assetError } = await db
++    .from("media_assets")
++    .select("storage_path,public_url")
++    .eq("id", args.assetId)
++    .single();
++  if (assetError) throw new Error(`Could not find media: ${assetError.message}`);
++  const { data, error } = await db
++    .from("media_shares")
++    .insert({
++      asset_id: args.assetId,
++      owner_id: auth.user.id,
++      recipient_email: args.recipientEmail?.trim().toLowerCase() || null,
++      visibility: args.visibility ?? "link",
++      expires_at: args.expiresAt ?? null,
++    })
++    .select("id,asset_id,share_token,recipient_email,visibility,expires_at,revoked_at,created_at")
++    .single();
++  if (error) throw new Error(`Could not create share link: ${error.message}`);
++  const signed = asset.public_url
++    ? { signedUrl: asset.public_url }
++    : asset.storage_path
++      ? await db.storage.from("media").createSignedUrl(asset.storage_path, 60 * 60 * 24 * 7)
++      : { data: null, error: null };
++  if ("error" in signed && signed.error) throw new Error(`Could not prepare share URL: ${signed.error.message}`);
++  return {
++    ...data,
++    // The signed URL is immediately usable by a friend without an account.
++    // The share token remains stored for revocation and auditing.
++    url: "signedUrl" in signed ? signed.signedUrl : signed.data?.signedUrl ?? `${window.location.origin}/share/${data.share_token}`,
++  };
++}
++
++export async function revokeMediaShare(id: string) {
++  const { error } = await client().from("media_shares").update({ revoked_at: new Date().toISOString() }).eq("id", id);
++  if (error) throw new Error(`Could not revoke share: ${error.message}`);
++}
++
++export async function deleteMediaAsset(asset: Pick<MediaAsset, "id" | "storage_path">) {
++  const db = client();
++  if (asset.storage_path) {
++    const removed = await db.storage.from("media").remove([asset.storage_path]);
++    if (removed.error) throw new Error(`Could not delete media file: ${removed.error.message}`);
++  }
++  const { error } = await db.from("media_assets").delete().eq("id", asset.id);
++  if (error) throw new Error(`Could not delete media record: ${error.message}`);
++}
++
++export async function createFilmProject(args: {
++  title: string;
++  brief: string;
++  targetDurationSeconds?: number;
++  aspectRatio?: string;
++  providerStrategy?: "fallback" | "self_hosted" | "hosted" | "manual";
++  continuity?: Record<string, unknown>;
++}) {
++  const db = client();
++  const { data: auth } = await db.auth.getUser();
++  if (!auth.user) throw new Error("Please sign in before creating a film project.");
++  const { data, error } = await db
++    .from("film_projects")
++    .insert({
++      owner_id: auth.user.id,
++      title: args.title,
++      brief: args.brief,
++      target_duration_seconds: args.targetDurationSeconds ?? 900,
++      aspect_ratio: args.aspectRatio ?? "16:9",
++      provider_strategy: args.providerStrategy ?? "fallback",
++      continuity: args.continuity ?? {},
++    })
++    .select("*")
++    .single();
++  if (error) throw new Error(`Could not create film project: ${error.message}`);
++  return data as FilmProject;
++}
++
++export async function saveFilmShots(projectId: string, shots: Array<Pick<FilmShot, "shot_index" | "prompt" | "continuity_notes" | "duration_seconds">>) {
++  const rows = shots.map((shot) => ({ project_id: projectId, ...shot }));
++  const { data, error } = await client().from("film_shots").upsert(rows, { onConflict: "project_id,shot_index" }).select("*");
++  if (error) throw new Error(`Could not save film shots: ${error.message}`);
++  return (data ?? []) as FilmShot[];
++}
++
++export async function listFilmShots(projectId: string) {
++  const { data, error } = await client().from("film_shots").select("*").eq("project_id", projectId).order("shot_index");
++  if (error) throw new Error(`Could not load film shots: ${error.message}`);
++  return (data ?? []) as FilmShot[];
++}
+diff --git a/src/styles.css b/src/styles.css
+index 92e088cfa636d877433db48d746acc662533c6de..a720da244519047a57c3bd90e4d6a8b37578d775 100644
+--- a/src/styles.css
++++ b/src/styles.css
+@@ -863,3 +863,50 @@ h2 {
+   padding-top: 18px;
+   border-top: 1px solid var(--line);
+ }
++
++
++.material-dropzone {
++  position: relative;
++  display: grid;
++  gap: 5px;
++  padding: 16px;
++  margin-top: 8px;
++  border: 1px dashed var(--line-strong, #c9c1b4);
++  border-radius: 12px;
++  background: var(--paper, #fffdf8);
++  color: var(--ink, #24342f);
++  cursor: pointer;
++  transition: border-color .18s ease, background .18s ease, box-shadow .18s ease;
++}
++.material-dropzone:hover,
++.material-dropzone.active {
++  border-color: var(--clay, #c96e52);
++  background: #fff7ef;
++  box-shadow: 0 0 0 3px rgba(201, 110, 82, .1);
++}
++.material-dropzone.has-file {
++  border-style: solid;
++  border-color: var(--forest, #163a34);
++}
++.material-dropzone strong { font-size: 13px; overflow-wrap: anywhere; }
++.material-dropzone small { color: var(--muted, #6d736a); font-size: 12px; }
++.material-dropzone input {
++  position: absolute;
++  inset: 0;
++  width: 100%;
++  height: 100%;
++  opacity: 0;
++  cursor: pointer;
++}
++
++.media-actions {
++  display: flex;
++  flex-wrap: wrap;
++  gap: 7px;
++  margin-top: 10px;
++}
++.danger-button {
++  background: #fff0ec;
++  color: var(--oxblood);
++  border: 1px solid #e5b9ad;
++}
+diff --git a/supabase/migrations/002-cloud-media.sql b/supabase/migrations/002-cloud-media.sql
+new file mode 100644
+index 0000000000000000000000000000000000000000..c0ff463d1b3a3998f81782ccf8c65e0317ba1874
+--- /dev/null
++++ b/supabase/migrations/002-cloud-media.sql
+@@ -0,0 +1,155 @@
++-- Group 13 Hub: cloud media library, sharing, and multi-shot film jobs.
++-- Run after 001_ai.sql and the base schema.
++
++create table if not exists public.media_assets (
++  id uuid primary key default gen_random_uuid(),
++  owner_id uuid not null references auth.users(id) on delete cascade,
++  title text not null,
++  kind text not null check (kind in ('podcast_script', 'podcast_audio', 'video_lesson', 'film_clip', 'film_export', 'other')),
++  source_material_id text references public.materials(id) on delete set null,
++  source_document_id uuid references public.ai_documents(id) on delete set null,
++  project_id uuid,
++  storage_path text,
++  mime_type text,
++  public_url text,
++  duration_seconds numeric,
++  status text not null default 'ready' check (status in ('queued', 'processing', 'ready', 'failed', 'deleted')),
++  provider text,
++  provider_job_id text,
++  metadata jsonb not null default '{}'::jsonb,
++  created_at timestamptz not null default now(),
++  updated_at timestamptz not null default now()
++);
++
++create table if not exists public.media_shares (
++  id uuid primary key default gen_random_uuid(),
++  asset_id uuid not null references public.media_assets(id) on delete cascade,
++  owner_id uuid not null references auth.users(id) on delete cascade,
++  share_token text not null unique default encode(gen_random_bytes(18), 'hex'),
++  recipient_email text,
++  visibility text not null default 'link' check (visibility in ('link', 'group', 'private')),
++  expires_at timestamptz,
++  revoked_at timestamptz,
++  created_at timestamptz not null default now()
++);
++
++create table if not exists public.film_projects (
++  id uuid primary key default gen_random_uuid(),
++  owner_id uuid not null references auth.users(id) on delete cascade,
++  title text not null,
++  brief text not null default '',
++  target_duration_seconds integer not null default 900 check (target_duration_seconds between 1 and 7200),
++  aspect_ratio text not null default '16:9',
++  status text not null default 'draft' check (status in ('draft', 'queued', 'processing', 'ready', 'failed')),
++  provider_strategy text not null default 'fallback' check (provider_strategy in ('fallback', 'self_hosted', 'hosted', 'manual')),
++  final_asset_id uuid references public.media_assets(id) on delete set null,
++  continuity jsonb not null default '{}'::jsonb,
++  created_at timestamptz not null default now(),
++  updated_at timestamptz not null default now()
++);
++
++alter table public.media_assets
++  add constraint media_assets_project_fk foreign key (project_id) references public.film_projects(id) on delete set null;
++
++create table if not exists public.film_shots (
++  id uuid primary key default gen_random_uuid(),
++  project_id uuid not null references public.film_projects(id) on delete cascade,
++  shot_index integer not null,
++  prompt text not null,
++  continuity_notes text not null default '',
++  duration_seconds integer not null default 10 check (duration_seconds between 1 and 180),
++  provider text,
++  status text not null default 'queued' check (status in ('queued', 'processing', 'ready', 'failed')),
++  provider_job_id text,
++  asset_id uuid references public.media_assets(id) on delete set null,
++  first_frame_path text,
++  last_frame_path text,
++  metadata jsonb not null default '{}'::jsonb,
++  created_at timestamptz not null default now(),
++  unique(project_id, shot_index)
++);
++
++alter table public.media_assets enable row level security;
++alter table public.media_shares enable row level security;
++alter table public.film_projects enable row level security;
++alter table public.film_shots enable row level security;
++
++drop policy if exists "Media assets owner or shared read" on public.media_assets;
++drop policy if exists "Media assets owner insert" on public.media_assets;
++drop policy if exists "Media assets owner update" on public.media_assets;
++drop policy if exists "Media assets owner delete" on public.media_assets;
++create policy "Media assets owner or shared read" on public.media_assets
++  for select to authenticated using (
++    owner_id = auth.uid()
++    or exists (
++      select 1 from public.media_shares s
++      where s.asset_id = media_assets.id
++        and s.revoked_at is null
++        and (s.visibility = 'group' or s.recipient_email = (select email from auth.users where id = auth.uid()))
++        and (s.expires_at is null or s.expires_at > now())
++    )
++  );
++create policy "Media assets owner insert" on public.media_assets
++  for insert to authenticated with check (owner_id = auth.uid());
++create policy "Media assets owner update" on public.media_assets
++  for update to authenticated using (owner_id = auth.uid()) with check (owner_id = auth.uid());
++create policy "Media assets owner delete" on public.media_assets
++  for delete to authenticated using (owner_id = auth.uid());
++
++drop policy if exists "Media shares owner manage" on public.media_shares;
++drop policy if exists "Media shares recipient read" on public.media_shares;
++create policy "Media shares owner manage" on public.media_shares
++  for all to authenticated using (owner_id = auth.uid()) with check (owner_id = auth.uid());
++create policy "Media shares recipient read" on public.media_shares
++  for select to authenticated using (
++    recipient_email = (select email from auth.users where id = auth.uid())
++    and revoked_at is null
++  );
++
++drop policy if exists "Film projects owner manage" on public.film_projects;
++create policy "Film projects owner manage" on public.film_projects
++  for all to authenticated using (owner_id = auth.uid()) with check (owner_id = auth.uid());
++
++drop policy if exists "Film shots owner manage" on public.film_shots;
++create policy "Film shots owner manage" on public.film_shots
++  for all to authenticated using (
++    exists (select 1 from public.film_projects p where p.id = film_shots.project_id and p.owner_id = auth.uid())
++  ) with check (
++    exists (select 1 from public.film_projects p where p.id = film_shots.project_id and p.owner_id = auth.uid())
++  );
++
++grant select, insert, update, delete on public.media_assets, public.media_shares, public.film_projects, public.film_shots to authenticated;
++
++insert into storage.buckets (id, name, public)
++values ('media', 'media', false)
++on conflict (id) do nothing;
++
++drop policy if exists "Media files owner access" on storage.objects;
++create policy "Media files owner access" on storage.objects
++  for all to authenticated using (
++    bucket_id = 'media'
++    and (storage.foldername(name))[1] = (select auth.uid()::text)
++  ) with check (
++    bucket_id = 'media'
++    and (storage.foldername(name))[1] = (select auth.uid()::text)
++  );
++
++create index if not exists media_assets_owner_created_idx on public.media_assets(owner_id, created_at desc);
++create index if not exists media_shares_token_idx on public.media_shares(share_token);
++create index if not exists film_shots_project_idx on public.film_shots(project_id, shot_index);
++
++create or replace function public.touch_cloud_media_updated_at()
++returns trigger language plpgsql as $$
++begin
++  new.updated_at = now();
++  return new;
++end;
++$$;
++
++drop trigger if exists media_assets_updated_at on public.media_assets;
++create trigger media_assets_updated_at before update on public.media_assets
++for each row execute function public.touch_cloud_media_updated_at();
++
++drop trigger if exists film_projects_updated_at on public.film_projects;
++create trigger film_projects_updated_at before update on public.film_projects
++for each row execute function public.touch_cloud_media_updated_at();
+diff --git a/worker/.env.example b/worker/.env.example
+new file mode 100644
+index 0000000000000000000000000000000000000000..f0b059116e286b34feef81332312185b89eef9bd
+--- /dev/null
++++ b/worker/.env.example
+@@ -0,0 +1,16 @@
++# Supabase project settings. Never expose the service-role key to the browser.
++SUPABASE_URL=https://YOUR_PROJECT.supabase.co
++SUPABASE_SERVICE_ROLE_KEY=YOUR_SERVER_ONLY_SERVICE_ROLE_KEY
++
++# ComfyUI must be running with an API-format workflow loaded/configured.
++COMFYUI_URL=http://127.0.0.1:8188
++COMFYUI_WORKFLOW_JSON=/opt/ComfyUI/workflows/llb13-wan-api.json
++COMFYUI_OUTPUT_DIR=/opt/ComfyUI/output
++
++# The worker generates many short units and stitches them into each segment.
++GENERATION_CLIP_SECONDS=5
++COMFYUI_JOB_TIMEOUT_SECONDS=1800
++WORKER_IDLE_SECONDS=15
++WORKER_POLL_SECONDS=3
++# Set to 1 for a single test project, then remove it for a long-running worker.
++WORKER_ONCE=0
+diff --git a/worker/README.md b/worker/README.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..9ef8f117246f7c2ea5acad20c743cdac1a55bb2a
+--- /dev/null
++++ b/worker/README.md
+@@ -0,0 +1,56 @@
++# LLB13 automated open-model video worker
++
++This worker turns the film plans saved by the LLB13 Media page into generated video. It polls Supabase for a `draft` or `queued` row in `film_projects`, reads its ordered `film_shots`, submits short generation jobs to ComfyUI, stitches the results with FFmpeg, uploads segment and final MP4 files to the private Supabase `media` bucket, and marks the project and shots as `ready`.
++
++## What it supports
++
++The worker is intentionally provider-neutral at the model layer. ComfyUI is the server, while the exported workflow decides whether the model is Wan 2.1, Wan 2.2, LTX-Video, or another compatible open model. This is safer than embedding a particular node graph because ComfyUI workflows and custom nodes change frequently.
++
++The worker subdivides each stored three-minute plan into short generation units. The default is 5 seconds, which matches the practical behavior of many open video models. A five-segment, 15-minute project therefore creates many jobs; it can take a long time and use substantial GPU, disk, and electricity. It is not an unlimited-free cloud service.
++
++## 1. Prepare ComfyUI
++
++Install ComfyUI on a machine with an NVIDIA GPU and install the model/workflow dependencies required by the selected open model. Wan 2.1's 1.3B checkpoint is the lower-memory starting point; larger Wan, LTX, and Hunyuan workflows require more VRAM and may need offloading or quantization.
++
++In ComfyUI:
++
++1. Load a working text-to-video workflow for the selected model.
++2. Put `__PROMPT__` in the positive prompt text field.
++3. Put `__SEED__` in the seed field.
++4. Put `__OUTPUT_PREFIX__` in the output filename prefix field.
++5. Export the workflow as **API format JSON** and save it as the path in `COMFYUI_WORKFLOW_JSON`.
++6. Confirm that `GET http://127.0.0.1:8188/system_stats` works and manually run the workflow once.
++
++The worker currently uses text-to-video continuity prompts. For stronger continuity, use an image-to-video workflow and add a reference-image placeholder plus a worker extension that passes the prior clip's last frame into the next workflow.
++
++## 2. Apply the database migration
++
++Apply `supabase/migrations/002-cloud-media.sql` first. It creates `film_projects`, `film_shots`, `media_assets`, the private `media` Storage bucket, and the required policies.
++
++## 3. Install and run
++
++On the worker host:
++
++```bash
++sudo apt-get update
++sudo apt-get install -y ffmpeg python3-venv
++python3 -m venv .venv
++. .venv/bin/activate
++pip install -r worker/requirements.txt
++cp worker/.env.example .env
++# edit .env with the real values
++set -a; . ./.env; set +a
++python worker/video_worker.py
++```
++
++For a safe first test, set `WORKER_ONCE=1` and create a small test project. The worker will process one queued project and exit. Remove that setting when running it as a service.
++
++## Security
++
++The worker requires `SUPABASE_SERVICE_ROLE_KEY`. This key bypasses Row Level Security and must stay on the worker machine. Do not put it in Vite variables, React code, GitHub, screenshots, or the browser. Restrict the ComfyUI port to localhost or a private network; do not expose an unauthenticated `/prompt` endpoint to the public internet.
++
++## Production notes
++
++Run one worker per GPU unless you have explicitly designed a queue for more. Add a process supervisor such as systemd or Docker restart policy after the one-project test works. Keep enough disk for intermediate clips. The worker writes `failed` status and a short error into `film_projects.continuity` when a job fails; inspect ComfyUI logs for model/node failures.
++
++This implementation does not bypass provider quotas, model licenses, or content restrictions. Review the selected model license before commercial deployment, particularly for LTX and Hunyuan variants.
+diff --git a/worker/llb13-video-worker.service.example b/worker/llb13-video-worker.service.example
+new file mode 100644
+index 0000000000000000000000000000000000000000..3069a5731946219f595a5471390edbb508652c3d
+--- /dev/null
++++ b/worker/llb13-video-worker.service.example
+@@ -0,0 +1,18 @@
++[Unit]
++Description=LLB13 ComfyUI video generation worker
++After=network-online.target
++Wants=network-online.target
++
++[Service]
++Type=simple
++User=ubuntu
++WorkingDirectory=/opt/llb13
++EnvironmentFile=/opt/llb13/.env
++ExecStart=/opt/llb13/.venv/bin/python /opt/llb13/worker/video_worker.py
++Restart=always
++RestartSec=10
++NoNewPrivileges=true
++PrivateTmp=true
++
++[Install]
++WantedBy=multi-user.target
+diff --git a/worker/requirements.txt b/worker/requirements.txt
+new file mode 100644
+index 0000000000000000000000000000000000000000..f95e960ac48a86f12ae68cb548b42cd0ccb031a9
+--- /dev/null
++++ b/worker/requirements.txt
+@@ -0,0 +1 @@
++requests>=2.32,<3
+diff --git a/worker/video_worker.py b/worker/video_worker.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..2c2b164c1daf3f2c8c1547c2ffd0135de4587603
+--- /dev/null
++++ b/worker/video_worker.py
+@@ -0,0 +1,254 @@
++#!/usr/bin/env python3
++"""Supabase -> ComfyUI -> FFmpeg film worker.
++
++The worker expects an API-format ComfyUI workflow JSON. Put the literal markers
++__PROMPT__, __SEED__, and __OUTPUT_PREFIX__ in the exported workflow where the
++worker should inject values. Export the workflow from ComfyUI's API format, not
++its UI format.
++
++This worker intentionally uses only server-side credentials. Run it on the same
++machine as ComfyUI, or on a machine that can reach COMFYUI_URL.
++"""
++from __future__ import annotations
++
++import json
++import math
++import os
++import shutil
++import subprocess
++import tempfile
++import time
++import uuid
++from pathlib import Path
++from typing import Any
++
++import requests
++
++
++class WorkerError(RuntimeError):
++    pass
++
++
++class SupabaseRest:
++    def __init__(self, url: str, service_key: str) -> None:
++        self.base = url.rstrip("/")
++        self.session = requests.Session()
++        self.session.headers.update(
++            {
++                "apikey": service_key,
++                "Authorization": f"Bearer {service_key}",
++                "Content-Type": "application/json",
++            }
++        )
++        self.service_key = service_key
++
++    def request(self, method: str, path: str, **kwargs: Any) -> Any:
++        response = self.session.request(method, f"{self.base}/rest/v1/{path.lstrip('/')}", timeout=60, **kwargs)
++        if not response.ok:
++            raise WorkerError(f"Supabase {method} {path} failed ({response.status_code}): {response.text[:500]}")
++        return response.json() if response.content else None
++
++    def one(self, table: str, params: dict[str, str]) -> dict[str, Any] | None:
++        rows = self.request("GET", table, params={**params, "limit": "1"})
++        return rows[0] if rows else None
++
++    def update(self, table: str, params: dict[str, str], values: dict[str, Any]) -> list[dict[str, Any]]:
++        return self.request("PATCH", table, params={**params, "select": "*"}, json=values, headers={"Prefer": "return=representation"})
++
++    def insert(self, table: str, values: dict[str, Any]) -> dict[str, Any]:
++        rows = self.request("POST", table, params={"select": "*"}, json=values, headers={"Prefer": "return=representation"})
++        if not rows:
++            raise WorkerError(f"Supabase insert into {table} returned no row")
++        return rows[0]
++
++    def list_shots(self, project_id: str) -> list[dict[str, Any]]:
++        return self.request("GET", "film_shots", params={"project_id": f"eq.{project_id}", "order": "shot_index.asc"})
++
++    def upload_file(self, path: Path, storage_path: str, content_type: str = "video/mp4") -> str:
++        response = self.session.put(
++            f"{self.base}/storage/v1/object/media/{storage_path}",
++            data=path.read_bytes(),
++            headers={"Content-Type": content_type, "x-upsert": "true"},
++            timeout=300,
++        )
++        if not response.ok:
++            raise WorkerError(f"Supabase media upload failed ({response.status_code}): {response.text[:500]}")
++        return f"{self.base}/storage/v1/object/public/media/{storage_path}"
++
++
++class ComfyUI:
++    def __init__(self, base_url: str, workflow_path: Path, output_dir: Path, poll_seconds: float) -> None:
++        self.base = base_url.rstrip("/")
++        self.workflow_path = workflow_path
++        self.output_dir = output_dir
++        self.poll_seconds = poll_seconds
++        self.client_id = str(uuid.uuid4())
++        self.session = requests.Session()
++        raw_workflow = workflow_path.read_text()
++        missing = [marker for marker in ("__PROMPT__", "__SEED__", "__OUTPUT_PREFIX__") if marker not in raw_workflow]
++        if missing:
++            raise WorkerError(f"ComfyUI workflow is missing marker(s): {', '.join(missing)}")
++        self.template = json.loads(raw_workflow)
++        if not isinstance(self.template, dict):
++            raise WorkerError("COMFYUI_WORKFLOW_JSON must contain an API-format workflow object")
++
++    def _replace(self, value: Any, prompt: str, seed: int, prefix: str) -> Any:
++        if isinstance(value, dict):
++            return {key: self._replace(item, prompt, seed, prefix) for key, item in value.items()}
++        if isinstance(value, list):
++            return [self._replace(item, prompt, seed, prefix) for item in value]
++        if isinstance(value, str):
++            if value == "__PROMPT__":
++                return prompt
++            if value == "__SEED__":
++                return seed
++            if value == "__OUTPUT_PREFIX__":
++                return prefix
++            return value.replace("__PROMPT__", prompt).replace("__OUTPUT_PREFIX__", prefix)
++        return value
++
++    def submit(self, prompt: str, seed: int, prefix: str) -> str:
++        workflow = self._replace(self.template, prompt, seed, prefix)
++        response = self.session.post(
++            f"{self.base}/prompt",
++            json={"prompt": workflow, "client_id": self.client_id},
++            timeout=60,
++        )
++        if not response.ok:
++            raise WorkerError(f"ComfyUI prompt submission failed ({response.status_code}): {response.text[:800]}")
++        data = response.json()
++        if data.get("error") or data.get("node_errors"):
++            raise WorkerError(f"ComfyUI rejected workflow: {json.dumps(data)[:1000]}")
++        prompt_id = data.get("prompt_id")
++        if not prompt_id:
++            raise WorkerError(f"ComfyUI response contained no prompt_id: {data}")
++        return str(prompt_id)
++
++    def wait_for_video(self, prompt_id: str, prefix: str, timeout_seconds: int) -> Path:
++        deadline = time.monotonic() + timeout_seconds
++        while time.monotonic() < deadline:
++            response = self.session.get(f"{self.base}/history/{prompt_id}", timeout=60)
++            if response.ok:
++                history = response.json().get(prompt_id)
++                if history:
++                    if history.get("status", {}).get("status_str") == "error":
++                        raise WorkerError(f"ComfyUI job failed: {json.dumps(history)[:1200]}")
++                    found = self._outputs_to_files(history.get("outputs", {}), prefix)
++                    if found:
++                        return found[-1]
++            time.sleep(self.poll_seconds)
++        raise WorkerError(f"Timed out waiting for ComfyUI prompt {prompt_id}")
++
++    def _outputs_to_files(self, outputs: dict[str, Any], prefix: str) -> list[Path]:
++        files: list[Path] = []
++        for node_output in outputs.values():
++            if not isinstance(node_output, dict):
++                continue
++            for key in ("videos", "gifs", "images"):
++                for item in node_output.get(key, []) or []:
++                    if not isinstance(item, dict) or not item.get("filename"):
++                        continue
++                    path = self.output_dir / str(item.get("type", "output")) / str(item.get("subfolder", "")) / str(item["filename"])
++                    if not path.exists():
++                        path = self.output_dir / str(item.get("subfolder", "")) / str(item["filename"])
++                    if path.exists() and (prefix in path.name or key == "videos" or key == "gifs"):
++                        files.append(path)
++        return files
++
++
++def env(name: str, default: str | None = None) -> str:
++    value = os.getenv(name, default)
++    if value is None or not value.strip():
++        raise WorkerError(f"Missing required environment variable: {name}")
++    return value.strip()
++
++
++def run_ffmpeg(args: list[str], timeout: int = 1800) -> None:
++    try:
++        result = subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", *args], capture_output=True, text=True, timeout=timeout)
++    except FileNotFoundError as exc:
++        raise WorkerError("ffmpeg is required on the worker host") from exc
++    if result.returncode:
++        raise WorkerError(f"ffmpeg failed: {result.stderr[-1200:]}")
++
++
++def concat_files(files: list[Path], destination: Path) -> None:
++    if not files:
++        raise WorkerError("No generated clips were available to stitch")
++    list_file = destination.with_suffix(".concat.txt")
++    list_file.write_text("\n".join(f"file '{path.resolve().as_posix().replace("'", "'\\''")}'" for path in files) + "\n")
++    run_ffmpeg(["-f", "concat", "-safe", "0", "-i", str(list_file), "-c:v", "libx264", "-pix_fmt", "yuv420p", "-an", "-movflags", "+faststart", "-y", str(destination)])
++    list_file.unlink(missing_ok=True)
++
++
++def process_project(db: SupabaseRest, comfy: ComfyUI, project: dict[str, Any], clip_seconds: int, job_timeout: int) -> None:
++    project_id = str(project["id"])
++    owner_id = str(project["owner_id"])
++    shots = db.list_shots(project_id)
++    if not shots:
++        raise WorkerError(f"Film project {project_id} has no film_shots rows")
++    with tempfile.TemporaryDirectory(prefix=f"llb13-{project_id}-") as temp:
++        root = Path(temp)
++        segment_files: list[Path] = []
++        for shot in shots:
++            shot_id = str(shot["id"])
++            index = int(shot["shot_index"])
++            duration = int(shot.get("duration_seconds") or 180)
++            count = max(1, math.ceil(duration / clip_seconds))
++            clip_files: list[Path] = []
++            db.update("film_shots", {"id": f"eq.{shot_id}"}, {"status": "processing"})
++            for clip_index in range(count):
++                prefix = f"llb13_{project_id}_{index:03d}_{clip_index:03d}_{uuid.uuid4().hex[:8]}"
++                prompt = (
++                    f"{shot['prompt']}\n\nContinuity notes: {shot.get('continuity_notes') or ''}\n"
++                    f"This is generated clip {clip_index + 1} of {count} for segment {index + 1}. "
++                    "Create a clean cinematic shot with a natural beginning and ending suitable for editorial stitching."
++                )
++                prompt_id = comfy.submit(prompt, seed=abs(hash((project_id, index, clip_index))) % 2_147_483_647, prefix=prefix)
++                generated = comfy.wait_for_video(prompt_id, prefix, job_timeout)
++                local = root / f"segment-{index:03d}-clip-{clip_index:03d}{generated.suffix or '.mp4'}"
++                shutil.copy2(generated, local)
++                clip_files.append(local)
++            segment = root / f"segment-{index:03d}.mp4"
++            concat_files(clip_files, segment)
++            segment_files.append(segment)
++            storage_path = f"{owner_id}/{project_id}/segment-{index:03d}.mp4"
++            url = db.upload_file(segment, storage_path)
++            asset = db.insert("media_assets", {"owner_id": owner_id, "title": f"{project['title']} · segment {index + 1}", "kind": "film_clip", "project_id": project_id, "storage_path": storage_path, "mime_type": "video/mp4", "public_url": None, "duration_seconds": duration, "status": "ready", "provider": "comfyui", "metadata": {"shot_id": shot_id, "generated_clip_count": count}})
++            db.update("film_shots", {"id": f"eq.{shot_id}"}, {"status": "ready", "asset_id": asset["id"], "provider": "comfyui"})
++        final = root / "final-film.mp4"
++        concat_files(segment_files, final)
++        final_path = f"{owner_id}/{project_id}/final-film.mp4"
++        final_url = db.upload_file(final, final_path)
++        final_asset = db.insert("media_assets", {"owner_id": owner_id, "title": project["title"], "kind": "film_export", "project_id": project_id, "storage_path": final_path, "mime_type": "video/mp4", "public_url": None, "status": "ready", "provider": "comfyui", "metadata": {"segments": len(segment_files), "target_duration_seconds": project.get("target_duration_seconds")}})
++        db.update("film_projects", {"id": f"eq.{project_id}"}, {"status": "ready", "final_asset_id": final_asset["id"]})
++
++
++def main() -> None:
++    db = SupabaseRest(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"))
++    comfy = ComfyUI(env("COMFYUI_URL", "http://127.0.0.1:8188"), Path(env("COMFYUI_WORKFLOW_JSON")), Path(env("COMFYUI_OUTPUT_DIR", "ComfyUI/output")), float(os.getenv("WORKER_POLL_SECONDS", "3")))
++    clip_seconds = int(os.getenv("GENERATION_CLIP_SECONDS", "5"))
++    job_timeout = int(os.getenv("COMFYUI_JOB_TIMEOUT_SECONDS", "1800"))
++    once = os.getenv("WORKER_ONCE", "0") == "1"
++    print(f"LLB13 video worker ready; generating {clip_seconds}s units through {comfy.base}", flush=True)
++    while True:
++        project = db.one("film_projects", {"status": "in.(draft,queued)", "order": "created_at.asc"})
++        if not project:
++            if once:
++                return
++            time.sleep(int(os.getenv("WORKER_IDLE_SECONDS", "15")))
++            continue
++        project_id = str(project["id"])
++        db.update("film_projects", {"id": f"eq.{project_id}"}, {"status": "processing"})
++        try:
++            process_project(db, comfy, project, clip_seconds, job_timeout)
++            print(f"Completed film project {project_id}", flush=True)
++        except Exception as exc:
++            db.update("film_projects", {"id": f"eq.{project_id}"}, {"status": "failed", "continuity": {"worker_error": str(exc)[:2000]}})
++            print(f"Film project {project_id} failed: {exc}", flush=True)
++        if once:
++            return
++
++
++if __name__ == "__main__":
++    main()
