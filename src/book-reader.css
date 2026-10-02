@@ -1,36 +1,315 @@
-.book-progress {
-  padding: 14px 20px;
+.book-reader {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  min-height: calc(100dvh - 140px);
+  background: var(--paper);
+}
+
+.book-reader-expanded {
+  position: fixed;
+  inset: 0;
+  z-index: 35;
+  width: 100vw;
+  height: 100dvh;
+  min-height: 0;
+  padding: 18px 28px 24px;
+  overflow: auto;
+  background: var(--paper);
+}
+
+.book-reader .reader-toolbar {
+  flex: 0 0 auto;
+  min-height: 58px;
+  padding: 10px 0 16px;
   border-bottom: 1px solid var(--line);
+}
+
+.book-reader .reader-heading {
+  flex: 1;
+}
+
+.book-reader-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(330px, 0.85fr);
+  gap: 18px;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-top: 18px;
+}
+
+.book-reading-pane,
+.book-ai-pane {
+  min-width: 0;
+  min-height: 0;
+  background: var(--white);
+  border: 1px solid var(--line);
+}
+
+.book-reading-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: min(78dvh, 900px);
+}
+
+.book-pane-head,
+.book-ai-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex: 0 0 auto;
+  padding: 17px 19px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.book-pane-head .field-hint,
+.book-ai-head + .field-hint {
+  display: block;
+  max-width: 58ch;
+  margin-top: 6px;
+  line-height: 1.45;
+}
+
+.book-preview-wrap {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  padding: 10px;
+  background: #e8e5de;
+}
+
+.book-preview-wrap > object,
+.book-preview-wrap > iframe {
+  display: block;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 650px;
+  height: min(78dvh, 980px);
+  border: 1px solid #cbc8c0;
+  background: #fff;
+}
+
+.book-preview-wrap > object iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 650px;
+  border: 0;
+}
+
+.reader-hint {
+  flex: 0 0 auto;
+  margin: 9px 4px 2px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.book-ai-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  max-height: min(78dvh, 900px);
+  overflow: auto;
+  padding-bottom: 18px;
+}
+
+.book-ai-head {
+  margin: -1px -1px 0;
   background: #fffdf6;
 }
-.book-progress-label {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  color: var(--muted);
-  font-size: 12px;
+
+.book-ai-head h2 {
+  margin-top: 5px;
+  font-size: 20px;
 }
-.book-progress-label span {
-  display: inline-flex;
+
+.book-ai-pane > .field-hint,
+.book-ai-pane > .book-actions,
+.book-ai-pane > .book-paste,
+.book-ai-pane > .book-prompts,
+.book-ai-pane > .book-explain,
+.book-ai-pane > .connection-error,
+.book-ai-pane > .book-result,
+.book-ai-pane > .book-highlights,
+.book-ai-pane > .book-selection {
+  margin-left: 18px;
+  margin-right: 18px;
+}
+
+.book-ai-pane > .field-hint {
+  line-height: 1.5;
+}
+
+.book-actions,
+.book-prompts {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 7px;
 }
-.book-progress-label strong {
-  color: var(--forest);
+
+.book-paste {
+  width: calc(100% - 36px);
+  min-height: 150px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.book-prompt {
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  background: var(--soft);
+  color: var(--muted);
   font-size: 11px;
 }
-.book-progress-track {
-  height: 6px;
-  margin-top: 9px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: #e7e2d7;
+
+.book-prompt.on {
+  border-color: var(--forest);
+  background: var(--forest);
+  color: var(--paper);
 }
-.book-progress-track span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--clay);
-  transition: width 0.2s ease;
+
+.book-explain {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.book-clear,
+.book-delete {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  text-decoration: underline;
+}
+
+.book-selection {
+  margin-top: 0;
+  margin-bottom: 0;
+  padding: 11px 13px;
+  border-left: 3px solid var(--clay);
+  background: #fff7ef;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.5;
+  max-height: 150px;
+  overflow: auto;
+}
+
+.book-result {
+  padding-top: 13px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.book-highlights {
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.book-highlight {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin-top: 8px;
+  padding: 9px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.book-highlight.on {
+  border-color: var(--clay);
+  background: #fff7ef;
+}
+
+.book-highlight > button:first-child {
+  display: flex;
+  flex: 1;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.book-delete {
+  flex: 0 0 auto;
+  font-size: 16px;
+  line-height: 1;
+  text-decoration: none;
+}
+
+@media (max-width: 1050px) {
+  .book-reader-grid {
+    grid-template-columns: minmax(0, 1.35fr) minmax(290px, 0.9fr);
+  }
+}
+
+@media (max-width: 820px) {
+  .book-reader-expanded {
+    padding: 12px 14px 20px;
+  }
+
+  .book-reader .reader-toolbar {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .book-reader .reader-heading {
+    order: 3;
+    flex-basis: 100%;
+    text-align: left;
+  }
+
+  .book-reader-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .book-reading-pane {
+    min-height: 72dvh;
+  }
+
+  .book-preview-wrap > object,
+  .book-preview-wrap > iframe,
+  .book-preview-wrap > object iframe {
+    min-height: 620px;
+    height: 72dvh;
+  }
+
+  .book-ai-pane {
+    max-height: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .book-reader .reader-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .book-preview-wrap {
+    padding: 6px;
+  }
+
+  .book-preview-wrap > object,
+  .book-preview-wrap > iframe,
+  .book-preview-wrap > object iframe {
+    min-height: 520px;
+  }
 }
