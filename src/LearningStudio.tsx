@@ -4,11 +4,14 @@ import {
   Download,
   Loader2,
   Mic,
+  Music,
   Play,
   Square,
+  Upload,
   Video,
 } from "lucide-react";
-import { askAI, listMyMaterials } from "./lib/ai";
+import { askAI, listMyMaterials, uploadMaterial } from "./lib/ai";
+import { generateAudio } from "./lib/cloudMedia";
 import { Markdown } from "./Markdown";
 import "./learning-studio.css";
 
@@ -48,6 +51,10 @@ export default function LearningStudio() {
   const [slide, setSlide] = useState(0);
   const [rendering, setRendering] = useState(false);
   const [renderProgress, setRenderProgress] = useState(0);
+  const [uploadingSource, setUploadingSource] = useState(false);
+  const [audioBusy, setAudioBusy] = useState(false);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [audioNote, setAudioNote] = useState("");
 
   useEffect(() => {
     void listMyMaterials()
@@ -85,6 +92,35 @@ export default function LearningStudio() {
     link.download = `${(topic || "law-lesson").replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.txt`;
     link.click();
     URL.revokeObjectURL(url);
+  };
+  const uploadSourceBook = async (file?: File) => {
+    if (!file || uploadingSource) return;
+    setUploadingSource(true);
+    setError("");
+    try {
+      const uploaded = await uploadMaterial(file);
+      const items = (await listMyMaterials() as Doc[]).filter(isBookSource);
+      setDocs(items);
+      setSelected((current) => [...current, uploaded.id].slice(-6));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not upload that book.");
+    } finally {
+      setUploadingSource(false);
+    }
+  };
+  const downloadAudio = async () => {
+    if (!script || audioBusy) return;
+    setAudioBusy(true);
+    setAudioNote("Creating a downloadable audio file…");
+    try {
+      const result = await generateAudio({ text: speakable(script), title: topic || "Podcast episode" });
+      setAudioUrl(result.signed_url);
+      setAudioNote("Audio saved privately in Supabase. Use the download link below.");
+    } catch (e) {
+      setAudioNote(e instanceof Error ? e.message : "Could not create audio.");
+    } finally {
+      setAudioBusy(false);
+    }
   };
   const play = () => {
     if (!script) return;
@@ -391,6 +427,11 @@ export default function LearningStudio() {
                   <button className="secondary-button" onClick={download}>
                     Download script
                   </button>
+                  {mode === "podcast" && (
+                    <button className="secondary-button" onClick={() => void downloadAudio()} disabled={audioBusy}>
+                      <Music size={13} /> {audioBusy ? "Creating audio…" : "Download audio"}
+                    </button>
+                  )}
                   {mode === "video" && (
                     <button
                       className="primary-button"
@@ -404,6 +445,8 @@ export default function LearningStudio() {
                     </button>
                   )}
                 </div>
+                {mode === "podcast" && audioNote && <p className="field-hint">{audioNote}</p>}
+                {mode === "podcast" && audioUrl && <div className="studio-audio-download"><audio controls src={audioUrl} /><a className="secondary-button" href={audioUrl} download={`${(topic || "podcast").replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.wav`}>Download WAV</a></div>}
               </div>
               {mode === "video" && (
                 <>
@@ -451,11 +494,12 @@ export default function LearningStudio() {
           <p className="field-hint">
             The panel will only use selected AI-ready documents.
           </p>
+          <label className="secondary-button studio-upload-source">
+            <Upload size={14} /> {uploadingSource ? "Uploading…" : "Upload book"}
+            <input type="file" accept=".pdf,.doc,.docx,.txt,.md" disabled={uploadingSource} onChange={(event) => void uploadSourceBook(event.target.files?.[0])} />
+          </label>
           {docs.length === 0 ? (
-            <div className="empty">
-              Upload a PDF, Word file, or text document in Study assistant
-              first.
-            </div>
+            <div className="empty">No AI-ready books yet. Upload one above.</div>
           ) : (
             docs.map((doc) => (
               <label
