@@ -223,3 +223,17 @@ export async function listFilmShots(projectId: string) {
   if (error) throw new Error(`Could not load film shots: ${error.message}`);
   return (data ?? []) as FilmShot[];
 }
+
+export async function generateImage(args: {
+  prompt: string;
+  model?: string;
+  width?: number;
+  height?: number;
+}) {
+  const { data, error } = await client().functions.invoke("generate-image", {
+    body: args,
+  });
+  if (error) throw new Error(`Image generation failed: ${error.message}`);
+  if (!data?.asset) throw new Error(data?.error || "Image generation returned no asset.");
+  return data as { asset: MediaAsset; signed_url: string | null };
+}

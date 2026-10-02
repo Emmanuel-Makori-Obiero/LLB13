@@ -16,6 +16,7 @@ import {
   Download,
   FileText,
   Film,
+  Image as ImageIcon,
   Gavel,
   LayoutDashboard,
   Library,
@@ -80,6 +81,7 @@ import {
   createFilmProject,
   createMediaShare,
   deleteMediaAsset,
+  generateImage,
   getMediaAssetUrl,
   listMediaAssets,
   saveFilmShots,
@@ -2322,6 +2324,10 @@ function MediaPage({
   const [filmBrief, setFilmBrief] = useState("");
   const [filmBusy, setFilmBusy] = useState(false);
   const [filmNote, setFilmNote] = useState("");
+  const [imagePrompt, setImagePrompt] = useState("");
+  const [imageBusy, setImageBusy] = useState(false);
+  const [imageNote, setImageNote] = useState("");
+  const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
   const change = (key: keyof typeof form, value: string) =>
     setForm((current) => ({ ...current, [key]: value }));
 
@@ -2394,6 +2400,24 @@ function MediaPage({
     }
   };
 
+  const buildImage = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (imagePrompt.trim().length < 8 || imageBusy) return;
+    setImageBusy(true);
+    setImageNote("");
+    setGeneratedImageUrl(null);
+    try {
+      const result = await generateImage({ prompt: imagePrompt.trim() });
+      setGeneratedImageUrl(result.signed_url);
+      setImageNote("Image generated and saved privately in Supabase Storage.");
+      setCloudAssets((current) => [result.asset, ...current]);
+    } catch (error) {
+      setImageNote(error instanceof Error ? error.message : "Could not generate image.");
+    } finally {
+      setImageBusy(false);
+    }
+  };
+
   return (
     <>
       <PageHeading
@@ -2419,6 +2443,17 @@ function MediaPage({
           <label>Source<input required value={form.source} onChange={(event) => change("source", event.target.value)} /></label>
           <button className="primary-button" type="submit">Add resource</button>
         </form>
+      </div>
+
+      <div className="card card-pad" style={{ marginTop: 18 }}>
+        <CardHeader label="Image Studio" action="Hugging Face · Supabase Storage" />
+        <p className="field-hint">Describe an illustration, study diagram, or film reference image. The request runs serverlessly and the result is saved to your private cloud library.</p>
+        <form className="data-form" onSubmit={(event) => void buildImage(event)}>
+          <label>Image prompt<textarea required minLength={8} rows={4} value={imagePrompt} onChange={(event) => setImagePrompt(event.target.value)} placeholder="A clean editorial illustration of a Kenyan courtroom, warm paper texture, no text" /></label>
+          <button className="primary-button" type="submit" disabled={imageBusy}>{imageBusy ? <><ImageIcon size={16} /> Generating…</> : <><Sparkles size={16} /> Generate image</>}</button>
+          {imageNote && <p className="field-hint">{imageNote}</p>}
+        </form>
+        {generatedImageUrl && <div className="generated-image-result"><img src={generatedImageUrl} alt={imagePrompt} /><a className="material-link" href={generatedImageUrl} target="_blank" rel="noreferrer">Open full-size image</a></div>}
       </div>
 
       <div className="card card-pad" style={{ marginTop: 18 }}>
