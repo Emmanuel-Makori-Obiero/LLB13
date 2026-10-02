@@ -259,3 +259,10 @@ export async function getVideoJobStatus(assetId: string) {
   if (!response.ok) throw new Error(data?.error || "Could not check video status.");
   return data as { asset: MediaAsset; status: "queued" | "processing" | "ready" | "failed"; signed_url?: string | null };
 }
+
+export async function generateAudio(args: { text: string; title: string }) {
+  const { data, error } = await client().functions.invoke("generate-audio", { body: args });
+  if (error) throw new Error(`Audio generation failed: ${error.message}`);
+  if (!data?.signed_url) throw new Error(data?.error || "Audio generation returned no file.");
+  return data as { asset: MediaAsset; signed_url: string };
+}
