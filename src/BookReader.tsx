@@ -16,11 +16,6 @@ import type { Material } from "./data/types";
 import "./book-reader.css";
 
 type Highlight = { id: string; text: string; createdAt: string };
-<<<<<<< HEAD
-=======
-type ReaderProgress = { page: number; total: number; phase: "cached" | "reading" | "ready" };
-
->>>>>>> b7ebf88b41fa691fa39ec349e12f1ec2599ecf14
 type Props = { material: Material; onClose: () => void };
 
 const prompts = [
@@ -47,35 +42,9 @@ const prompts = [
 ];
 
 const keyFor = (id: string) => `llb13-highlights:${id}`;
-const textCacheKey = (material: Material, href: string) => `${material.id}:${material.storage_path ?? href}:${material.title}`;
-
-function readerCache() {
-  return new Promise<IDBDatabase | null>((resolve) => {
-    if (!("indexedDB" in window)) return resolve(null);
-    const request = indexedDB.open("llb13-reader-cache", 1);
-    request.onupgradeneeded = () => request.result.createObjectStore("texts");
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => resolve(null);
-  });
-}
-async function getCachedText(key: string) {
-  const db = await readerCache(); if (!db) return null;
-  return new Promise<string | null>((resolve) => { const request = db.transaction("texts").objectStore("texts").get(key); request.onsuccess = () => resolve(typeof request.result === "string" ? request.result : null); request.onerror = () => resolve(null); });
-}
-async function setCachedText(key: string, value: string) {
-  const db = await readerCache(); if (!db) return;
-  await new Promise<void>((resolve) => { const request = db.transaction("texts", "readwrite").objectStore("texts").put(value, key); request.onsuccess = () => resolve(); request.onerror = () => resolve(); });
-}
 
 export default function BookReader({ material, onClose }: Props) {
   const [expanded, setExpanded] = useState(false);
-<<<<<<< HEAD
-=======
-  const [text, setText] = useState("");
-  const [loadingText, setLoadingText] = useState(false);
-  const [progress, setProgress] = useState<ReaderProgress>({ page: 0, total: 0, phase: "reading" });
-  const [sourceNote, setSourceNote] = useState("");
->>>>>>> b7ebf88b41fa691fa39ec349e12f1ec2599ecf14
   const [selectedText, setSelectedText] = useState("");
   const [highlights, setHighlights] = useState<Highlight[]>(() => {
     try {
@@ -96,55 +65,6 @@ export default function BookReader({ material, onClose }: Props) {
   const link = safeUrl(material.url);
   const frame = readerUrl(material);
   const info = downloadInfo(material);
-<<<<<<< HEAD
-=======
-  const paragraphs = useMemo(() => text.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean), [text]);
-
-  useEffect(() => {
-    let active = true;
-    const load = async () => {
-      if (!info?.href || !info.file) return;
-      setLoadingText(true);
-      setSourceNote("");
-      try {
-        const cacheKey = textCacheKey(material, info.href);
-        const cached = await getCachedText(cacheKey);
-        if (cached && active) {
-          setText(cached); setProgress({ page: 1, total: 1, phase: "cached" }); setLoadingText(false); return;
-        }
-        const response = await fetch(info.href, { credentials: "omit" });
-        if (!response.ok) throw new Error(`Could not read file (${response.status}).`);
-        const blob = await response.blob();
-        const isPdf = /\.pdf(\?|$)/i.test(material.storage_path ?? material.url ?? "");
-        if (isPdf) {
-          const pdfjs = await import("pdfjs-dist");
-          const worker = (await import("pdfjs-dist/build/pdf.worker.min.mjs?url")).default;
-          pdfjs.GlobalWorkerOptions.workerSrc = worker;
-          const pdf = await pdfjs.getDocument({ data: await blob.arrayBuffer() }).promise;
-          const pages: string[] = []; const firstBatch = Math.min(3, pdf.numPages);
-          setProgress({ page: 0, total: pdf.numPages, phase: "reading" });
-          const readPage = async (pageNumber: number) => {
-            const page = await pdf.getPage(pageNumber); const content = await page.getTextContent();
-            return content.items.map((item) => ("str" in item ? item.str : "")).join(" ").trim();
-          };
-          for (let page = 1; page <= firstBatch; page += 1) { pages[page - 1] = await readPage(page); if (active) { setText(pages.filter(Boolean).join("\n\n")); setProgress({ page, total: pdf.numPages, phase: "reading" }); } }
-          for (let page = firstBatch + 1; page <= pdf.numPages; page += 1) { pages[page - 1] = await readPage(page); if (active) setProgress({ page, total: pdf.numPages, phase: "reading" }); }
-          const extracted = pages.filter(Boolean).join("\n\n").trim();
-          if (extracted) { await setCachedText(cacheKey, extracted); if (active) { setText(extracted); setProgress({ page: pdf.numPages, total: pdf.numPages, phase: "ready" }); } }
-          else if (active) setSourceNote("This PDF has no selectable text. It may be scanned; use OCR or paste a passage below.");
-        } else {
-          const extracted = (await extractText(new File([blob], `${material.title}.${material.type}`))).trim();
-          if (extracted) { await setCachedText(cacheKey, extracted); if (active) { setText(extracted); setProgress({ page: 1, total: 1, phase: "ready" }); } }
-          else if (active) setSourceNote("This file has no selectable text. Paste a passage below to use the AI reader.");
-        }
-      } catch {
-        if (active) setSourceNote("The preview is available, but this source does not allow text extraction. Paste a passage below to use the AI reader.");
-      } finally { if (active) setLoadingText(false); }
-    };
-    void load();
-    return () => { active = false; };
-  }, [info?.href, info?.file, material.title, material.type]);
->>>>>>> b7ebf88b41fa691fa39ec349e12f1ec2599ecf14
 
   const persist = (next: Highlight[]) => {
     setHighlights(next);
@@ -251,7 +171,6 @@ export default function BookReader({ material, onClose }: Props) {
 
       <div className="book-reader-grid">
         <section className="book-reading-pane">
-<<<<<<< HEAD
           <div className="book-pane-head">
             <div>
               <span className="section-label">Preview</span>
@@ -259,19 +178,6 @@ export default function BookReader({ material, onClose }: Props) {
                 The source opens directly here. Copy any passage you want to
                 study.
               </p>
-=======
-          <div className="book-pane-head"><div><span className="section-label">Reading view</span><p className="field-hint">Select a line or paragraph, then save it as a highlight.</p></div><BookOpen size={18} /></div>
-          {loadingText && <div className="book-progress" role="status" aria-live="polite"><div className="book-progress-label"><span><Loader2 size={14} className="book-spin" /> Reading page {progress.page || 1} of {progress.total || "…"}</span><strong>{progress.total ? Math.round((progress.page / progress.total) * 100) : 0}%</strong></div><div className="book-progress-track"><span style={{ width: `${progress.total ? Math.max(3, (progress.page / progress.total) * 100) : 3}%` }} /></div></div>}
-          {!loadingText && progress.phase === "cached" && <p className="book-status"><Check size={14} /> Selectable text loaded from this device’s cache.</p>}
-          {paragraphs.length > 0 ? (
-            <article className="book-text" onMouseUp={captureSelection}>
-              {paragraphs.map((paragraph, index) => <p key={`${index}-${paragraph.slice(0, 12)}`}>{paragraph}</p>)}
-            </article>
-          ) : frame ? (
-            <div className="book-preview-wrap">
-              {info?.file && /\.pdf(\?|$)/i.test(material.storage_path ?? material.url ?? "") ? <object data={frame} type="application/pdf" aria-label={`Reading ${material.title}`}><iframe src={frame} title={`Reading ${material.title}`} /></object> : <iframe src={frame} title={`Reading ${material.title}`} referrerPolicy="no-referrer" />}
-              <p className="reader-hint">{sourceNote || "Select and copy a passage into the AI reader on the right."}</p>
->>>>>>> b7ebf88b41fa691fa39ec349e12f1ec2599ecf14
             </div>
             <BookOpen size={18} />
           </div>

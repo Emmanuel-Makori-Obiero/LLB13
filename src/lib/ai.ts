@@ -260,13 +260,15 @@ async function storeText(
 }
 
 export async function listMyMaterials() {
-  const { data } = await db()
+  const { data, error } = await db()
     .from("ai_documents")
     .select("id,title,citation,scope,created_at")
     .order("created_at", { ascending: false });
+  if (error) throw new Error("Could not load AI documents.");
   return data ?? [];
 }
 
 export async function deleteMaterial(id: string) {
-  await db().from("ai_documents").delete().eq("id", id);
+  const { error } = await db().from("ai_documents").delete().eq("id", id);
+  if (error) throw new Error("Could not delete that document.");
 }
