@@ -926,3 +926,18 @@ h2 {
   border: 1px solid var(--line);
   border-radius: 12px;
 }
+
+.generated-video-result {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+  max-width: 720px;
+}
+.generated-video-result video {
+  display: block;
+  width: min(100%, 720px);
+  max-height: 520px;
+  background: #101815;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}

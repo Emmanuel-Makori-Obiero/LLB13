@@ -82,6 +82,8 @@ import {
   createMediaShare,
   deleteMediaAsset,
   generateImage,
+  generateVideoJob,
+  getVideoJobStatus,
   getMediaAssetUrl,
   listMediaAssets,
   saveFilmShots,
@@ -2328,6 +2330,10 @@ function MediaPage({
   const [imageBusy, setImageBusy] = useState(false);
   const [imageNote, setImageNote] = useState("");
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
+  const [videoPrompt, setVideoPrompt] = useState("");
+  const [videoBusy, setVideoBusy] = useState(false);
+  const [videoNote, setVideoNote] = useState("");
+  const [generatedVideoUrl, setGeneratedVideoUrl] = useState<string | null>(null);
   const change = (key: keyof typeof form, value: string) =>
     setForm((current) => ({ ...current, [key]: value }));
 
@@ -2418,6 +2424,35 @@ function MediaPage({
     }
   };
 
+  const buildVideo = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (videoPrompt.trim().length < 12 || videoBusy) return;
+    setVideoBusy(true);
+    setVideoNote("Submitting to the free cloud GPU queue…");
+    setGeneratedVideoUrl(null);
+    try {
+      const job = await generateVideoJob({ prompt: videoPrompt.trim() });
+      setCloudAssets((current) => [job.asset, ...current]);
+      for (let attempt = 0; attempt < 24; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 8000));
+        const status = await getVideoJobStatus(job.asset.id);
+        if (status.status === "ready") {
+          setGeneratedVideoUrl(status.signed_url ?? null);
+          setVideoNote("Video ready and saved privately in Supabase Storage.");
+          setCloudAssets((current) => current.map((item) => item.id === job.asset.id ? status.asset : item));
+          return;
+        }
+        if (status.status === "failed") throw new Error("The free video provider could not complete this clip.");
+        setVideoNote(`Cloud GPU job is ${status.status}… (${Math.min(99, Math.round(((attempt + 1) / 24) * 100))}%)`);
+      }
+      setVideoNote("The clip is still queued. You can leave this page open and try again from Cloud media later.");
+    } catch (error) {
+      setVideoNote(error instanceof Error ? error.message : "Could not generate video.");
+    } finally {
+      setVideoBusy(false);
+    }
+  };
+
   return (
     <>
       <PageHeading
@@ -2443,6 +2478,17 @@ function MediaPage({
           <label>Source<input required value={form.source} onChange={(event) => change("source", event.target.value)} /></label>
           <button className="primary-button" type="submit">Add resource</button>
         </form>
+      </div>
+
+      <div className="card card-pad" style={{ marginTop: 18 }}>
+        <CardHeader label="Video Studio" action="Wan2.2 · free cloud GPU" />
+        <p className="field-hint">Generate one short cinematic clip first. Longer films are built by queueing connected clips and saving every result to Supabase.</p>
+        <form className="data-form" onSubmit={(event) => void buildVideo(event)}>
+          <label>Video scene<textarea required minLength={12} rows={4} value={videoPrompt} onChange={(event) => setVideoPrompt(event.target.value)} placeholder="A law student walks through a quiet Nairobi courthouse at sunrise, cinematic camera movement, realistic documentary style" /></label>
+          <button className="primary-button" type="submit" disabled={videoBusy}>{videoBusy ? "Generating cloud video…" : "Generate short video clip"}</button>
+          {videoNote && <p className="field-hint">{videoNote}</p>}
+        </form>
+        {generatedVideoUrl && <div className="generated-video-result"><video src={generatedVideoUrl} controls playsInline /><a className="material-link" href={generatedVideoUrl} target="_blank" rel="noreferrer">Open full-size video</a></div>}
       </div>
 
       <div className="card card-pad" style={{ marginTop: 18 }}>

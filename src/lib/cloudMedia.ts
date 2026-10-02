@@ -237,3 +237,25 @@ export async function generateImage(args: {
   if (!data?.asset) throw new Error(data?.error || "Image generation returned no asset.");
   return data as { asset: MediaAsset; signed_url: string | null };
 }
+
+export async function generateVideoJob(args: { prompt: string; projectId?: string; shotIndex?: number; seed?: number }) {
+  const { data, error } = await client().functions.invoke("generate-video", {
+    body: { prompt: args.prompt, project_id: args.projectId, shot_index: args.shotIndex, seed: args.seed },
+  });
+  if (error) throw new Error(`Video job failed: ${error.message}`);
+  if (!data?.asset?.id) throw new Error(data?.error || "Video provider returned no job.");
+  return data as { asset: MediaAsset; provider_job_id: string; status_url: string };
+}
+
+export async function getVideoJobStatus(assetId: string) {
+  const db = client();
+  const { data: session } = await db.auth.getSession();
+  const token = session.session?.access_token;
+  if (!token) throw new Error("Please sign in before checking video status.");
+  const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/video-status?asset_id=${encodeURIComponent(assetId)}`, {
+    headers: { Authorization: `Bearer ${token}`, apikey: import.meta.env.VITE_SUPABASE_ANON_KEY },
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data?.error || "Could not check video status.");
+  return data as { asset: MediaAsset; status: "queued" | "processing" | "ready" | "failed"; signed_url?: string | null };
+}
