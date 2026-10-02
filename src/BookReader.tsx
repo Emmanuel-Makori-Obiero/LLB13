@@ -33,6 +33,7 @@ export default function BookReader({ material, onClose }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [zoom, setZoom] = useState(125);
+  const [readerHeight, setReaderHeight] = useState(560);
   const [chatInput, setChatInput] = useState("");
   const [chat, setChat] = useState<ChatLine[]>([]);
 
@@ -118,10 +119,10 @@ export default function BookReader({ material, onClose }: Props) {
       </div>
 
       <div className="book-reader-grid">
-        <section className="book-reading-pane">
-          <div className="book-pane-head"><div><span className="section-label">Preview</span><p className="field-hint">The source opens directly here. Copy any passage you want to study.</p></div><div className="reader-zoom-controls" aria-label="Preview text size"><button className="secondary-button" onClick={() => setZoom((value) => Math.max(60, value - 10))} title="Zoom out"><Minus size={13} /></button><strong>{zoom}%</strong><button className="secondary-button" onClick={() => setZoom((value) => Math.min(200, value + 10))} title="Zoom in"><Plus size={13} /></button></div><BookOpen size={18} /></div>
+          <section className="book-reading-pane" style={{ height: `${readerHeight + 84}px` }}>
+          <div className="book-pane-head"><div><span className="section-label">Preview</span><p className="field-hint">The source opens directly here. Copy any passage you want to study.</p></div><div className="reader-zoom-controls" aria-label="Preview size controls"><button className="secondary-button" onClick={() => setZoom((value) => Math.max(60, value - 10))} title="Zoom out"><Minus size={13} /></button><strong>{zoom}%</strong><button className="secondary-button" onClick={() => setZoom((value) => Math.min(200, value + 10))} title="Zoom in"><Plus size={13} /></button><label className="reader-height-control">Height <input type="range" min="360" max="900" step="20" value={readerHeight} onChange={(event) => setReaderHeight(Number(event.target.value))} /> <strong>{readerHeight}px</strong></label></div><BookOpen size={18} /></div>
           {frame ? (
-            <div className="book-preview-wrap">
+            <div className="book-preview-wrap" style={{ height: `${readerHeight}px` }}>
               {isPdf ? <object data={previewFrame} type="application/pdf" aria-label={`Preview ${material.title}`}><iframe src={previewFrame} title={`Preview ${material.title}`} /></object> : <iframe src={previewFrame} title={`Preview ${material.title}`} referrerPolicy="no-referrer" />}
               <p className="reader-hint">Preview only — no background extraction or loading wait. Copy a passage and paste it into the AI reading desk.</p>
             </div>

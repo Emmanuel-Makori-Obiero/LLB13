@@ -369,3 +369,25 @@
   gap: 7px;
   margin: 10px 0 14px;
 }
+
+.reader-height-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.reader-height-control input[type="range"] {
+  width: 86px;
+  accent-color: var(--forest);
+}
+.reader-height-control strong {
+  min-width: 50px;
+  color: var(--forest);
+  font-size: 11px;
+}
+@media (max-width: 700px) {
+  .reader-height-control { width: 100%; }
+  .reader-height-control input[type="range"] { flex: 1; }
+}
