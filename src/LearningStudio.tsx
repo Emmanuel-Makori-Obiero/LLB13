@@ -30,6 +30,8 @@ const perspectives = [
 
 function speakable(text: string) {
   return text
+    .replace(/^\s*(SCENE\s*\d+[^\n]*|VISUAL:|SOURCE NOTE:)[^\n]*\n?/gim, "")
+    .replace(/^\s*(HOST|TUTOR|SPEAKER\s*[12])\s*:\s*/gim, "")
     .replace(/[#*_`>\[\]]/g, "")
     .replace(/\(verify\)/gi, "verify")
     .replace(/\s+/g, " ")
@@ -133,18 +135,31 @@ export default function LearningStudio() {
       setPlaying(false);
       return;
     }
-    const utterance = new SpeechSynthesisUtterance(speakable(script));
-    utterance.lang = "en-KE";
-    utterance.rate = 0.9;
-    utterance.pitch = 0.98;
     const voices = window.speechSynthesis.getVoices();
-    utterance.voice =
-      voices.find((voice) => /en[-_]KE/i.test(voice.lang)) ??
-      voices.find((voice) => /en[-_](GB|AU|US)/i.test(voice.lang)) ??
-      null;
-    utterance.onend = () => setPlaying(false);
     window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
+    const defaultVoice = voices.find((voice) => /en[-_]KE/i.test(voice.lang)) ?? voices.find((voice) => /en[-_](GB|AU|US)/i.test(voice.lang));
+    const alternateVoice = voices.find((voice) => /en[-_](GB|AU|US)/i.test(voice.lang) && voice !== defaultVoice) ?? defaultVoice;
+    const lines = script.split(/\n+/).map((line) => {
+      const match = line.match(/^\s*(HOST|TUTOR)\s*:\s*(.*)$/i);
+      return { speaker: match?.[1]?.toUpperCase() ?? "HOST", text: match?.[2] ?? line };
+    }).filter((line) => line.text.trim());
+    let index = 0;
+    const speakNext = () => {
+      const line = lines[index++];
+      if (!line) {
+        setPlaying(false);
+        return;
+      }
+      const utterance = new SpeechSynthesisUtterance(speakable(line.text));
+      utterance.lang = "en-KE";
+      utterance.rate = 0.9;
+      utterance.pitch = line.speaker === "TUTOR" ? 0.98 : 1.03;
+      utterance.voice = line.speaker === "TUTOR" ? alternateVoice ?? null : defaultVoice ?? null;
+      utterance.onend = speakNext;
+      utterance.onerror = () => setPlaying(false);
+      window.speechSynthesis.speak(utterance);
+    };
+    speakNext();
     setPlaying(true);
   };
 
@@ -154,6 +169,12 @@ export default function LearningStudio() {
     setRenderProgress(0);
     setError("");
     try {
+      setStage("Creating the narration audio…");
+      const narration = await generateAudio({
+        text: speakable(script),
+        title: topic || "Narrated law lesson",
+      });
+      setRenderProgress(10);
       const canvas = document.createElement("canvas");
       canvas.width = 1280;
       canvas.height = 720;
@@ -221,7 +242,7 @@ export default function LearningStudio() {
       for (let index = 0; index < pages.length; index += 1) {
         draw(pages[index], index);
         await new Promise((resolve) => window.setTimeout(resolve, 5200));
-        setRenderProgress(Math.round(((index + 1) / pages.length) * 80));
+        setRenderProgress(10 + Math.round(((index + 1) / pages.length) * 70));
       }
       recorder.stop();
       await stopped;
@@ -240,13 +261,26 @@ export default function LearningStudio() {
         ),
       });
       await ffmpeg.writeFile("lesson.webm", await fetchFile(webm));
+      await ffmpeg.writeFile("narration.wav", await fetchFile(narration.signed_url));
+      setStage("Combining slides and narration…");
       await ffmpeg.exec([
         "-i",
         "lesson.webm",
+        "-i",
+        "narration.wav",
+        "-map",
+        "0:v:0",
+        "-map",
+        "1:a:0",
         "-c:v",
         "libx264",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "128k",
         "-pix_fmt",
         "yuv420p",
+        "-shortest",
         "-movflags",
         "+faststart",
         "lesson.mp4",
@@ -263,6 +297,7 @@ export default function LearningStudio() {
       window.setTimeout(() => URL.revokeObjectURL(url), 5000);
       await ffmpeg.terminate();
       setRenderProgress(100);
+      setStage("Narrated MP4 ready.");
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "Could not render the MP4 lesson.",
@@ -316,7 +351,20 @@ export default function LearningStudio() {
           },
         ],
       });
-      setScript(editor.answer);
+      let finalScript = editor.answer.trim();
+      if (mode === "podcast") {
+        finalScript = finalScript
+          .replace(/^Speaker\s*1\s*:/gim, "HOST:")
+          .replace(/^Speaker\s*2\s*:/gim, "TUTOR:")
+          .replace(/^Host\s*:/gim, "HOST:")
+          .replace(/^Tutor\s*:/gim, "TUTOR:");
+        if (!/HOST\s*:/i.test(finalScript) || !/TUTOR\s*:/i.test(finalScript)) {
+          throw new Error("The podcast editor returned an invalid two-speaker script. Please try again.");
+        }
+      } else if (!/SCENE\s*\d+/i.test(finalScript) || !/NARRATION\s*:/i.test(finalScript)) {
+        throw new Error("The narration editor returned an incomplete scene script. Please try again.");
+      }
+      setScript(finalScript);
       setGenerationProgress(100);
       setStage("Complete — your episode is ready.");
     } catch (e) {
