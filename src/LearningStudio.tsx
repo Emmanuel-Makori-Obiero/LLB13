@@ -40,6 +40,7 @@ export default function LearningStudio() {
   const [mode, setMode] = useState<Mode>("podcast");
   const [working, setWorking] = useState(false);
   const [stage, setStage] = useState("");
+  const [generationProgress, setGenerationProgress] = useState(0);
   const [error, setError] = useState("");
   const [panel, setPanel] = useState<string[]>([]);
   const [script, setScript] = useState("");
@@ -53,9 +54,7 @@ export default function LearningStudio() {
       .then((items) => {
         const books = (items as Doc[]).filter(isBookSource);
         setDocs(books);
-        setSelected((current) =>
-          current.filter((id) => books.some((doc) => doc.id === id)),
-        );
+        setSelected((current) => current.filter((id) => books.some((doc) => doc.id === id)));
       })
       .catch(() => setError("Could not load your AI-ready documents."));
   }, []);
@@ -90,9 +89,7 @@ export default function LearningStudio() {
   const play = () => {
     if (!script) return;
     if (!("speechSynthesis" in window)) {
-      setError(
-        "Speech playback is not supported in this browser. Download the script instead.",
-      );
+      setError("Speech playback is not supported in this browser. Download the script instead.");
       return;
     }
     if (playing) {
@@ -135,11 +132,8 @@ export default function LearningStudio() {
         );
       const stream = canvas.captureStream(30);
       const chunks: Blob[] = [];
-      const mimeType = [
-        "video/webm;codecs=vp9",
-        "video/webm;codecs=vp8",
-        "video/webm",
-      ].find((candidate) => MediaRecorder.isTypeSupported(candidate));
+      const mimeType = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"]
+        .find((candidate) => MediaRecorder.isTypeSupported(candidate));
       const recorder = mimeType
         ? new MediaRecorder(stream, { mimeType })
         : new MediaRecorder(stream);
@@ -245,6 +239,7 @@ export default function LearningStudio() {
   const generate = async () => {
     if (!topic.trim() || !selected.length || working) return;
     setWorking(true);
+    setGenerationProgress(5);
     setError("");
     setPanel([]);
     setScript("");
@@ -253,6 +248,7 @@ export default function LearningStudio() {
       const findings: string[] = [];
       for (let index = 0; index < perspectives.length; index += 1) {
         setStage(`AI perspective ${index + 1} of ${perspectives.length}…`);
+        setGenerationProgress(10 + index * 20);
         const result = await askAI({
           feature: "topic_summary",
           mode: "auto",
@@ -267,6 +263,7 @@ export default function LearningStudio() {
         findings.push(result.answer);
       }
       setPanel(findings);
+      setGenerationProgress(75);
       setStage(
         mode === "podcast"
           ? "Editing the two-speaker episode…"
@@ -284,13 +281,18 @@ export default function LearningStudio() {
         ],
       });
       setScript(editor.answer);
+      setGenerationProgress(100);
+      setStage("Complete — your episode is ready.");
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "The learning studio is unavailable.",
       );
     } finally {
-      setWorking(false);
-      setStage("");
+      window.setTimeout(() => {
+        setWorking(false);
+        setStage("");
+        setGenerationProgress(0);
+      }, 700);
     }
   };
 
@@ -331,6 +333,18 @@ export default function LearningStudio() {
               <Video size={15} /> Narrated video lesson
             </button>
           </div>
+          {(working || stage) && (
+            <div className="studio-progress" aria-live="polite">
+              <div className="studio-progress-top">
+                <span>{stage || "Preparing…"}</span>
+                <strong>{generationProgress}%</strong>
+              </div>
+              <div className="studio-progress-track" role="progressbar" aria-valuenow={generationProgress} aria-valuemin={0} aria-valuemax={100}>
+                <span style={{ width: `${generationProgress}%` }} />
+              </div>
+              <p>Keep this page open while the source perspectives and final script are being prepared.</p>
+            </div>
+          )}
           <button
             className="primary-button studio-generate"
             onClick={() => void generate()}

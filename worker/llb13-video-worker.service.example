@@ -1,0 +1,18 @@
+[Unit]
+Description=LLB13 ComfyUI video generation worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/llb13
+EnvironmentFile=/opt/llb13/.env
+ExecStart=/opt/llb13/.venv/bin/python /opt/llb13/worker/video_worker.py
+Restart=always
+RestartSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
