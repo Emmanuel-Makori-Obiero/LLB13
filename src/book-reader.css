@@ -50,7 +50,8 @@
 .book-reading-pane {
   display: flex;
   flex-direction: column;
-  min-height: min(78dvh, 900px);
+  height: min(68dvh, 760px);
+  min-height: 520px;
 }
 
 .book-pane-head,
@@ -86,8 +87,8 @@
   display: block;
   flex: 1 1 auto;
   width: 100%;
-  min-height: 650px;
-  height: min(78dvh, 980px);
+  min-height: 0;
+  height: 100%;
   border: 1px solid #cbc8c0;
   background: #fff;
 }
@@ -282,14 +283,15 @@
   }
 
   .book-reading-pane {
-    min-height: 72dvh;
+    height: min(64dvh, 680px);
+    min-height: 480px;
   }
 
   .book-preview-wrap > object,
   .book-preview-wrap > iframe,
   .book-preview-wrap > object iframe {
-    min-height: 620px;
-    height: 72dvh;
+    min-height: 0;
+    height: 100%;
   }
 
   .book-ai-pane {
@@ -310,7 +312,8 @@
   .book-preview-wrap > object,
   .book-preview-wrap > iframe,
   .book-preview-wrap > object iframe {
-    min-height: 520px;
+    min-height: 0;
+    height: 100%;
   }
 }
 
