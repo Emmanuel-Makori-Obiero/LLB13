@@ -1,0 +1,189 @@
+[1mdiff --git a/src/BookReader.tsx b/src/BookReader.tsx[m
+[1mindex 6180649..033da0e 100644[m
+[1m--- a/src/BookReader.tsx[m
+[1m+++ b/src/BookReader.tsx[m
+[36m@@ -1,14 +1,12 @@[m
+[31m-import { useEffect, useMemo, useState, type FormEvent } from "react";[m
+[31m-import { BookOpen, Check, Highlighter, Loader2, Maximize2, Minimize2, Send, Sparkles, X } from "lucide-react";[m
+[32m+[m[32mimport { useState, type FormEvent } from "react";[m
+[32m+[m[32mimport { BookOpen, Check, Highlighter, Maximize2, Minimize2, Send, Sparkles, X } from "lucide-react";[m
+ import { downloadInfo, readerUrl, safeUrl } from "./links";[m
+[31m-import { askAI, extractText, type AIResult } from "./lib/ai";[m
+[32m+[m[32mimport { askAI, type AIResult } from "./lib/ai";[m
+ import { Markdown } from "./Markdown";[m
+ import type { Material } from "./data/types";[m
+ import "./book-reader.css";[m
+ [m
+ type Highlight = { id: string; text: string; createdAt: string };[m
+[31m-type ReaderProgress = { page: number; total: number; phase: "cached" | "reading" | "ready" };[m
+[31m-[m
+ type Props = { material: Material; onClose: () => void };[m
+ [m
+ const prompts = [[m
+[36m@@ -19,32 +17,9 @@[m [mconst prompts = [[m
+ ];[m
+ [m
+ const keyFor = (id: string) => `llb13-highlights:${id}`;[m
+[31m-const textCacheKey = (material: Material, href: string) => `${material.id}:${material.storage_path ?? href}:${material.title}`;[m
+[31m-[m
+[31m-function readerCache() {[m
+[31m-  return new Promise<IDBDatabase | null>((resolve) => {[m
+[31m-    if (!("indexedDB" in window)) return resolve(null);[m
+[31m-    const request = indexedDB.open("llb13-reader-cache", 1);[m
+[31m-    request.onupgradeneeded = () => request.result.createObjectStore("texts");[m
+[31m-    request.onsuccess = () => resolve(request.result);[m
+[31m-    request.onerror = () => resolve(null);[m
+[31m-  });[m
+[31m-}[m
+[31m-async function getCachedText(key: string) {[m
+[31m-  const db = await readerCache(); if (!db) return null;[m
+[31m-  return new Promise<string | null>((resolve) => { const request = db.transaction("texts").objectStore("texts").get(key); request.onsuccess = () => resolve(typeof request.result === "string" ? request.result : null); request.onerror = () => resolve(null); });[m
+[31m-}[m
+[31m-async function setCachedText(key: string, value: string) {[m
+[31m-  const db = await readerCache(); if (!db) return;[m
+[31m-  await new Promise<void>((resolve) => { const request = db.transaction("texts", "readwrite").objectStore("texts").put(value, key); request.onsuccess = () => resolve(); request.onerror = () => resolve(); });[m
+[31m-}[m
+ [m
+ export default function BookReader({ material, onClose }: Props) {[m
+   const [expanded, setExpanded] = useState(false);[m
+[31m-  const [text, setText] = useState("");[m
+[31m-  const [loadingText, setLoadingText] = useState(false);[m
+[31m-  const [progress, setProgress] = useState<ReaderProgress>({ page: 0, total: 0, phase: "reading" });[m
+[31m-  const [sourceNote, setSourceNote] = useState("");[m
+   const [selectedText, setSelectedText] = useState("");[m
+   const [highlights, setHighlights] = useState<Highlight[]>(() => {[m
+     try { return JSON.parse(localStorage.getItem(keyFor(material.id)) || "[]") as Highlight[]; } catch { return []; }[m
+[36m@@ -59,52 +34,6 @@[m [mexport default function BookReader({ material, onClose }: Props) {[m
+   const link = safeUrl(material.url);[m
+   const frame = readerUrl(material);[m
+   const info = downloadInfo(material);[m
+[31m-  const paragraphs = useMemo(() => text.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean), [text]);[m
+[31m-[m
+[31m-  useEffect(() => {[m
+[31m-    let active = true;[m
+[31m-    const load = async () => {[m
+[31m-      if (!info?.href || !info.file) return;[m
+[31m-      setLoadingText(true);[m
+[31m-      setSourceNote("");[m
+[31m-      try {[m
+[31m-        const cacheKey = textCacheKey(material, info.href);[m
+[31m-        const cached = await getCachedText(cacheKey);[m
+[31m-        if (cached && active) {[m
+[31m-          setText(cached); setProgress({ page: 1, total: 1, phase: "cached" }); setLoadingText(false); return;[m
+[31m-        }[m
+[31m-        const response = await fetch(info.href, { credentials: "omit" });[m
+[31m-        if (!response.ok) throw new Error(`Could not read file (${response.status}).`);[m
+[31m-        const blob = await response.blob();[m
+[31m-        const isPdf = /\.pdf(\?|$)/i.test(material.storage_path ?? material.url ?? "");[m
+[31m-        if (isPdf) {[m
+[31m-          const pdfjs = await import("pdfjs-dist");[m
+[31m-          const worker = (await import("pdfjs-dist/build/pdf.worker.min.mjs?url")).default;[m
+[31m-          pdfjs.GlobalWorkerOptions.workerSrc = worker;[m
+[31m-          const pdf = await pdfjs.getDocument({ data: await blob.arrayBuffer() }).promise;[m
+[31m-          const pages: string[] = []; const firstBatch = Math.min(3, pdf.numPages);[m
+[31m-          setProgress({ page: 0, total: pdf.numPages, phase: "reading" });[m
+[31m-          const readPage = async (pageNumber: number) => {[m
+[31m-            const page = await pdf.getPage(pageNumber); const content = await page.getTextContent();[m
+[31m-            return content.items.map((item) => ("str" in item ? item.str : "")).join(" ").trim();[m
+[31m-          };[m
+[31m-          for (let page = 1; page <= firstBatch; page += 1) { pages[page - 1] = await readPage(page); if (active) { setText(pages.filter(Boolean).join("\n\n")); setProgress({ page, total: pdf.numPages, phase: "reading" }); } }[m
+[31m-          for (let page = firstBatch + 1; page <= pdf.numPages; page += 1) { pages[page - 1] = await readPage(page); if (active) setProgress({ page, total: pdf.numPages, phase: "reading" }); }[m
+[31m-          const extracted = pages.filter(Boolean).join("\n\n").trim();[m
+[31m-          if (extracted) { await setCachedText(cacheKey, extracted); if (active) { setText(extracted); setProgress({ page: pdf.numPages, total: pdf.numPages, phase: "ready" }); } }[m
+[31m-          else if (active) setSourceNote("This PDF has no selectable text. It may be scanned; use OCR or paste a passage below.");[m
+[31m-        } else {[m
+[31m-          const extracted = (await extractText(new File([blob], `${material.title}.${material.type}`))).trim();[m
+[31m-          if (extracted) { await setCachedText(cacheKey, extracted); if (active) { setText(extracted); setProgress({ page: 1, total: 1, phase: "ready" }); } }[m
+[31m-          else if (active) setSourceNote("This file has no selectable text. Paste a passage below to use the AI reader.");[m
+[31m-        }[m
+[31m-      } catch {[m
+[31m-        if (active) setSourceNote("The preview is available, but this source does not allow text extraction. Paste a passage below to use the AI reader.");[m
+[31m-      } finally { if (active) setLoadingText(false); }[m
+[31m-    };[m
+[31m-    void load();[m
+[31m-    return () => { active = false; };[m
+[31m-  }, [info?.href, info?.file, material.title, material.type]);[m
+ [m
+   const persist = (next: Highlight[]) => {[m
+     setHighlights(next);[m
+[36m@@ -117,16 +46,18 @@[m [mexport default function BookReader({ material, onClose }: Props) {[m
+   };[m
+ [m
+   const saveHighlight = () => {[m
+[31m-    if (!selectedText) return;[m
+[31m-    const item = { id: crypto.randomUUID(), text: selectedText, createdAt: new Date().toISOString() };[m
+[32m+[m[32m    const passage = selectedText || customPrompt.trim();[m
+[32m+[m[32m    if (!passage) return;[m
+[32m+[m[32m    const item = { id: crypto.randomUUID(), text: passage, createdAt: new Date().toISOString() };[m
+     persist([item, ...highlights]);[m
+     setActiveHighlight(item.id);[m
+[32m+[m[32m    setSelectedText(passage);[m
+   };[m
+ [m
+   const explain = async (event?: FormEvent) => {[m
+     event?.preventDefault();[m
+     const passage = selectedText || (activeHighlight ? highlights.find((h) => h.id === activeHighlight)?.text : "") || customPrompt.trim();[m
+[31m-    if (!passage) { setError("Highlight or paste a passage first."); return; }[m
+[32m+[m[32m    if (!passage) { setError("Paste or highlight a passage first."); return; }[m
+     setBusy(true); setError(""); setResult(null);[m
+     const task = customPrompt.trim() && customPrompt.trim() !== passage ? customPrompt.trim() : instruction;[m
+     try {[m
+[36m@@ -140,6 +71,8 @@[m [mexport default function BookReader({ material, onClose }: Props) {[m
+     finally { setBusy(false); }[m
+   };[m
+ [m
+[32m+[m[32m  const hasPassage = Boolean(selectedText || activeHighlight || customPrompt.trim());[m
+[32m+[m
+   return ([m
+     <div className={`book-reader ${expanded ? "book-reader-expanded" : ""}`}>[m
+       <div className="reader-toolbar">[m
+[36m@@ -149,33 +82,26 @@[m [mexport default function BookReader({ material, onClose }: Props) {[m
+           <button className="secondary-button" onClick={() => setExpanded((v) => !v)} title={expanded ? "Minimize reader" : "Maximize reader"}>[m
+             {expanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}<span>{expanded ? "Minimize" : "Maximize"}</span>[m
+           </button>[m
+[31m-          {info?.href && <a className="primary-button" href={info.href} target="_blank" rel="noreferrer">Open source</a>}[m
+[32m+[m[32m          {(info?.href || link) && <a className="primary-button" href={info?.href || link} target="_blank" rel="noreferrer">Open source</a>}[m
+         </div>[m
+       </div>[m
+ [m
+       <div className="book-reader-grid">[m
+         <section className="book-reading-pane">[m
+[31m-          <div className="book-pane-head"><div><span className="section-label">Reading view</span><p className="field-hint">Select a line or paragraph, then save it as a highlight.</p></div><BookOpen size={18} /></div>[m
+[31m-          {loadingText && <div className="book-progress" role="status" aria-live="polite"><div className="book-progress-label"><span><Loader2 size={14} className="book-spin" /> Reading page {progress.page || 1} of {progress.total || "…"}</span><strong>{progress.total ? Math.round((progress.page / progress.total) * 100) : 0}%</strong></div><div className="book-progress-track"><span style={{ width: `${progress.total ? Math.max(3, (progress.page / progress.total) * 100) : 3}%` }} /></div></div>}[m
+[31m-          {!loadingText && progress.phase === "cached" && <p className="book-status"><Check size={14} /> Selectable text loaded from this device’s cache.</p>}[m
+[31m-          {paragraphs.length > 0 ? ([m
+[31m-            <article className="book-text" onMouseUp={captureSelection}>[m
+[31m-              {paragraphs.map((paragraph, index) => <p key={`${index}-${paragraph.slice(0, 12)}`}>{paragraph}</p>)}[m
+[31m-            </article>[m
+[31m-          ) : frame ? ([m
+[32m+[m[32m          <div className="book-pane-head"><div><span className="section-label">Preview</span><p className="field-hint">The source opens directly here. Copy any passage you want to study.</p></div><BookOpen size={18} /></div>[m
+[32m+[m[32m          {frame ? ([m
+             <div className="book-preview-wrap">[m
+[31m-              {info?.file && /\.pdf(\?|$)/i.test(material.storage_path ?? material.url ?? "") ? <object data={frame} type="application/pdf" aria-label={`Reading ${material.title}`}><iframe src={frame} title={`Reading ${material.title}`} /></object> : <iframe src={frame} title={`Reading ${material.title}`} referrerPolicy="no-referrer" />}[m
+[31m-              <p className="reader-hint">{sourceNote || "Select and copy a passage into the AI reader on the right."}</p>[m
+[32m+[m[32m              {info?.file && /\.pdf(\?|$)/i.test(material.storage_path ?? material.url ?? "") ? <object data={frame} type="application/pdf" aria-label={`Preview ${material.title}`}><iframe src={frame} title={`Preview ${material.title}`} /></object> : <iframe src={frame} title={`Preview ${material.title}`} referrerPolicy="no-referrer" />}[m
+[32m+[m[32m              <p className="reader-hint">Preview only — no background extraction or loading wait. Copy a passage and paste it into the AI reading desk.</p>[m
+             </div>[m
+           ) : <div className="empty">This material has no valid preview link.</div>}[m
+[31m-          {sourceNote && paragraphs.length > 0 && <p className="reader-hint">{sourceNote}</p>}[m
+         </section>[m
+ [m
+         <aside className="book-ai-pane">[m
+           <div className="book-ai-head"><div><span className="section-label">AI reading desk</span><h2>Understand it better.</h2></div><Sparkles size={18} /></div>[m
+[31m-          <p className="field-hint">Highlight a passage or paste one below. The answer will be based on the text you provide.</p>[m
+[32m+[m[32m          <p className="field-hint">Paste a passage from the preview below, or use a saved highlight. The answer will be based on the text you provide.</p>[m
+           <div className="book-actions">[m
+[31m-            <button className="secondary-button" onClick={saveHighlight} disabled={!selectedText}><Highlighter size={14} /> Save highlight</button>[m
+[32m+[m[32m            <button className="secondary-button" onClick={saveHighlight} disabled={!hasPassage}><Highlighter size={14} /> Save passage</button>[m
+             {selectedText && <button className="book-clear" onClick={() => setSelectedText("")}>Clear selection</button>}[m
+           </div>[m
+           {selectedText && <blockquote className="book-selection">{selectedText}</blockquote>}[m
+[36m@@ -183,7 +109,7 @@[m [mexport default function BookReader({ material, onClose }: Props) {[m
+           <div className="book-prompts">[m
+             {prompts.map((prompt) => <button key={prompt.label} className={`book-prompt ${instruction === prompt.value ? "on" : ""}`} onClick={() => setInstruction(prompt.value)}>{prompt.label}</button>)}[m
+           </div>[m
+[31m-          <button className="primary-button book-explain" onClick={() => void explain()} disabled={busy || (!selectedText && !activeHighlight && !customPrompt.trim())}><Send size={14} /> {busy ? "Thinking…" : "Explain this passage"}</button>[m
+[32m+[m[32m          <button className="primary-button book-explain" onClick={() => void explain()} disabled={busy || !hasPassage}><Send size={14} /> {busy ? "Thinking…" : "Explain this passage"}</button>[m
+           {error && <div className="connection-error">{error}</div>}[m
+           {result && <div className="book-result"><div className="sa-basis"><span className={`sa-badge ${result.grounded ? "grounded" : "open"}`}>{result.grounded ? "From your passage" : "General context"}</span></div><Markdown text={result.answer} />{result.warnings.length > 0 && <ul className="sa-warnings">{result.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}</div>}[m
+           <div className="book-highlights"><div className="section-label">Saved highlights · {highlights.length}</div>{highlights.length === 0 ? <p className="field-hint">Your saved passages will stay with this book on this device.</p> : highlights.map((highlight) => <div className={`book-highlight ${activeHighlight === highlight.id ? "on" : ""}`} key={highlight.id}><button onClick={() => { setActiveHighlight(highlight.id); setSelectedText(highlight.text); }}><Check size={13} />{highlight.text}</button><button className="book-delete" onClick={() => persist(highlights.filter((item) => item.id !== highlight.id))} aria-label="Delete highlight">×</button></div>)}</div>[m
