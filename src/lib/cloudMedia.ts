@@ -273,7 +273,17 @@ export async function getVideoJobStatus(assetId: string) {
 
 export async function generateAudio(args: { text: string; title: string }) {
   const { data, error } = await client().functions.invoke("generate-audio", { body: args });
-  if (error) throw new Error(`Audio generation failed: ${error.message}`);
+  if (error) {
+    let detail = error.message;
+    const context = (error as unknown as { context?: Response }).context;
+    if (context) {
+      try {
+        const body = await context.clone().json() as { error?: string; detail?: string };
+        detail = body.error || body.detail || detail;
+      } catch { /* keep SDK message */ }
+    }
+    throw new Error(`Audio generation failed: ${detail}`);
+  }
   if (!data?.signed_url) throw new Error(data?.error || "Audio generation returned no file.");
   return data as { asset: MediaAsset; signed_url: string };
 }
