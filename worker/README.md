@@ -8,6 +8,8 @@ The worker is intentionally provider-neutral at the model layer. ComfyUI is the 
 
 The worker subdivides each stored three-minute plan into short generation units. The default is 5 seconds, which matches the practical behavior of many open video models. A five-segment, 15-minute project therefore creates many jobs; it can take a long time and use substantial GPU, disk, and electricity. It is not an unlimited-free cloud service.
 
+Each ComfyUI submission is retried up to three times, and each render wait is retried once before the project is marked failed. Successful units are concatenated with FFmpeg into segment files and then into a final MP4; every segment and the final export are copied to private Supabase Storage.
+
 ## 1. Prepare ComfyUI
 
 Install ComfyUI on a machine with an NVIDIA GPU and install the model/workflow dependencies required by the selected open model. Wan 2.1's 1.3B checkpoint is the lower-memory starting point; larger Wan, LTX, and Hunyuan workflows require more VRAM and may need offloading or quantization.
@@ -25,7 +27,7 @@ The worker currently uses text-to-video continuity prompts. For stronger continu
 
 ## 2. Apply the database migration
 
-Apply `supabase/migrations/002-cloud-media.sql` first. It creates `film_projects`, `film_shots`, `media_assets`, the private `media` Storage bucket, and the required policies.
+Apply `supabase/migrations/002-cloud-media.sql` first, then `supabase/migrations/003-video-reliability.sql` for persistent serverless video retry state. The first migration creates `film_projects`, `film_shots`, `media_assets`, the private `media` Storage bucket, and the required policies.
 
 ## 3. Install and run
 

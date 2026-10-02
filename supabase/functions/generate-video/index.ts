@@ -33,10 +33,12 @@ Deno.serve(async (req) => {
   const headers: Record<string, string> = {};
   const hfToken = Deno.env.get("HF_TOKEN");
   if (hfToken) headers.Authorization = `Bearer ${hfToken}`;
+  const admin = createClient(url, service);
+  const providers = providerChain();
 
   const attempts: Array<{ provider: string; error: string }> = [];
   let selected: Awaited<ReturnType<typeof submitVideo>> | null = null;
-  for (const provider of providerChain()) {
+  for (const provider of providers) {
     try {
       selected = await submitVideo(provider, prompt, seed, headers);
       break;
@@ -45,14 +47,23 @@ Deno.serve(async (req) => {
     }
   }
   if (!selected) {
-    return response({
-      error: "All free video providers are busy or unavailable. Try again shortly.",
-      attempts,
-      retryable: true,
-    }, 503);
+    const queuedAsset = {
+      owner_id: auth.user.id,
+      title: prompt.slice(0, 90),
+      kind: "film_clip",
+      project_id: body.project_id || null,
+      status: "queued",
+      provider: null,
+      provider_job_id: null,
+      metadata: { prompt, shot_index: body.shot_index ?? null, seed, fallback_order: providers.map((item) => item.id), fallback_attempts: attempts, retry_after_seconds: 30 },
+    };
+    const { data: queued, error: queuedError } = await admin.from("media_assets").insert(queuedAsset).select("id,title,kind,project_id,status,provider,provider_job_id,metadata,created_at").single();
+    if (queuedError) return response({ error: `Could not save queued video job: ${queuedError.message}`, attempts }, 500);
+    const job = await admin.from("video_jobs").insert({ asset_id: queued.id, owner_id: auth.user.id, status: "queued", attempt_count: attempts.length, last_error: attempts.at(-1)?.error || "All providers unavailable", provider_attempts: attempts, next_attempt_at: new Date(Date.now() + 30_000).toISOString() });
+    if (job.error) return response({ error: `Could not save retry state: ${job.error.message}` }, 500);
+    return response({ asset: queued, provider: null, fallback_attempts: attempts, retryable: true, status_url: `${url}/functions/v1/video-status?asset_id=${queued.id}` }, 202);
   }
 
-  const admin = createClient(url, service);
   const asset = {
     owner_id: auth.user.id,
     title: prompt.slice(0, 90),
@@ -68,12 +79,14 @@ Deno.serve(async (req) => {
       provider_label: selected.provider.label,
       provider_api: selected.provider.apiName,
       space: selected.provider.space,
-      fallback_order: providerChain().map((item) => item.id),
+      fallback_order: providers.map((item) => item.id),
       fallback_attempts: attempts,
       frames: selected.provider.id === "openking-wan22" ? 25 : null,
     },
   };
   const { data, error } = await admin.from("media_assets").insert(asset).select("id,title,kind,project_id,status,provider,provider_job_id,metadata,created_at").single();
   if (error) return response({ error: `Could not save video job: ${error.message}` }, 500);
+  const job = await admin.from("video_jobs").insert({ asset_id: data.id, owner_id: auth.user.id, status: "processing", attempt_count: attempts.length + 1, last_provider: selected.provider.id, provider_attempts: attempts, next_attempt_at: new Date().toISOString() });
+  if (job.error) return response({ error: `Could not save retry state: ${job.error.message}` }, 500);
   return response({ asset, provider_job_id: selected.eventId, provider: selected.provider.id, fallback_attempts: attempts, status_url: `${url}/functions/v1/video-status?asset_id=${data.id}` }, 202);
 });
