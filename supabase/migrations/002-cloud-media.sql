@@ -94,7 +94,7 @@ create policy "Media assets owner or shared read" on public.media_assets
       select 1 from public.media_shares s
       where s.asset_id = media_assets.id
         and s.revoked_at is null
-        and (s.visibility = 'group' or s.recipient_email = (select email from auth.users where id = auth.uid()))
+        and (s.visibility = 'group' or s.recipient_email = (auth.jwt() ->> 'email'))
         and (s.expires_at is null or s.expires_at > now())
     )
   );
@@ -111,7 +111,7 @@ create policy "Media shares owner manage" on public.media_shares
   for all to authenticated using (owner_id = auth.uid()) with check (owner_id = auth.uid());
 create policy "Media shares recipient read" on public.media_shares
   for select to authenticated using (
-    recipient_email = (select email from auth.users where id = auth.uid())
+    recipient_email = (auth.jwt() ->> 'email')
     and revoked_at is null
   );
 
