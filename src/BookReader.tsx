@@ -4,6 +4,7 @@ import { downloadInfo, readerUrl, safeUrl } from "./links";
 import { askAI, type AIResult } from "./lib/ai";
 import { Markdown } from "./Markdown";
 import type { Material } from "./data/types";
+import { downloadBlob, downloadPdf, downloadWord } from "./export";
 import "./book-reader.css";
 
 type Highlight = { id: string; text: string; createdAt: string };
@@ -98,6 +99,10 @@ export default function BookReader({ material, onClose }: Props) {
   const hasPassage = Boolean(selectedText || activeHighlight || customPrompt.trim());
   const isPdf = Boolean(info?.file && /\.pdf(\?|$)/i.test(material.storage_path ?? material.url ?? ""));
   const previewFrame = frame ? `${frame.split("#")[0]}#page=1&zoom=${zoom}` : "";
+  const resultName = `${material.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "book-explanation"}-plain-language`;
+  const downloadResultMarkdown = () => result && downloadBlob(new Blob([`# ${material.title}\n\n${result.answer}`], { type: "text/markdown" }), `${resultName}.md`);
+  const downloadResultPdf = () => result && downloadPdf(`${material.title} — Plain-language explanation`, result.answer, `${resultName}.pdf`);
+  const downloadResultWord = () => result && downloadWord(`${material.title} — Plain-language explanation`, result.answer, `${resultName}.doc`);
 
   return (
     <div className={`book-reader ${expanded ? "book-reader-expanded" : ""}`}>
@@ -138,7 +143,7 @@ export default function BookReader({ material, onClose }: Props) {
           <button className="primary-button book-explain" onClick={() => void explain()} disabled={busy || !hasPassage}><Send size={14} /> {busy ? "Thinking…" : "Explain this passage"}</button>
           <form className="book-chat" onSubmit={(event) => void sendChat(event)}><div className="section-label">Talk about this passage</div><div className="book-chat-history">{chat.length === 0 ? <p className="field-hint">Ask a follow-up after you paste or highlight a passage. The assistant explains first and only quizzes you when you ask.</p> : chat.map((line, index) => <div className={`book-chat-line ${line.role}`} key={`${line.role}-${index}`}><strong>{line.role === "student" ? "You" : "AI"}</strong><Markdown text={line.text} /></div>)}</div><div className="book-chat-entry"><input value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder="Ask: What does this mean in simple words?" /><button className="primary-button" type="submit" disabled={busy || !chatInput.trim()}><Send size={13} /></button></div></form>
           {error && <div className="connection-error">{error}</div>}
-          {result && <div className="book-result"><div className="sa-basis"><span className={`sa-badge ${result.grounded ? "grounded" : "open"}`}>{result.grounded ? "From your passage" : "General context"}</span></div><Markdown text={result.answer} />{result.warnings.length > 0 && <ul className="sa-warnings">{result.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}</div>}
+          {result && <div className="book-result"><div className="sa-basis"><span className={`sa-badge ${result.grounded ? "grounded" : "open"}`}>{result.grounded ? "From your passage" : "General context"}</span></div><div className="book-result-actions"><button className="secondary-button" onClick={downloadResultMarkdown}>Download .md</button><button className="secondary-button" onClick={downloadResultPdf}>Download PDF</button><button className="secondary-button" onClick={downloadResultWord}>Download Word</button></div><Markdown text={result.answer} />{result.warnings.length > 0 && <ul className="sa-warnings">{result.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}</div>}
           <div className="book-highlights"><div className="section-label">Saved highlights · {highlights.length}</div>{highlights.length === 0 ? <p className="field-hint">Your saved passages will stay with this book on this device.</p> : highlights.map((highlight) => <div className={`book-highlight ${activeHighlight === highlight.id ? "on" : ""}`} key={highlight.id}><button onClick={() => { setActiveHighlight(highlight.id); setSelectedText(highlight.text); }}><Check size={13} />{highlight.text}</button><button className="book-delete" onClick={() => persist(highlights.filter((item) => item.id !== highlight.id))} aria-label="Delete highlight">×</button></div>)}</div>
         </aside>
       </div>

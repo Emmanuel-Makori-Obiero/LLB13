@@ -362,3 +362,10 @@
 @media (max-width: 560px) {
   .reader-zoom-controls { order: 3; width: 100%; justify-content: flex-start; margin-left: 0; }
 }
+
+.book-result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 10px 0 14px;
+}
