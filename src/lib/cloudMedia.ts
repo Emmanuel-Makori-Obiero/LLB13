@@ -255,7 +255,7 @@ export async function generateVideoJob(args: { prompt: string; projectId?: strin
     throw new Error(`Video job failed: ${detail}`);
   }
   if (!data?.asset?.id) throw new Error(data?.error || "Video provider returned no job.");
-  return data as { asset: MediaAsset; provider_job_id: string; status_url: string };
+  return data as { asset: MediaAsset; provider_job_id: string; provider?: string; fallback_attempts?: Array<{ provider: string; error: string }>; status_url: string };
 }
 
 export async function getVideoJobStatus(assetId: string) {
