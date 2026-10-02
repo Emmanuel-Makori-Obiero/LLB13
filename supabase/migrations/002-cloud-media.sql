@@ -48,8 +48,17 @@ create table if not exists public.film_projects (
   updated_at timestamptz not null default now()
 );
 
-alter table public.media_assets
-  add constraint media_assets_project_fk foreign key (project_id) references public.film_projects(id) on delete set null;
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'media_assets_project_fk'
+      and conrelid = 'public.media_assets'::regclass
+  ) then
+    alter table public.media_assets
+      add constraint media_assets_project_fk foreign key (project_id) references public.film_projects(id) on delete set null;
+  end if;
+end $$;
 
 create table if not exists public.film_shots (
   id uuid primary key default gen_random_uuid(),
