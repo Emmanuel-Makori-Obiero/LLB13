@@ -32,7 +32,7 @@
 
 .book-reader-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(330px, .85fr);
+  grid-template-columns: minmax(0, 2.25fr) minmax(300px, .72fr);
   gap: 18px;
   flex: 1 1 auto;
   min-height: 0;
@@ -50,8 +50,8 @@
 .book-reading-pane {
   display: flex;
   flex-direction: column;
-  height: min(68dvh, 760px);
-  min-height: 520px;
+  height: min(58dvh, 640px);
+  min-height: 420px;
 }
 
 .book-pane-head,
@@ -113,7 +113,7 @@
   display: flex;
   flex-direction: column;
   gap: 13px;
-  max-height: min(78dvh, 900px);
+  max-height: min(58dvh, 640px);
   overflow: auto;
   padding-bottom: 18px;
 }
@@ -258,7 +258,7 @@
 
 @media (max-width: 1050px) {
   .book-reader-grid {
-    grid-template-columns: minmax(0, 1.35fr) minmax(290px, .9fr);
+    grid-template-columns: minmax(0, 1.8fr) minmax(280px, .78fr);
   }
 }
 
@@ -283,8 +283,8 @@
   }
 
   .book-reading-pane {
-    height: min(64dvh, 680px);
-    min-height: 480px;
+    height: min(56dvh, 600px);
+    min-height: 400px;
   }
 
   .book-preview-wrap > object,
