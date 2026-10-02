@@ -2428,11 +2428,12 @@ function MediaPage({
     event.preventDefault();
     if (videoPrompt.trim().length < 12 || videoBusy) return;
     setVideoBusy(true);
-    setVideoNote("Submitting to the free cloud GPU queue…");
+      setVideoNote("Trying the free video providers…");
     setGeneratedVideoUrl(null);
     try {
       const job = await generateVideoJob({ prompt: videoPrompt.trim() });
       setCloudAssets((current) => [job.asset, ...current]);
+      setVideoNote(`Queued with ${job.provider || "a free video provider"}; waiting for the cloud GPU…`);
       for (let attempt = 0; attempt < 24; attempt += 1) {
         await new Promise((resolve) => window.setTimeout(resolve, 8000));
         const status = await getVideoJobStatus(job.asset.id);
@@ -2442,7 +2443,7 @@ function MediaPage({
           setCloudAssets((current) => current.map((item) => item.id === job.asset.id ? status.asset : item));
           return;
         }
-        if (status.status === "failed") throw new Error("The free video provider could not complete this clip.");
+        if (status.status === "failed") throw new Error("All attempted free video providers could not complete this clip.");
         setVideoNote(`Cloud GPU job is ${status.status}… (${Math.min(99, Math.round(((attempt + 1) / 24) * 100))}%)`);
       }
       setVideoNote("The clip is still queued. You can leave this page open and try again from Cloud media later.");
@@ -2481,8 +2482,8 @@ function MediaPage({
       </div>
 
       <div className="card card-pad" style={{ marginTop: 18 }}>
-        <CardHeader label="Video Studio" action="Wan2.2 · free cloud GPU" />
-        <p className="field-hint">Generate one short cinematic clip first. Longer films are built by queueing connected clips and saving every result to Supabase.</p>
+        <CardHeader label="Video Studio" action="3-provider free fallback" />
+        <p className="field-hint">Generate one short cinematic clip. The server tries OpenKing Wan2.2, Pyramid Flow, then LTX-Video Fast, and saves the successful result to Supabase.</p>
         <form className="data-form" onSubmit={(event) => void buildVideo(event)}>
           <label>Video scene<textarea required minLength={12} rows={4} value={videoPrompt} onChange={(event) => setVideoPrompt(event.target.value)} placeholder="A law student walks through a quiet Nairobi courthouse at sunrise, cinematic camera movement, realistic documentary style" /></label>
           <button className="primary-button" type="submit" disabled={videoBusy}>{videoBusy ? "Generating cloud video…" : "Generate short video clip"}</button>

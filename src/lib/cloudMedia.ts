@@ -242,9 +242,20 @@ export async function generateVideoJob(args: { prompt: string; projectId?: strin
   const { data, error } = await client().functions.invoke("generate-video", {
     body: { prompt: args.prompt, project_id: args.projectId, shot_index: args.shotIndex, seed: args.seed },
   });
-  if (error) throw new Error(`Video job failed: ${error.message}`);
+  if (error) {
+    let detail = error.message;
+    const context = (error as unknown as { context?: Response }).context;
+    if (context) {
+      try {
+        const body = await context.clone().json() as { error?: string; detail?: string };
+        detail = body.error || body.detail || detail;
+        if (/queue is full/i.test(body.detail || "")) detail = "The free video GPU queue is full right now. Wait a few minutes and try again.";
+      } catch { /* keep the SDK message */ }
+    }
+    throw new Error(`Video job failed: ${detail}`);
+  }
   if (!data?.asset?.id) throw new Error(data?.error || "Video provider returned no job.");
-  return data as { asset: MediaAsset; provider_job_id: string; status_url: string };
+  return data as { asset: MediaAsset; provider_job_id: string; provider?: string; fallback_attempts?: Array<{ provider: string; error: string }>; status_url: string };
 }
 
 export async function getVideoJobStatus(assetId: string) {
