@@ -172,6 +172,19 @@ def run_ffmpeg(args: list[str], timeout: int = 1800) -> None:
         raise WorkerError(f"ffmpeg failed: {result.stderr[-1200:]}")
 
 
+def retry_call(label: str, fn: Any, attempts: int = 3, delay_seconds: float = 5.0) -> Any:
+    last_error: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return fn()
+        except Exception as exc:
+            last_error = exc
+            if attempt < attempts:
+                print(f"{label} failed (attempt {attempt}/{attempts}): {exc}; retrying", flush=True)
+                time.sleep(delay_seconds * attempt)
+    raise WorkerError(f"{label} failed after {attempts} attempts: {last_error}") from last_error
+
+
 def concat_files(files: list[Path], destination: Path) -> None:
     if not files:
         raise WorkerError("No generated clips were available to stitch")
@@ -204,8 +217,17 @@ def process_project(db: SupabaseRest, comfy: ComfyUI, project: dict[str, Any], c
                     f"This is generated clip {clip_index + 1} of {count} for segment {index + 1}. "
                     "Create a clean cinematic shot with a natural beginning and ending suitable for editorial stitching."
                 )
-                prompt_id = comfy.submit(prompt, seed=abs(hash((project_id, index, clip_index))) % 2_147_483_647, prefix=prefix)
-                generated = comfy.wait_for_video(prompt_id, prefix, job_timeout)
+                seed = abs(hash((project_id, index, clip_index))) % 2_147_483_647
+                prompt_id = retry_call(
+                    f"Submit segment {index + 1} clip {clip_index + 1}",
+                    lambda: comfy.submit(prompt, seed=seed, prefix=prefix),
+                )
+                generated = retry_call(
+                    f"Render segment {index + 1} clip {clip_index + 1}",
+                    lambda: comfy.wait_for_video(prompt_id, prefix, job_timeout),
+                    attempts=2,
+                    delay_seconds=10.0,
+                )
                 local = root / f"segment-{index:03d}-clip-{clip_index:03d}{generated.suffix or '.mp4'}"
                 shutil.copy2(generated, local)
                 clip_files.append(local)
