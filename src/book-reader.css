@@ -313,3 +313,49 @@
     min-height: 520px;
   }
 }
+
+.reader-zoom-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: auto;
+}
+.reader-zoom-controls strong {
+  min-width: 42px;
+  color: var(--forest);
+  font-size: 12px;
+  text-align: center;
+}
+.reader-zoom-controls .secondary-button {
+  min-width: 30px;
+  padding: 6px 7px;
+}
+.book-chat {
+  margin: 4px 18px 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.book-chat-history {
+  display: grid;
+  gap: 8px;
+  max-height: 280px;
+  margin-top: 9px;
+  overflow: auto;
+}
+.book-chat-line {
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.book-chat-line.student { background: #fff7ef; border-color: #e5c2ad; }
+.book-chat-line.assistant { background: var(--paper); }
+.book-chat-line strong { display: block; margin-bottom: 4px; color: var(--forest); font-size: 11px; }
+.book-chat-line .md > :first-child { margin-top: 0; }
+.book-chat-line .md > :last-child { margin-bottom: 0; }
+.book-chat-entry { display: flex; gap: 7px; margin-top: 9px; }
+.book-chat-entry input { min-width: 0; flex: 1; padding: 10px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); }
+.book-chat-entry button { flex: 0 0 auto; padding: 9px 11px; }
+@media (max-width: 560px) {
+  .reader-zoom-controls { order: 3; width: 100%; justify-content: flex-start; margin-left: 0; }
+}
