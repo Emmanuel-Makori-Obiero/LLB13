@@ -1,7 +1,7 @@
 import { supabase } from "../data/repository";
 import { askAI, saveTextMaterial, type AIResult } from "./ai";
 
-export type SourceChoice = { id: string; title: string; kind: "document" | "transcript"; citation?: string | null; scope?: "user" | "library" };
+export type SourceChoice = { id: string; title: string; kind: "document" | "transcript" | "material"; citation?: string | null; scope?: "user" | "library"; url?: string | null };
 export type GuideLesson = {
   title: string;
   objective: string;
@@ -50,24 +50,29 @@ async function transcriptAsDocument(choice: SourceChoice) {
 }
 
 export async function listGuideSources(): Promise<SourceChoice[]> {
-  const [docs, transcripts] = await Promise.all([
+  const [docs, transcripts, materials] = await Promise.all([
     db().from("ai_documents").select("id,title,citation,scope").order("created_at", { ascending: false }).limit(200),
     db().from("transcripts").select("id,title,unit,status,created_at").eq("status", "done").order("created_at", { ascending: false }).limit(200),
+    db().from("materials").select("id,title,type,unit,topic,date,source,url").order("date", { ascending: false }).limit(500),
   ]);
   if (docs.error) throw new Error("Could not load saved AI documents.");
   if (transcripts.error) throw new Error("Could not load saved transcripts.");
+  if (materials.error) throw new Error("Could not load Library materials.");
   return [
     ...(docs.data ?? []).map((d) => ({ id: d.id, title: d.title, kind: "document" as const, citation: d.citation, scope: d.scope === "library" ? "library" as const : "user" as const })),
     ...(transcripts.data ?? []).map((t) => ({ id: t.id, title: t.title, kind: "transcript" as const, citation: t.unit ? `Transcript · ${t.unit}` : "Saved transcript", scope: "user" as const })),
+    ...(materials.data ?? []).map((m) => ({ id: m.id, title: m.title, kind: "material" as const, citation: [m.type, m.unit, m.topic, m.source].filter(Boolean).join(" · "), scope: "library" as const, url: m.url ?? null })),
   ];
 }
 
 export async function createGuidedCourse(subject: string, sources: SourceChoice[], preferences: string): Promise<GuidedCourse> {
   if (!sources.length) throw new Error("Choose at least one book, saved document, or transcript.");
   const docIds: string[] = [];
-  for (const source of sources) docIds.push(source.kind === "transcript" ? (await transcriptAsDocument(source)).id : source.id);
-  const prompt = `Create a complete guided law-study syllabus for: ${subject}. Use ONLY the selected source documents. ${preferences}\nReturn ONLY JSON in this exact shape: {"overview":"...","lessons":[{"title":"...","objective":"...","explanation":"...","example":"...","sourceFocus":"...","checkpoint":"quiz","quiz":[{"question":"...","options":["...","...","...","..."],"answerIndex":0,"explanation":"..."}]}]}. Create 6 to 10 ordered lessons. Add a short quiz to every lesson, and mark every third lesson as checkpoint exam. Explain before testing; use plain language, story/examples where helpful, and never invent authorities.`;
-  const mode = sources.every((source) => source.kind === "document" && source.scope === "library") ? "library" : sources.some((source) => source.scope === "library") ? "auto" : "materials";
+  for (const source of sources) if (source.kind === "transcript") docIds.push((await transcriptAsDocument(source)).id); else if (source.kind === "document") docIds.push(source.id);
+  const linkedMaterials = sources.filter((source) => source.kind === "material").map((source) => `${source.title}${source.citation ? ` (${source.citation})` : ""}`).join("; ");
+  const prompt = `Create a complete guided law-study syllabus for: ${subject}. Use ONLY the selected source documents. ${linkedMaterials ? `The following Library items are also linked as reference records; use their titles and metadata as context, but do not invent their contents: ${linkedMaterials}.` : ""} ${preferences}\nReturn ONLY JSON in this exact shape: {"overview":"...","lessons":[{"title":"...","objective":"...","explanation":"...","example":"...","sourceFocus":"...","checkpoint":"quiz","quiz":[{"question":"...","options":["...","...","...","..."],"answerIndex":0,"explanation":"..."}]}]}. Create 6 to 10 ordered lessons. Add a short quiz to every lesson, and mark every third lesson as checkpoint exam. Explain before testing; use plain language, story/examples where helpful, and never invent authorities.`;
+  const readableSources = sources.filter((source) => source.kind !== "material");
+  const mode = readableSources.length === 0 ? "general" : readableSources.every((source) => source.kind === "document" && source.scope === "library") ? "library" : readableSources.some((source) => source.scope === "library") ? "auto" : "materials";
   const result: AIResult = await askAI({ feature: "study_plan", mode, docIds, messages: [{ role: "user", content: prompt }] });
   const syllabus = parseJson(result.answer);
   const user = (await db().auth.getUser()).data.user;

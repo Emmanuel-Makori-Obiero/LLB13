@@ -999,7 +999,7 @@ function App() {
             </>
           )}
           {view === "guide" && <GuidedStudyPage />}
-          {view === "assignment-helper" && <AssignmentHelperPage />}
+          {view === "assignment-helper" && <AssignmentHelperPage assignments={assignments} />}
           {view === "research" && (
             <>
               <PageHeading
