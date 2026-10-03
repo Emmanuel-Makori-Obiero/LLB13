@@ -5,6 +5,7 @@ import './styles.css'
 import './layout.css'
 import './mobile.css'
 import './guide.css'
+import './assignment-helper.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode><App /></StrictMode>

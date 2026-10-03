@@ -79,6 +79,7 @@ import RealtimeJudgeRoom from "./RealtimeJudgeRoom";
 import BookReader from "./BookReader";
 import LearningStudio from "./LearningStudio";
 import GuidedStudyPage from "./GuidedStudyPage";
+import AssignmentHelperPage from "./AssignmentHelperPage";
 import {
   createFilmProject,
   createMediaShare,
@@ -99,6 +100,7 @@ const nav = [
   { id: "assignments", label: "Assignments", icon: FileText },
   { id: "library", label: "Library", icon: Library },
   { id: "guide", label: "Guided study", icon: GraduationCap },
+  { id: "assignment-helper", label: "AI assignment helper", icon: Sparkles },
   { id: "units", label: "Units", icon: BookOpen },
   { id: "discussions", label: "Discussions", icon: MessageSquare },
   { id: "members", label: "Members", icon: Users },
@@ -997,6 +999,7 @@ function App() {
             </>
           )}
           {view === "guide" && <GuidedStudyPage />}
+          {view === "assignment-helper" && <AssignmentHelperPage />}
           {view === "research" && (
             <>
               <PageHeading
