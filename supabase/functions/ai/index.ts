@@ -211,7 +211,7 @@ const json = (b: unknown, status = 200) =>
 // ---------- limits ----------
 const MAX_MSG_CHARS = 20_000; // research drafts are long
 const MAX_HISTORY = 12;
-const HOURLY_LIMIT = Number(Deno.env.get("AI_HOURLY_LIMIT") ?? 40);
+const HOURLY_LIMIT = Number(Deno.env.get("AI_HOURLY_LIMIT") ?? 200);
 const JURISDICTION = Deno.env.get("AI_DEFAULT_JURISDICTION") ?? "Kenya";
 const CHUNKS_PER_QUERY = 8;
 const CHUNKS_PART = 10; // sections per 'notes' call: the client walks through a transcript part by part
