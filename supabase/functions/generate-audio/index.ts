@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { secretKeys } from "../_shared/keys.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -17,8 +18,8 @@ Deno.serve(async (req) => {
   const url = Deno.env.get("SUPABASE_URL");
   const anon = Deno.env.get("SUPABASE_ANON_KEY");
   const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const token = Deno.env.get("HF_TOKEN");
-  if (!url || !anon || !service || !token) return json({ error: "Audio generation is not configured on the server." }, 503);
+  const tokens = secretKeys("HF_TOKEN");
+  if (!url || !anon || !service || !tokens.length) return json({ error: "Audio generation is not configured on the server." }, 503);
   const authHeader = req.headers.get("Authorization") || "";
   const userClient = createClient(url, anon, { global: { headers: { Authorization: authHeader } } });
   const { data: auth } = await userClient.auth.getUser();
@@ -35,6 +36,7 @@ Deno.serve(async (req) => {
   let generated: Response | null = null;
   let lastDetail = "";
   for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const token = tokens[(attempt - 1) % tokens.length];
     try {
       generated = await fetch(endpoint, {
         method: "POST",
