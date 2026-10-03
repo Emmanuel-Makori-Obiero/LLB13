@@ -42,3 +42,15 @@ grant select, insert, update, delete on public.guided_course_progress to authent
 
 create index if not exists guided_courses_owner_idx on public.guided_courses(owner, updated_at desc);
 create index if not exists guided_progress_course_idx on public.guided_course_progress(course_id, learner, lesson_index);
+
+-- Let the owner choose whether a syllabus is private or visible to Group 13 members.
+alter table public.guided_courses add column if not exists visibility text not null default 'private' check (visibility in ('private','group'));
+
+drop policy if exists "Learners manage own guided courses" on public.guided_courses;
+drop policy if exists "Learners read shared guided courses" on public.guided_courses;
+create policy "Owners manage own guided courses" on public.guided_courses
+  for all to authenticated using (owner = auth.uid()) with check (owner = auth.uid());
+create policy "Members read shared guided courses" on public.guided_courses
+  for select to authenticated using (visibility = 'group');
+
+create index if not exists guided_courses_visibility_idx on public.guided_courses(visibility, updated_at desc);

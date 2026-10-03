@@ -21,6 +21,7 @@ export type GuidedCourse = {
   source_labels: SourceChoice[];
   syllabus: GuideSyllabus;
   progress: number;
+  visibility: "private" | "group";
   updated_at: string;
 };
 export type WrittenCheckpoint = { answer: string; feedback: string; score: number; passed: boolean; missing_points: string[]; next_step: string; updated_at: string };
@@ -184,7 +185,7 @@ export async function listGuideSources(): Promise<SourceChoice[]> {
   ];
 }
 
-export async function createGuidedCourse(subject: string, sources: SourceChoice[], preferences: string, onProgress?: GuideProgress): Promise<GuidedCourse> {
+export async function createGuidedCourse(subject: string, sources: SourceChoice[], preferences: string, visibility: "private" | "group" = "private", onProgress?: GuideProgress): Promise<GuidedCourse> {
   if (!sources.length) throw new Error("Choose at least one book, saved document, or transcript.");
   const docIds: string[] = [];
   for (const source of sources) if (source.kind === "transcript") docIds.push((await transcriptAsDocument(source)).id); else if (source.kind === "document") docIds.push(source.id);
@@ -199,7 +200,7 @@ export async function createGuidedCourse(subject: string, sources: SourceChoice[
   const syllabus = parseJson(final.answer, final.data);
   const user = (await db().auth.getUser()).data.user;
   if (!user) throw new Error("Sign in first.");
-  const { data, error } = await db().from("guided_courses").insert({ owner: user.id, title: `${subject} guided syllabus`, subject, source_document_ids: docIds, source_labels: sources, syllabus, progress: 0 }).select("*").single();
+  const { data, error } = await db().from("guided_courses").insert({ owner: user.id, title: `${subject} guided syllabus`, subject, source_document_ids: docIds, source_labels: sources, syllabus, progress: 0, visibility }).select("*").single();
   if (error || !data) throw new Error(`Could not save the syllabus: ${error?.message ?? "unknown error"}`);
   return data as GuidedCourse;
 }
@@ -214,6 +215,12 @@ export async function getCourseProgress(courseId: string) {
   const { data, error } = await db().from("guided_course_progress").select("lesson_index,status,score,attempts,last_answer").eq("course_id", courseId).order("lesson_index").limit(100);
   if (error) throw new Error("Could not load learning progress.");
   return (data ?? []) as CourseProgress[];
+}
+
+export async function resumeLessonIndex(course: GuidedCourse) {
+  const saved = await getCourseProgress(course.id);
+  const next = course.syllabus.lessons.findIndex((_, index) => saved.find((item) => item.lesson_index === index)?.status !== "completed");
+  return { progress: saved, lessonIndex: next >= 0 ? next : Math.max(0, course.syllabus.lessons.length - 1) };
 }
 
 export async function evaluateWrittenCheckpoint(course: GuidedCourse, lessonIndex: number, answer: string, previous?: WrittenCheckpoint | null) {
