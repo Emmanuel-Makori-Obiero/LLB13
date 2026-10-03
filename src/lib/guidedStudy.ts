@@ -24,6 +24,7 @@ export type GuidedCourse = {
   updated_at: string;
 };
 export type CourseProgress = { lesson_index: number; status: string; score: number | null; attempts: number };
+export type GuideProgress = (message: string) => void;
 
 function db() { if (!supabase) throw new Error("Supabase is not configured."); return supabase; }
 
@@ -67,6 +68,71 @@ async function transcriptAsDocument(choice: SourceChoice) {
   return saveTextMaterial(`${choice.title} (saved transcript)`, text, `Saved transcript: ${choice.title}`);
 }
 
+async function documentChunkCount(id: string) {
+  const { count, error } = await db().from("ai_chunks").select("id", { count: "exact", head: true }).eq("document_id", id);
+  if (error) throw new Error(`Could not inspect document sections.`);
+  return count ?? 0;
+}
+
+async function retryAI(args: Parameters<typeof askAI>[0], onProgress?: GuideProgress): Promise<AIResult> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    try { return await askAI(args); }
+    catch (error) {
+      lastError = error;
+      if (attempt < 3) {
+        onProgress?.(`The AI provider is busy; retrying this stage (${attempt + 1}/3)…`);
+        await new Promise((resolve) => window.setTimeout(resolve, 2500 * (attempt + 1)));
+      }
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("The AI could not complete this stage.");
+}
+
+async function buildSourceDigest(sources: SourceChoice[], docIds: string[], onProgress?: GuideProgress) {
+  const digests: string[] = [];
+  for (const docId of docIds) {
+    const source = sources.find((item) => item.id === docId && item.kind === "document");
+    const count = await documentChunkCount(docId);
+    const parts = Math.max(1, Math.ceil(count / 10));
+    const mode = source?.scope === "library" ? "library" : "materials";
+    const notes: string[] = [];
+    for (let part = 0; part < parts; part += 1) {
+      onProgress?.(`Reading ${source?.title ?? "source"}: section ${part + 1} of ${parts}…`);
+      const result = await retryAI({
+        feature: "notes", mode, docIds: [docId], part, size: 10,
+        messages: [{ role: "user", content: "Create faithful coverage notes for this section. Preserve every rule, definition, authority, example, exception, date and exam warning. Do not invent or skip content." }],
+      }, onProgress);
+      notes.push(result.answer);
+    }
+    for (let i = 0; i < notes.length; i += 4) {
+      onProgress?.(`Compressing ${source?.title ?? "source"}: digest ${Math.floor(i / 4) + 1} of ${Math.ceil(notes.length / 4)}…`);
+      const batch = notes.slice(i, i + 4).join("\n\n--- NEXT SECTION ---\n\n");
+      const compressed = await retryAI({
+        feature: "summarize", mode: "general",
+        messages: [{ role: "user", content: `Compress the following source-grounded coverage notes into a compact chapter/topic map. Keep all distinct legal rules, authorities, examples, exceptions and unresolved [unclear] markers. Do not add facts.\n\n${batch}` }],
+      }, onProgress);
+      digests.push(`SOURCE: ${source?.title ?? docId}\n${compressed.answer}`);
+    }
+  }
+  let digestParts = digests;
+  while (digestParts.join("\n\n=== SOURCE DIGEST ===\n\n").length > 14000 && digestParts.length > 1) {
+    const next: string[] = [];
+    for (let i = 0; i < digestParts.length; i += 4) {
+      onProgress?.(`Compacting the full-book digest: group ${Math.floor(i / 4) + 1} of ${Math.ceil(digestParts.length / 4)}…`);
+      const batch = digestParts.slice(i, i + 4).join("\n\n--- NEXT DIGEST ---\n\n");
+      const compressed = await retryAI({
+        feature: "summarize",
+        mode: "general",
+        messages: [{ role: "user", content: `Compact this study digest while preserving every distinct topic, rule, authority, exception and example. Keep section order and do not add facts.\n\n${batch}` }],
+      }, onProgress);
+      next.push(compressed.answer);
+    }
+    digestParts = next;
+  }
+  return digestParts.join("\n\n=== SOURCE DIGEST ===\n\n");
+}
+
 export async function listGuideSources(): Promise<SourceChoice[]> {
   const [docs, transcripts, materials] = await Promise.all([
     db().from("ai_documents").select("id,title,citation,scope").order("created_at", { ascending: false }).limit(200),
@@ -83,26 +149,19 @@ export async function listGuideSources(): Promise<SourceChoice[]> {
   ];
 }
 
-export async function createGuidedCourse(subject: string, sources: SourceChoice[], preferences: string): Promise<GuidedCourse> {
+export async function createGuidedCourse(subject: string, sources: SourceChoice[], preferences: string, onProgress?: GuideProgress): Promise<GuidedCourse> {
   if (!sources.length) throw new Error("Choose at least one book, saved document, or transcript.");
   const docIds: string[] = [];
   for (const source of sources) if (source.kind === "transcript") docIds.push((await transcriptAsDocument(source)).id); else if (source.kind === "document") docIds.push(source.id);
   const linkedMaterials = sources.filter((source) => source.kind === "material").map((source) => `${source.title}${source.citation ? ` (${source.citation})` : ""}`).join("; ");
-  const prompt = `Create a complete guided law-study syllabus for: ${subject}. Use ONLY the selected source documents. ${linkedMaterials ? `The following Library items are also linked as reference records; use their titles and metadata as context, but do not invent their contents: ${linkedMaterials}.` : ""} ${preferences}\nReturn ONLY valid JSON with no markdown fences in this exact shape: {"overview":"...","lessons":[{"title":"...","objective":"...","explanation":"...","example":"...","sourceFocus":"...","checkpoint":"quiz","quiz":[{"question":"...","options":["...","...","...","..."],"answerIndex":0,"explanation":"..."}]}]}. Create 5 to 8 ordered lessons with concise explanations. Add a short quiz to every lesson, and mark every third lesson as checkpoint exam. Explain before testing; use plain language, story/examples where helpful, and never invent authorities.`;
   const readableSources = sources.filter((source) => source.kind !== "material");
   const mode = readableSources.length === 0 ? "general" : readableSources.every((source) => source.kind === "document" && source.scope === "library") ? "library" : readableSources.some((source) => source.scope === "library") ? "auto" : "materials";
-  let syllabus: GuideSyllabus | null = null;
-  let lastError: unknown;
-  for (let attempt = 0; attempt < 3 && !syllabus; attempt += 1) {
-    try {
-      const result: AIResult = await askAI({ feature: "study_plan", mode, docIds, messages: [{ role: "user", content: prompt }] });
-      syllabus = parseJson(result.answer, result.data);
-    } catch (error) {
-      lastError = error;
-      if (attempt < 2) await new Promise((resolve) => window.setTimeout(resolve, 2500 * (attempt + 1)));
-    }
-  }
-  if (!syllabus) throw new Error(lastError instanceof Error ? lastError.message : "The AI could not create the syllabus after three attempts.");
+  const prompt = `Create a complete guided law-study syllabus for: ${subject}. Use ONLY the source digest below. ${linkedMaterials ? `The following Library items are linked reference records; use their titles and metadata as context, but do not invent their contents: ${linkedMaterials}.` : ""} ${preferences}\nReturn ONLY valid JSON with no markdown fences in this exact shape: {"overview":"...","lessons":[{"title":"...","objective":"...","explanation":"...","example":"...","sourceFocus":"...","checkpoint":"quiz","quiz":[{"question":"...","options":["...","...","...","..."],"answerIndex":0,"explanation":"..."}]}]}. Create 5 to 8 ordered lessons covering the full digest, not just its opening. Add a short quiz to every lesson, and mark every third lesson as checkpoint exam. Explain before testing; use plain language, story/examples where helpful, and never invent authorities.\n\nSOURCE DIGEST:\n`;
+  onProgress?.("Starting a staged read so every source section is covered…");
+  const digest = docIds.length ? await buildSourceDigest(sources, docIds, onProgress) : "No AI-readable document was selected.";
+  onProgress?.("Building the final syllabus from the complete staged digest…");
+  const final = await retryAI({ feature: "study_plan", mode: "general", messages: [{ role: "user", content: `${prompt}${digest}` }] }, onProgress);
+  const syllabus = parseJson(final.answer, final.data);
   const user = (await db().auth.getUser()).data.user;
   if (!user) throw new Error("Sign in first.");
   const { data, error } = await db().from("guided_courses").insert({ owner: user.id, title: `${subject} guided syllabus`, subject, source_document_ids: docIds, source_labels: sources, syllabus, progress: 0 }).select("*").single();
