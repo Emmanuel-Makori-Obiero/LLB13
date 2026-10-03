@@ -27,10 +27,28 @@ export type CourseProgress = { lesson_index: number; status: string; score: numb
 
 function db() { if (!supabase) throw new Error("Supabase is not configured."); return supabase; }
 
-function parseJson(text: string): GuideSyllabus {
-  const candidate = text.match(/\{[\s\S]*\}/)?.[0];
-  if (!candidate) throw new Error("The guide generator did not return a syllabus. Try again.");
-  const raw = JSON.parse(candidate) as Partial<GuideSyllabus>;
+function extractJsonObject(text: string) {
+  const clean = text.replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  try { return JSON.parse(clean) as Partial<GuideSyllabus>; } catch { /* find JSON wrapped in prose */ }
+  for (let start = 0; start < clean.length; start += 1) {
+    if (clean[start] !== "{") continue;
+    let depth = 0; let quoted = false; let escaped = false;
+    for (let i = start; i < clean.length; i += 1) {
+      const char = clean[i];
+      if (escaped) { escaped = false; continue; }
+      if (char === "\\" && quoted) { escaped = true; continue; }
+      if (char === '"') { quoted = !quoted; continue; }
+      if (quoted) continue;
+      if (char === "{") depth += 1;
+      if (char === "}") { depth -= 1; if (depth === 0) { try { return JSON.parse(clean.slice(start, i + 1)) as Partial<GuideSyllabus>; } catch { break; } } }
+    }
+  }
+  return null;
+}
+
+function parseJson(text: string, data?: unknown): GuideSyllabus {
+  const raw = data && typeof data === "object" ? data as Partial<GuideSyllabus> : extractJsonObject(text);
+  if (!raw) throw new Error("The guide generator did not return a syllabus. Try again.");
   const lessons = Array.isArray(raw.lessons) ? raw.lessons : [];
   if (!lessons.length) throw new Error("The guide generator returned no lessons.");
   return { overview: String(raw.overview ?? "A source-grounded guided course."), lessons: lessons.map((lesson) => ({
@@ -70,11 +88,21 @@ export async function createGuidedCourse(subject: string, sources: SourceChoice[
   const docIds: string[] = [];
   for (const source of sources) if (source.kind === "transcript") docIds.push((await transcriptAsDocument(source)).id); else if (source.kind === "document") docIds.push(source.id);
   const linkedMaterials = sources.filter((source) => source.kind === "material").map((source) => `${source.title}${source.citation ? ` (${source.citation})` : ""}`).join("; ");
-  const prompt = `Create a complete guided law-study syllabus for: ${subject}. Use ONLY the selected source documents. ${linkedMaterials ? `The following Library items are also linked as reference records; use their titles and metadata as context, but do not invent their contents: ${linkedMaterials}.` : ""} ${preferences}\nReturn ONLY JSON in this exact shape: {"overview":"...","lessons":[{"title":"...","objective":"...","explanation":"...","example":"...","sourceFocus":"...","checkpoint":"quiz","quiz":[{"question":"...","options":["...","...","...","..."],"answerIndex":0,"explanation":"..."}]}]}. Create 6 to 10 ordered lessons. Add a short quiz to every lesson, and mark every third lesson as checkpoint exam. Explain before testing; use plain language, story/examples where helpful, and never invent authorities.`;
+  const prompt = `Create a complete guided law-study syllabus for: ${subject}. Use ONLY the selected source documents. ${linkedMaterials ? `The following Library items are also linked as reference records; use their titles and metadata as context, but do not invent their contents: ${linkedMaterials}.` : ""} ${preferences}\nReturn ONLY valid JSON with no markdown fences in this exact shape: {"overview":"...","lessons":[{"title":"...","objective":"...","explanation":"...","example":"...","sourceFocus":"...","checkpoint":"quiz","quiz":[{"question":"...","options":["...","...","...","..."],"answerIndex":0,"explanation":"..."}]}]}. Create 5 to 8 ordered lessons with concise explanations. Add a short quiz to every lesson, and mark every third lesson as checkpoint exam. Explain before testing; use plain language, story/examples where helpful, and never invent authorities.`;
   const readableSources = sources.filter((source) => source.kind !== "material");
   const mode = readableSources.length === 0 ? "general" : readableSources.every((source) => source.kind === "document" && source.scope === "library") ? "library" : readableSources.some((source) => source.scope === "library") ? "auto" : "materials";
-  const result: AIResult = await askAI({ feature: "study_plan", mode, docIds, messages: [{ role: "user", content: prompt }] });
-  const syllabus = parseJson(result.answer);
+  let syllabus: GuideSyllabus | null = null;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3 && !syllabus; attempt += 1) {
+    try {
+      const result: AIResult = await askAI({ feature: "study_plan", mode, docIds, messages: [{ role: "user", content: prompt }] });
+      syllabus = parseJson(result.answer, result.data);
+    } catch (error) {
+      lastError = error;
+      if (attempt < 2) await new Promise((resolve) => window.setTimeout(resolve, 2500 * (attempt + 1)));
+    }
+  }
+  if (!syllabus) throw new Error(lastError instanceof Error ? lastError.message : "The AI could not create the syllabus after three attempts.");
   const user = (await db().auth.getUser()).data.user;
   if (!user) throw new Error("Sign in first.");
   const { data, error } = await db().from("guided_courses").insert({ owner: user.id, title: `${subject} guided syllabus`, subject, source_document_ids: docIds, source_labels: sources, syllabus, progress: 0 }).select("*").single();

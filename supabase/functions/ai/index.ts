@@ -267,7 +267,8 @@ const FEATURES: Record<
     task: "Give feedback on the student's draft: structure, legal accuracy, use of authority, analysis depth, and 3 concrete improvements. Do not rewrite the whole essay. Also identify specific passages with AI-like signals such as generic claims, repeated transitions, vague abstractions, unnatural uniformity or a voice mismatch; explain these are signals rather than proof, and give a humanisation exercise for each. Ask the student to restate one passage in their own words before offering a model alternative.",
   },
   study_plan: {
-    task: "Create a realistic study plan from the student's constraints, prioritising high-yield topics and active recall.",
+    json: true,
+    task: "Create a source-grounded guided law-study syllabus. Return ONLY valid JSON matching the shape requested by the student; no markdown fences, no introductory prose, and no trailing commentary.",
   },
   moot: {
     task: "Help prepare a moot step by step: give one issue or drill at a time, ask the student to respond, then correct and continue. Cover strongest arguments, authorities, bench questions and rebuttals without dumping a complete submission.",
@@ -704,6 +705,8 @@ Deno.serve(async (req) => {
     const r = await callChain(msgs, {
       temperature: strict ? 0.1 : 0.3,
       json: FEATURES[feature].json,
+      fast: feature === "study_plan",
+      maxTokens: feature === "study_plan" ? 7000 : undefined,
     });
     await admin.from("ai_usage").insert({
       user_id: u.user.id,
