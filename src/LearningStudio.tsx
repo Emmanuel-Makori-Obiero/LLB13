@@ -17,10 +17,7 @@ import "./learning-studio.css";
 
 type Doc = { id: string; title: string; scope: string };
 type Mode = "podcast" | "video";
-const isBookSource = (doc: Doc) =>
-  !/(lecture transcript|recording|transcript|audio recording|meeting recording)\s*\)?$/i.test(
-    doc.title,
-  );
+const isBookSource = (_doc: Doc) => true;
 
 const perspectives = [
   "Act as a careful Kenyan law lecturer. Identify the governing rule, authorities, reasoning, and any uncertainty in the selected source.",
@@ -538,16 +535,16 @@ export default function LearningStudio() {
           )}
         </div>
         <aside className="studio-sources">
-          <div className="section-label">Choose source books</div>
+          <div className="section-label">Choose source books or transcripts</div>
           <p className="field-hint">
-            The panel will only use selected AI-ready documents.
+            Select any AI-ready book, document, or saved transcript.
           </p>
           <label className="secondary-button studio-upload-source">
             <Upload size={14} /> {uploadingSource ? "Uploading…" : "Upload book"}
             <input type="file" accept=".pdf,.doc,.docx,.txt,.md" disabled={uploadingSource} onChange={(event) => void uploadSourceBook(event.target.files?.[0])} />
           </label>
           {docs.length === 0 ? (
-            <div className="empty">No AI-ready books yet. Upload one above.</div>
+            <div className="empty">No AI-ready sources yet. Upload a book or finish a transcript above.</div>
           ) : (
             docs.map((doc) => (
               <label
@@ -559,7 +556,7 @@ export default function LearningStudio() {
                   checked={selected.includes(doc.id)}
                   onChange={() => toggle(doc.id)}
                 />
-                <span>{doc.title}</span>
+                <span>{doc.title}<small>{/transcript|recording/i.test(doc.title) ? "Saved transcript" : "Book or document"}</small></span>
               </label>
             ))
           )}
