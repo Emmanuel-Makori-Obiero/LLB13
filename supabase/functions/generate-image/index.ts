@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { secretKeys } from "../_shared/keys.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -21,8 +22,8 @@ Deno.serve(async (req) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const hfToken = Deno.env.get("HF_TOKEN");
-  if (!supabaseUrl || !anonKey || !serviceRoleKey || !hfToken) {
+  const hfTokens = secretKeys("HF_TOKEN");
+  if (!supabaseUrl || !anonKey || !serviceRoleKey || !hfTokens.length) {
     return json({ error: "Image generation is not configured on the server." }, 503);
   }
 
@@ -48,22 +49,19 @@ Deno.serve(async (req) => {
   const height = Math.min(1536, Math.max(512, Number(body.height) || 1024));
   const endpoint = Deno.env.get("HF_IMAGE_URL") || `https://router.huggingface.co/hf-inference/models/${model}`;
 
-  const generated = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${hfToken}`,
-      "Content-Type": "application/json",
-      Accept: "image/png, application/json",
-    },
-    body: JSON.stringify({
-      inputs: prompt,
-      parameters: { width, height, num_inference_steps: 4 },
-    }),
-  });
-  if (!generated.ok) {
-    const detail = (await generated.text()).slice(0, 1200);
-    return json({ error: `Hugging Face generation failed (${generated.status}).`, detail }, 502);
+  let generated: Response | null = null;
+  let detail = "";
+  for (let attempt = 0; attempt < hfTokens.length; attempt += 1) {
+    generated = await fetch(endpoint, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${hfTokens[attempt]}`, "Content-Type": "application/json", Accept: "image/png, application/json" },
+      body: JSON.stringify({ inputs: prompt, parameters: { width, height, num_inference_steps: 4 } }),
+    });
+    if (generated.ok) break;
+    detail = (await generated.text()).slice(0, 1200);
+    if (![401, 403, 408, 429, 500, 502, 503, 504].includes(generated.status)) break;
   }
+  if (!generated?.ok) return json({ error: `Hugging Face generation failed (${generated?.status || "network"}).`, detail }, 502);
   const contentType = generated.headers.get("content-type") || "image/png";
   if (!contentType.startsWith("image/")) {
     return json({ error: "Hugging Face returned a non-image response.", detail: (await generated.text()).slice(0, 1200) }, 502);

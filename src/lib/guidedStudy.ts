@@ -1,0 +1,102 @@
+import { supabase } from "../data/repository";
+import { askAI, saveTextMaterial, type AIResult } from "./ai";
+
+export type SourceChoice = { id: string; title: string; kind: "document" | "transcript"; citation?: string | null };
+export type GuideLesson = {
+  title: string;
+  objective: string;
+  explanation: string;
+  example: string;
+  sourceFocus?: string;
+  quiz: { question: string; options: string[]; answerIndex: number; explanation: string }[];
+  checkpoint?: "quiz" | "exam";
+};
+export type GuideSyllabus = { overview: string; lessons: GuideLesson[] };
+export type GuidedCourse = {
+  id: string;
+  owner: string;
+  title: string;
+  subject: string;
+  source_document_ids: string[];
+  source_labels: SourceChoice[];
+  syllabus: GuideSyllabus;
+  progress: number;
+  updated_at: string;
+};
+export type CourseProgress = { lesson_index: number; status: string; score: number | null; attempts: number };
+
+function db() { if (!supabase) throw new Error("Supabase is not configured."); return supabase; }
+
+function parseJson(text: string): GuideSyllabus {
+  const candidate = text.match(/\{[\s\S]*\}/)?.[0];
+  if (!candidate) throw new Error("The guide generator did not return a syllabus. Try again.");
+  const raw = JSON.parse(candidate) as Partial<GuideSyllabus>;
+  const lessons = Array.isArray(raw.lessons) ? raw.lessons : [];
+  if (!lessons.length) throw new Error("The guide generator returned no lessons.");
+  return { overview: String(raw.overview ?? "A source-grounded guided course."), lessons: lessons.map((lesson) => ({
+    title: String(lesson.title ?? "Lesson"), objective: String(lesson.objective ?? "Understand the key rule."),
+    explanation: String(lesson.explanation ?? ""), example: String(lesson.example ?? ""), sourceFocus: lesson.sourceFocus ? String(lesson.sourceFocus) : undefined,
+    checkpoint: lesson.checkpoint === "exam" ? "exam" : "quiz",
+    quiz: Array.isArray(lesson.quiz) ? lesson.quiz.filter((q) => q && typeof q.question === "string" && Array.isArray(q.options)).map((q) => ({ question: q.question, options: q.options.map(String), answerIndex: Number(q.answerIndex) || 0, explanation: String(q.explanation ?? "") })) : [],
+  })) };
+}
+
+async function transcriptAsDocument(choice: SourceChoice) {
+  const { data, error } = await db().from("transcript_chunks").select("idx,text").eq("transcript_id", choice.id).order("idx").limit(3000);
+  if (error) throw new Error(`Could not load transcript ${choice.title}.`);
+  const text = (data ?? []).map((row) => row.text).join("\n\n");
+  if (text.trim().length < 50) throw new Error(`${choice.title} has no usable transcript text yet.`);
+  return saveTextMaterial(`${choice.title} (saved transcript)`, text, `Saved transcript: ${choice.title}`);
+}
+
+export async function listGuideSources(): Promise<SourceChoice[]> {
+  const [docs, transcripts] = await Promise.all([
+    db().from("ai_documents").select("id,title,citation,scope").order("created_at", { ascending: false }).limit(200),
+    db().from("transcripts").select("id,title,unit,status,created_at").eq("status", "done").order("created_at", { ascending: false }).limit(200),
+  ]);
+  if (docs.error) throw new Error("Could not load saved AI documents.");
+  if (transcripts.error) throw new Error("Could not load saved transcripts.");
+  return [
+    ...(docs.data ?? []).map((d) => ({ id: d.id, title: d.title, kind: "document" as const, citation: d.citation })),
+    ...(transcripts.data ?? []).map((t) => ({ id: t.id, title: t.title, kind: "transcript" as const, citation: t.unit ? `Transcript · ${t.unit}` : "Saved transcript" })),
+  ];
+}
+
+export async function createGuidedCourse(subject: string, sources: SourceChoice[], preferences: string): Promise<GuidedCourse> {
+  if (!sources.length) throw new Error("Choose at least one book, saved document, or transcript.");
+  const docIds: string[] = [];
+  for (const source of sources) docIds.push(source.kind === "transcript" ? (await transcriptAsDocument(source)).id : source.id);
+  const prompt = `Create a complete guided law-study syllabus for: ${subject}. Use ONLY the selected source documents. ${preferences}\nReturn ONLY JSON in this exact shape: {"overview":"...","lessons":[{"title":"...","objective":"...","explanation":"...","example":"...","sourceFocus":"...","checkpoint":"quiz","quiz":[{"question":"...","options":["...","...","...","..."],"answerIndex":0,"explanation":"..."}]}]}. Create 6 to 10 ordered lessons. Add a short quiz to every lesson, and mark every third lesson as checkpoint exam. Explain before testing; use plain language, story/examples where helpful, and never invent authorities.`;
+  const result: AIResult = await askAI({ feature: "study_plan", mode: "materials", docIds, messages: [{ role: "user", content: prompt }] });
+  const syllabus = parseJson(result.answer);
+  const user = (await db().auth.getUser()).data.user;
+  if (!user) throw new Error("Sign in first.");
+  const { data, error } = await db().from("guided_courses").insert({ owner: user.id, title: `${subject} guided syllabus`, subject, source_document_ids: docIds, source_labels: sources, syllabus, progress: 0 }).select("*").single();
+  if (error || !data) throw new Error(`Could not save the syllabus: ${error?.message ?? "unknown error"}`);
+  return data as GuidedCourse;
+}
+
+export async function listGuidedCourses() {
+  const { data, error } = await db().from("guided_courses").select("*").order("updated_at", { ascending: false }).limit(50);
+  if (error) throw new Error("Could not load your guided syllabi.");
+  return (data ?? []) as GuidedCourse[];
+}
+
+export async function getCourseProgress(courseId: string) {
+  const { data, error } = await db().from("guided_course_progress").select("lesson_index,status,score,attempts").eq("course_id", courseId).order("lesson_index").limit(100);
+  if (error) throw new Error("Could not load learning progress.");
+  return (data ?? []) as CourseProgress[];
+}
+
+export async function saveLessonProgress(course: GuidedCourse, lessonIndex: number, score: number, answers: number[]) {
+  const user = (await db().auth.getUser()).data.user;
+  if (!user) throw new Error("Sign in first.");
+  const current = await db().from("guided_course_progress").select("attempts").eq("course_id", course.id).eq("learner", user.id).eq("lesson_index", lessonIndex).maybeSingle();
+  const attempts = Number(current.data?.attempts ?? 0) + 1;
+  const status = score >= 70 ? "completed" : "repeat";
+  const { error } = await db().from("guided_course_progress").upsert({ course_id: course.id, learner: user.id, lesson_index: lessonIndex, status, score, attempts, last_answer: answers, completed_at: status === "completed" ? new Date().toISOString() : null, updated_at: new Date().toISOString() }, { onConflict: "course_id,learner,lesson_index" });
+  if (error) throw new Error("Could not save this checkpoint.");
+  const progress = Math.round(((await getCourseProgress(course.id)).filter((p) => p.status === "completed").length / Math.max(1, course.syllabus.lessons.length)) * 100);
+  await db().from("guided_courses").update({ progress, updated_at: new Date().toISOString() }).eq("id", course.id).eq("owner", user.id);
+  return { progress, status };
+}

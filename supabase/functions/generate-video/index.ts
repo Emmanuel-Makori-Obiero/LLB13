@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { providerChain, submitVideo } from "./video-providers.ts";
+import { secretKeys } from "../_shared/keys.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -30,16 +31,17 @@ Deno.serve(async (req) => {
   if (prompt.length < 12) return response({ error: "Describe the video scene in at least 12 characters." }, 400);
   if (prompt.length > 2500) return response({ error: "Prompt is too long." }, 400);
   const seed = Number.isFinite(body.seed) ? Number(body.seed) : -1;
-  const headers: Record<string, string> = {};
-  const hfToken = Deno.env.get("HF_TOKEN");
-  if (hfToken) headers.Authorization = `Bearer ${hfToken}`;
+  const hfTokens = secretKeys("HF_TOKEN");
   const admin = createClient(url, service);
   const providers = providerChain();
 
   const attempts: Array<{ provider: string; error: string }> = [];
   let selected: Awaited<ReturnType<typeof submitVideo>> | null = null;
-  for (const provider of providers) {
+  for (const [providerIndex, provider] of providers.entries()) {
     try {
+      const headers: Record<string, string> = {};
+      const hfToken = hfTokens[providerIndex % Math.max(1, hfTokens.length)];
+      if (hfToken) headers.Authorization = `Bearer ${hfToken}`;
       selected = await submitVideo(provider, prompt, seed, headers);
       break;
     } catch (error) {

@@ -56,3 +56,26 @@ The worker requires `SUPABASE_SERVICE_ROLE_KEY`. This key bypasses Row Level Sec
 Run one worker per GPU unless you have explicitly designed a queue for more. Add a process supervisor such as systemd or Docker restart policy after the one-project test works. Keep enough disk for intermediate clips. The worker writes `failed` status and a short error into `film_projects.continuity` when a job fails; inspect ComfyUI logs for model/node failures.
 
 This implementation does not bypass provider quotas, model licenses, or content restrictions. Review the selected model license before commercial deployment, particularly for LTX and Hunyuan variants.
+
+## Optional two-speaker audio worker
+
+`tts_worker.py` creates a downloadable multi-voice podcast from `HOST:` and `TUTOR:` lines using self-hosted Piper and FFmpeg. This is the dependable free-first route for two different voices; hosted free TTS APIs are quota- or trial-limited and do not share one universal speaker schema.
+
+Install Piper and download two voices:
+
+```bash
+python -m pip install piper-tts
+python -m piper.download_voices en_US-lessac-medium
+python -m piper.download_voices en_GB-alan-medium
+```
+
+Then create the final file:
+
+```bash
+python worker/tts_worker.py podcast-script.txt \
+  --output podcast.mp3 \
+  --host-voice en_US-lessac-medium \
+  --tutor-voice en_GB-alan-medium
+```
+
+To connect this worker to the app, put an authenticated HTTPS queue in front of it. The queue should accept a script/job ID, run the worker, upload the result to Supabase Storage, and update the media asset row. Do not expose Piper or provider tokens directly to the browser.

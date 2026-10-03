@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { EXTRA_FEATURES, handleExtra } from "./exam.ts";
+import { secretKeys } from "../_shared/keys.ts";
 
 // ===== providers (fallback chain) =====
 // Free-tier fallback chain. Every provider speaks the OpenAI chat-completions format.
@@ -131,102 +132,66 @@ export async function callChain(
   const attempts: Attempt[] = [];
 
   for (const ent of chain()) {
-    const key = Deno.env.get(ent.keyEnv);
-    const eid = id(ent);
-    if (!key) continue;
-    if ((cooldownUntil.get(eid) ?? 0) > Date.now()) {
-      attempts.push({ id: eid, status: "cooldown" });
-      continue;
-    }
-    if (Date.now() - started > deadline - 8_000) {
-      attempts.push({ id: eid, status: "deadline" });
-      break;
-    }
-
-    // Try with high reasoning first; if the provider/model rejects the parameter (400), retry once without it.
-    // opts.fast skips the high-reasoning attempt (used by the floating guide, which must answer quickly).
-    for (const withReasoning of ent.reasoning === "none" || opts.fast
-      ? [false]
-      : [true, false]) {
-      const body: Record<string, unknown> = {
-        model: ent.model,
-        messages: ent.noSystem ? mergeSystem(messages) : messages,
-        temperature: opts.temperature ?? 0.2,
-        max_tokens: ent.maxTokens ?? opts.maxTokens ?? 4096,
-      };
-      if (withReasoning) {
-        if (ent.reasoning === "openrouter") body.reasoning = { effort: "high" };
-        if (ent.reasoning === "effort") body.reasoning_effort = "high";
+    const keys = secretKeys(ent.keyEnv);
+    for (const [keyIndex, key] of keys.entries()) {
+      const eid = `${id(ent)}#${keyIndex + 1}`;
+      if ((cooldownUntil.get(eid) ?? 0) > Date.now()) {
+        attempts.push({ id: eid, status: "cooldown" });
+        continue;
       }
-
-      try {
-        const res = await fetch(`${ent.baseUrl}/chat/completions`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${key}`,
-            ...(ent.provider === "openrouter"
-              ? { "X-Title": "Group 13 Hub" }
-              : {}),
-          },
-          body: JSON.stringify(body),
-          signal: AbortSignal.timeout(
-            Math.min(
-              perCall,
-              Math.max(5_000, deadline - (Date.now() - started)),
-            ),
-          ),
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          const text = clean(data?.choices?.[0]?.message?.content ?? "");
-          if (text) {
-            attempts.push({ id: eid, status: "ok" });
-            return { text, provider: ent.provider, model: ent.model, attempts };
+      if (Date.now() - started > deadline - 8_000) {
+        attempts.push({ id: eid, status: "deadline" });
+        break;
+      }
+      // Try high reasoning first; if rejected, retry once without it.
+      for (const withReasoning of ent.reasoning === "none" || opts.fast ? [false] : [true, false]) {
+        const body: Record<string, unknown> = {
+          model: ent.model,
+          messages: ent.noSystem ? mergeSystem(messages) : messages,
+          temperature: opts.temperature ?? 0.2,
+          max_tokens: ent.maxTokens ?? opts.maxTokens ?? 4096,
+        };
+        if (withReasoning) {
+          if (ent.reasoning === "openrouter") body.reasoning = { effort: "high" };
+          if (ent.reasoning === "effort") body.reasoning_effort = "high";
+        }
+        try {
+          const res = await fetch(`${ent.baseUrl}/chat/completions`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}`, ...(ent.provider === "openrouter" ? { "X-Title": "Group 13 Hub" } : {}) },
+            body: JSON.stringify(body),
+            signal: AbortSignal.timeout(Math.min(perCall, Math.max(5_000, deadline - (Date.now() - started)))),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const text = clean(data?.choices?.[0]?.message?.content ?? "");
+            if (text) {
+              attempts.push({ id: eid, status: "ok" });
+              return { text, provider: ent.provider, model: ent.model, attempts };
+            }
+            if (withReasoning) continue;
+            attempts.push({ id: eid, status: "empty" });
+            cooldownUntil.set(eid, Date.now() + 60_000);
+            break;
           }
-          if (withReasoning) continue; // reasoning may have eaten the token budget: retry without it
-          attempts.push({ id: eid, status: "empty" });
-          cooldownUntil.set(eid, Date.now() + 60_000);
+          if (res.status === 400 && withReasoning) continue;
+          const retryAfter = Number(res.headers.get("retry-after")) || 0;
+          const cool = res.status === 429 ? Math.max(retryAfter * 1000, 60_000) : res.status === 401 || res.status === 403 ? 15 * 60_000 : res.status === 404 || res.status === 400 ? 30 * 60_000 : 45_000;
+          cooldownUntil.set(eid, Date.now() + cool);
+          let detail: string | undefined;
+          if (Deno.env.get("AI_DEBUG")) detail = (await res.text().catch(() => "")).slice(0, 240);
+          else await res.body?.cancel();
+          attempts.push({ id: eid, status: String(res.status), ...(detail ? { detail } : {}) });
+          break;
+        } catch (err) {
+          cooldownUntil.set(eid, Date.now() + 45_000);
+          attempts.push({ id: eid, status: err instanceof DOMException ? "timeout" : "network" });
           break;
         }
-
-        if (res.status === 400 && withReasoning) continue; // retry same model without reasoning params
-
-        const retryAfter = Number(res.headers.get("retry-after")) || 0;
-        const cool =
-          res.status === 429
-            ? Math.max(retryAfter * 1000, 60_000)
-            : res.status === 401 || res.status === 403
-              ? 15 * 60_000
-              : res.status === 404 || res.status === 400
-                ? 30 * 60_000 // model ID gone / unsupported
-                : 45_000; // 5xx, 408 etc.
-        cooldownUntil.set(eid, Date.now() + cool);
-        // Set the secret AI_DEBUG=1 to see the first part of each provider's error message in `attempts`.
-        let detail: string | undefined;
-        if (Deno.env.get("AI_DEBUG"))
-          detail = (await res.text().catch(() => "")).slice(0, 240);
-        else await res.body?.cancel();
-        attempts.push({
-          id: eid,
-          status: String(res.status),
-          ...(detail ? { detail } : {}),
-        });
-        break;
-      } catch (err) {
-        cooldownUntil.set(eid, Date.now() + 45_000);
-        attempts.push({
-          id: eid,
-          status: err instanceof DOMException ? "timeout" : "network",
-        });
-        break;
       }
     }
   }
-  throw Object.assign(new Error("All AI providers are busy or unavailable"), {
-    attempts,
-  });
+  throw Object.assign(new Error("All AI providers are busy or unavailable"), { attempts });
 }
 
 // ===== handler =====

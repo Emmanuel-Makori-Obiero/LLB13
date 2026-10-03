@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { bearerHeaders } from "../_shared/keys.ts";
 import { providerChain, submitVideo } from "./video-providers.ts";
 
 const cors = {
@@ -56,9 +57,7 @@ Deno.serve(async (req) => {
   const metadata = (asset.metadata || {}) as Record<string, unknown>;
   const space = String(metadata.space || "https://openking-wan2-video-generation.hf.space").replace(/\/$/, "");
   const apiName = String(metadata.provider_api || "generate_video");
-  const headers: Record<string, string> = {};
-  const hfToken = Deno.env.get("HF_TOKEN");
-  if (hfToken) headers.Authorization = `Bearer ${hfToken}`;
+  const headers: Record<string, string> = bearerHeaders("HF_TOKEN");
   const retryProvider = async () => {
     const attempted = new Set<string>([
       ...((Array.isArray(metadata.fallback_attempts) ? metadata.fallback_attempts : []) as Array<{ provider?: string }>).map((item) => item.provider || ""),
