@@ -270,6 +270,10 @@ const FEATURES: Record<
     json: true,
     task: "Create a source-grounded guided law-study syllabus. Return ONLY valid JSON matching the shape requested by the student; no markdown fences, no introductory prose, and no trailing commentary.",
   },
+  kaizen_check: {
+    json: true,
+    task: 'Evaluate the student’s typed answer as a Kaizen learning checkpoint. Return ONLY JSON: {"score":0,"passed":false,"feedback":"...","missing_points":["..."],"next_step":"..."}. Score for legal accuracy, use of the supplied lesson/source, reasoning and application—not grammar. Be constructive, identify one improvement at a time, and never invent authorities.',
+  },
   moot: {
     task: "Help prepare a moot step by step: give one issue or drill at a time, ask the student to respond, then correct and continue. Cover strongest arguments, authorities, bench questions and rebuttals without dumping a complete submission.",
   },

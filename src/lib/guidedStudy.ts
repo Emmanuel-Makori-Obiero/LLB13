@@ -23,7 +23,8 @@ export type GuidedCourse = {
   progress: number;
   updated_at: string;
 };
-export type CourseProgress = { lesson_index: number; status: string; score: number | null; attempts: number };
+export type WrittenCheckpoint = { answer: string; feedback: string; score: number; passed: boolean; missing_points: string[]; next_step: string; updated_at: string };
+export type CourseProgress = { lesson_index: number; status: string; score: number | null; attempts: number; last_answer?: WrittenCheckpoint | null };
 export type GuideProgress = (message: string) => void;
 
 function db() { if (!supabase) throw new Error("Supabase is not configured."); return supabase; }
@@ -176,9 +177,29 @@ export async function listGuidedCourses() {
 }
 
 export async function getCourseProgress(courseId: string) {
-  const { data, error } = await db().from("guided_course_progress").select("lesson_index,status,score,attempts").eq("course_id", courseId).order("lesson_index").limit(100);
+  const { data, error } = await db().from("guided_course_progress").select("lesson_index,status,score,attempts,last_answer").eq("course_id", courseId).order("lesson_index").limit(100);
   if (error) throw new Error("Could not load learning progress.");
   return (data ?? []) as CourseProgress[];
+}
+
+export async function evaluateWrittenCheckpoint(course: GuidedCourse, lessonIndex: number, answer: string, previous?: WrittenCheckpoint | null) {
+  const lesson = course.syllabus.lessons[lessonIndex];
+  if (!lesson || answer.trim().length < 20) throw new Error("Write at least a few sentences so the tutor can evaluate your reasoning.");
+  const readable = course.source_labels.filter((source) => source.kind !== "material");
+  const sourceMode = !course.source_document_ids.length ? "general" : readable.length > 0 && readable.every((source) => source.kind === "document" && source.scope === "library") ? "library" : "materials";
+  const prior = previous ? `\nPrevious typed answer: ${previous.answer}\nPrevious checkpoint feedback: ${previous.feedback}\nPrevious missing points: ${previous.missing_points.join("; ")}` : "";
+  const result = await retryAI({ feature: "kaizen_check", mode: sourceMode, docIds: course.source_document_ids, messages: [{ role: "user", content: `Lesson: ${lesson.title}\nObjective: ${lesson.objective}\nTeaching output:\n${lesson.explanation}\n\nStudent typed answer:\n${answer.trim()}${prior}\n\nEvaluate this answer as the written Kaizen checkpoint. Return only the requested JSON.` }] });
+  const raw = result.data && typeof result.data === "object" ? result.data as Record<string, unknown> : {};
+  const score = Math.max(0, Math.min(100, Number(raw.score) || 0));
+  const checkpoint: WrittenCheckpoint = { answer: answer.trim(), feedback: String(raw.feedback ?? result.answer), score, passed: Boolean(raw.passed) || score >= 70, missing_points: Array.isArray(raw.missing_points) ? raw.missing_points.map(String) : [], next_step: String(raw.next_step ?? "Rewrite the answer once using the feedback."), updated_at: new Date().toISOString() };
+  const user = (await db().auth.getUser()).data.user;
+  if (!user) throw new Error("Sign in first.");
+  const current = await db().from("guided_course_progress").select("attempts").eq("course_id", course.id).eq("learner", user.id).eq("lesson_index", lessonIndex).maybeSingle();
+  const { error } = await db().from("guided_course_progress").upsert({ course_id: course.id, learner: user.id, lesson_index: lessonIndex, status: checkpoint.passed ? "completed" : "repeat", score: checkpoint.score, attempts: Number(current.data?.attempts ?? 0) + 1, last_answer: checkpoint, completed_at: checkpoint.passed ? new Date().toISOString() : null, updated_at: checkpoint.updated_at }, { onConflict: "course_id,learner,lesson_index" });
+  if (error) throw new Error("Could not save your written checkpoint.");
+  const progress = Math.round(((await getCourseProgress(course.id)).filter((p) => p.status === "completed").length / Math.max(1, course.syllabus.lessons.length)) * 100);
+  await db().from("guided_courses").update({ progress, updated_at: checkpoint.updated_at }).eq("id", course.id).eq("owner", user.id);
+  return { checkpoint, progress };
 }
 
 export async function saveLessonProgress(course: GuidedCourse, lessonIndex: number, score: number, answers: number[]) {
