@@ -1,7 +1,7 @@
 import { supabase } from "../data/repository";
 import { askAI, saveTextMaterial, type AIResult } from "./ai";
 
-export type SourceChoice = { id: string; title: string; kind: "document" | "transcript"; citation?: string | null };
+export type SourceChoice = { id: string; title: string; kind: "document" | "transcript"; citation?: string | null; scope?: "user" | "library" };
 export type GuideLesson = {
   title: string;
   objective: string;
@@ -57,8 +57,8 @@ export async function listGuideSources(): Promise<SourceChoice[]> {
   if (docs.error) throw new Error("Could not load saved AI documents.");
   if (transcripts.error) throw new Error("Could not load saved transcripts.");
   return [
-    ...(docs.data ?? []).map((d) => ({ id: d.id, title: d.title, kind: "document" as const, citation: d.citation })),
-    ...(transcripts.data ?? []).map((t) => ({ id: t.id, title: t.title, kind: "transcript" as const, citation: t.unit ? `Transcript · ${t.unit}` : "Saved transcript" })),
+    ...(docs.data ?? []).map((d) => ({ id: d.id, title: d.title, kind: "document" as const, citation: d.citation, scope: d.scope === "library" ? "library" as const : "user" as const })),
+    ...(transcripts.data ?? []).map((t) => ({ id: t.id, title: t.title, kind: "transcript" as const, citation: t.unit ? `Transcript · ${t.unit}` : "Saved transcript", scope: "user" as const })),
   ];
 }
 
@@ -67,7 +67,8 @@ export async function createGuidedCourse(subject: string, sources: SourceChoice[
   const docIds: string[] = [];
   for (const source of sources) docIds.push(source.kind === "transcript" ? (await transcriptAsDocument(source)).id : source.id);
   const prompt = `Create a complete guided law-study syllabus for: ${subject}. Use ONLY the selected source documents. ${preferences}\nReturn ONLY JSON in this exact shape: {"overview":"...","lessons":[{"title":"...","objective":"...","explanation":"...","example":"...","sourceFocus":"...","checkpoint":"quiz","quiz":[{"question":"...","options":["...","...","...","..."],"answerIndex":0,"explanation":"..."}]}]}. Create 6 to 10 ordered lessons. Add a short quiz to every lesson, and mark every third lesson as checkpoint exam. Explain before testing; use plain language, story/examples where helpful, and never invent authorities.`;
-  const result: AIResult = await askAI({ feature: "study_plan", mode: "materials", docIds, messages: [{ role: "user", content: prompt }] });
+  const mode = sources.every((source) => source.kind === "document" && source.scope === "library") ? "library" : sources.some((source) => source.scope === "library") ? "auto" : "materials";
+  const result: AIResult = await askAI({ feature: "study_plan", mode, docIds, messages: [{ role: "user", content: prompt }] });
   const syllabus = parseJson(result.answer);
   const user = (await db().auth.getUser()).data.user;
   if (!user) throw new Error("Sign in first.");
