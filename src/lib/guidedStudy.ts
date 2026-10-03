@@ -48,17 +48,51 @@ function extractJsonObject(text: string) {
   return null;
 }
 
-function parseJson(text: string, data?: unknown): GuideSyllabus {
-  const raw = data && typeof data === "object" ? data as Partial<GuideSyllabus> : extractJsonObject(text);
-  if (!raw) throw new Error("The guide generator did not return a syllabus. Try again.");
+function normalizeSyllabus(raw: unknown): Partial<GuideSyllabus> | null {
+  if (!raw || typeof raw !== "object") return null;
+  const value = raw as Record<string, unknown>;
+  if (Array.isArray(value.lessons)) return value as Partial<GuideSyllabus>;
+  for (const key of ["syllabus", "course", "data", "result"]) {
+    const nested = normalizeSyllabus(value[key]);
+    if (nested) return nested;
+  }
+  for (const key of ["modules", "sections", "topics", "chapters"]) {
+    if (!Array.isArray(value[key])) continue;
+    return { overview: String(value.overview ?? value.summary ?? "A source-grounded guided course."), lessons: value[key] as GuideLesson[] };
+  }
+  return null;
+}
+
+function parseSyllabus(text: string, data?: unknown): GuideSyllabus | null {
+  const raw = normalizeSyllabus(data) ?? normalizeSyllabus(extractJsonObject(text));
+  if (!raw) return null;
   const lessons = Array.isArray(raw.lessons) ? raw.lessons : [];
-  if (!lessons.length) throw new Error("The guide generator returned no lessons.");
-  return { overview: String(raw.overview ?? "A source-grounded guided course."), lessons: lessons.map((lesson) => ({
-    title: String(lesson.title ?? "Lesson"), objective: String(lesson.objective ?? "Understand the key rule."),
-    explanation: String(lesson.explanation ?? ""), example: String(lesson.example ?? ""), sourceFocus: lesson.sourceFocus ? String(lesson.sourceFocus) : undefined,
-    checkpoint: lesson.checkpoint === "exam" ? "exam" : "quiz",
-    quiz: Array.isArray(lesson.quiz) ? lesson.quiz.filter((q) => q && typeof q.question === "string" && Array.isArray(q.options)).map((q) => ({ question: q.question, options: q.options.map(String), answerIndex: Number(q.answerIndex) || 0, explanation: String(q.explanation ?? "") })) : [],
-  })) };
+  if (!lessons.length) return null;
+  return { overview: String(raw.overview ?? "A source-grounded guided course."), lessons: lessons.map((lesson) => {
+    const item = (lesson && typeof lesson === "object" ? lesson : {}) as Partial<GuideLesson> & { summary?: unknown; content?: unknown };
+    const quiz = Array.isArray(item.quiz) ? item.quiz : [];
+    return {
+    title: String(item.title ?? "Lesson"), objective: String(item.objective ?? "Understand the key rule."),
+    explanation: String(item.explanation ?? item.summary ?? item.content ?? ""), example: String(item.example ?? ""), sourceFocus: item.sourceFocus ? String(item.sourceFocus) : undefined,
+    checkpoint: item.checkpoint === "exam" ? "exam" : "quiz",
+    quiz: quiz.filter((q) => q && typeof q === "object" && typeof (q as { question?: unknown }).question === "string").map((q) => { const item = q as { question: string; options?: unknown; answerIndex?: unknown; explanation?: unknown }; return { question: item.question, options: Array.isArray(item.options) ? item.options.map(String) : [], answerIndex: Number(item.answerIndex) || 0, explanation: String(item.explanation ?? "") }; }),
+  }; }) };
+}
+
+function parseMarkdownSyllabus(text: string): GuideSyllabus | null {
+  const headings = text.split(/\r?\n(?=##?\s+)/).map((part) => part.trim()).filter(Boolean);
+  const lessons: GuideLesson[] = headings.map((part): GuideLesson | null => {
+    const lines = part.split(/\r?\n/); const title = lines[0].replace(/^##?\s+/, "").trim();
+    if (!title || /^overview$/i.test(title)) return null;
+    return { title, objective: "Understand the key ideas in this section.", explanation: lines.slice(1).join("\n").trim(), example: "", checkpoint: "quiz" as const, quiz: [] };
+  }).filter((lesson): lesson is GuideLesson => lesson !== null);
+  return lessons.length ? { overview: "A source-grounded guided course.", lessons } : null;
+}
+
+function parseJson(text: string, data?: unknown): GuideSyllabus {
+  const parsed = parseSyllabus(text, data) ?? parseMarkdownSyllabus(text);
+  if (!parsed) throw new Error("The guide generator did not return a syllabus. Try again.");
+  return parsed;
 }
 
 async function transcriptAsDocument(choice: SourceChoice) {
