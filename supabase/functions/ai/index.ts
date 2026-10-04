@@ -72,20 +72,33 @@ export const DEFAULT_CHAIN: Entry[] = [
   e("openrouter", "openrouter/free", "openrouter"), // last resort: OpenRouter picks any live free model
 ];
 
-function chain(): Entry[] {
-  const raw = Deno.env.get("AI_CHAIN_JSON");
-  if (raw) {
+function chain(feature?: string): Entry[] {
+  const stageName = feature
+    ? `AI_CHAIN_${feature.toUpperCase().replace(/[^A-Z0-9]+/g, "_")}_JSON`
+    : "";
+  const parse = (raw?: string): Entry[] | null => {
+    if (!raw) return null;
     try {
-      return JSON.parse(raw) as Entry[];
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length && parsed.every((entry) =>
+        entry && typeof entry.provider === "string" && typeof entry.baseUrl === "string" &&
+        typeof entry.keyEnv === "string" && typeof entry.model === "string"
+      )) return parsed as Entry[];
     } catch {
-      /* fall through to default */
+      /* use the next configured chain */
     }
-  }
-  return DEFAULT_CHAIN;
+    return null;
+  };
+  const stageChain = parse(stageName ? Deno.env.get(stageName) : undefined);
+  const fallbackChain = parse(Deno.env.get("AI_CHAIN_JSON")) ?? DEFAULT_CHAIN;
+  if (!stageChain) return fallbackChain;
+  const identity = (entry: Entry) => `${entry.provider}\0${entry.baseUrl}\0${entry.model}\0${entry.keyEnv}`;
+  const preferred = new Set(stageChain.map(identity));
+  return [...stageChain, ...fallbackChain.filter((entry) => !preferred.has(identity(entry)))];
 }
 
 const cooldownUntil = new Map<string, number>(); // per warm isolate; good enough for a fallback breaker
-const id = (x: Entry) => `${x.provider}:${x.model}`;
+const id = (x: Entry) => `${x.provider}:${x.model}:${x.keyEnv}`;
 
 function mergeSystem(msgs: Msg[]): Msg[] {
   const sys = msgs
@@ -157,6 +170,7 @@ export async function callChain(
     deadlineMs?: number;
     perCallMs?: number;
     fast?: boolean;
+    feature?: string;
   },
 ): Promise<ChainResult> {
   const started = Date.now();
@@ -164,7 +178,7 @@ export async function callChain(
   const perCall = opts.perCallMs ?? 45_000;
   const attempts: Attempt[] = [];
 
-  for (const ent of chain()) {
+  for (const ent of chain(opts.feature)) {
     const keys = secretKeys(ent.keyEnv);
     for (const [keyIndex, key] of keys.entries()) {
       const eid = `${id(ent)}#${keyIndex + 1}`;
@@ -755,10 +769,11 @@ Deno.serve(async (req) => {
 
   try {
     const r = await callChain(msgs, {
+      feature,
       temperature: strict ? 0.1 : 0.3,
       json: FEATURES[feature].json,
       fast: feature === "study_plan",
-      maxTokens: feature === "study_plan" ? 7000 : undefined,
+      maxTokens: feature === "study_plan" ? 10_000 : undefined,
     });
     await admin.from("ai_usage").insert({
       user_id: u.user.id,
@@ -841,7 +856,7 @@ Deno.serve(async (req) => {
   } catch (err) {
     return json(
       {
-        error: "The AI is busy right now. Please try again in a minute.",
+        error: "The configured AI providers could not complete this request. Check the provider key, model ID, and current quota, then try again.",
         attempts: (err as { attempts?: unknown }).attempts ?? [],
       },
       503,

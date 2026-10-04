@@ -110,19 +110,28 @@ async function documentChunkCount(id: string) {
   return count ?? 0;
 }
 
-async function retryAI(args: Parameters<typeof askAI>[0], onProgress?: GuideProgress): Promise<AIResult> {
-  let lastError: unknown;
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    try { return await askAI(args); }
-    catch (error) {
-      lastError = error;
-      if (attempt < 3) {
-        onProgress?.(`The AI provider is busy; retrying this stage (${attempt + 1}/3)…`);
-        await new Promise((resolve) => window.setTimeout(resolve, 2500 * (attempt + 1)));
-      }
-    }
+async function runAIStage(args: Parameters<typeof askAI>[0]): Promise<AIResult> {
+  try { return await askAI(args); }
+  catch (error) {
+    const stage = args.feature === "notes" ? "Section reading" : args.feature === "summarize" ? "Coverage reduction" : args.feature === "study_plan" ? "Syllabus generation" : "AI stage";
+    const detail = error instanceof Error ? error.message : "No provider returned a result.";
+    throw new Error(`${stage} failed after the configured provider failover: ${detail}`);
   }
-  throw lastError instanceof Error ? lastError : new Error("The AI could not complete this stage.");
+}
+
+const SOURCE_READ_CONCURRENCY = 3;
+const DIGEST_CONCURRENCY = 2;
+async function mapConcurrentOrdered<T, R>(items: T[], limit: number, mapper: (item: T, index: number) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (true) {
+      const index = nextIndex++;
+      if (index >= items.length) return;
+      results[index] = await mapper(items[index], index);
+    }
+  }));
+  return results;
 }
 
 async function buildSourceDigest(sources: SourceChoice[], docIds: string[], onProgress?: GuideProgress) {
@@ -133,39 +142,40 @@ async function buildSourceDigest(sources: SourceChoice[], docIds: string[], onPr
     if (!count) throw new Error(`${source?.title ?? "This document"} has no readable text. Re-upload it or choose a saved transcript before building a source-grounded syllabus.`);
     const parts = Math.max(1, Math.ceil(count / 10));
     const mode = source?.scope === "library" ? "library" : "materials";
-    const notes: string[] = [];
-    for (let part = 0; part < parts; part += 1) {
+    const sectionIndexes = Array.from({ length: parts }, (_, index) => index);
+    const notes = await mapConcurrentOrdered(sectionIndexes, SOURCE_READ_CONCURRENCY, async (part) => {
       onProgress?.(`Reading ${source?.title ?? "source"}: section ${part + 1} of ${parts}…`);
-      const result = await retryAI({
+      const result = await runAIStage({
         feature: "notes", mode, docIds: [docId], part, size: 10,
         messages: [{ role: "user", content: "Create faithful coverage notes for this section. Preserve every rule, definition, authority, example, exception, date and exam warning. Do not invent or skip content." }],
-      }, onProgress);
-      notes.push(result.answer);
-    }
-    for (let i = 0; i < notes.length; i += 4) {
-      onProgress?.(`Compressing ${source?.title ?? "source"}: digest ${Math.floor(i / 4) + 1} of ${Math.ceil(notes.length / 4)}…`);
-      const batch = notes.slice(i, i + 4).join("\n\n--- NEXT SECTION ---\n\n");
-      const compressed = await retryAI({
+      });
+      return result.answer;
+    });
+    const reductionBatches = Array.from({ length: Math.ceil(notes.length / 4) }, (_, index) => notes.slice(index * 4, index * 4 + 4));
+    const reduced = await mapConcurrentOrdered(reductionBatches, DIGEST_CONCURRENCY, async (batchNotes, index) => {
+      onProgress?.(`Compressing ${source?.title ?? "source"}: digest ${index + 1} of ${reductionBatches.length}…`);
+      const batch = batchNotes.join("\n\n--- NEXT SECTION ---\n\n");
+      const compressed = await runAIStage({
         feature: "summarize", mode: "general",
         messages: [{ role: "user", content: `Compress the following source-grounded coverage notes into a compact chapter/topic map. Keep all distinct legal rules, authorities, examples, exceptions and unresolved [unclear] markers. Do not add facts.\n\n${batch}` }],
-      }, onProgress);
-      digests.push(`SOURCE: ${source?.title ?? docId}\n${compressed.answer}`);
-    }
+      });
+      return `SOURCE: ${source?.title ?? docId}\n${compressed.answer}`;
+    });
+    digests.push(...reduced);
   }
   let digestParts = digests;
   while (digestParts.join("\n\n=== SOURCE DIGEST ===\n\n").length > 14000 && digestParts.length > 1) {
-    const next: string[] = [];
-    for (let i = 0; i < digestParts.length; i += 4) {
-      onProgress?.(`Compacting the full-book digest: group ${Math.floor(i / 4) + 1} of ${Math.ceil(digestParts.length / 4)}…`);
-      const batch = digestParts.slice(i, i + 4).join("\n\n--- NEXT DIGEST ---\n\n");
-      const compressed = await retryAI({
+    const compactBatches = Array.from({ length: Math.ceil(digestParts.length / 4) }, (_, index) => digestParts.slice(index * 4, index * 4 + 4));
+    onProgress?.(`Compacting the full-book digest in ${compactBatches.length} ordered groups…`);
+    digestParts = await mapConcurrentOrdered(compactBatches, DIGEST_CONCURRENCY, async (batchParts) => {
+      const batch = batchParts.join("\n\n--- NEXT DIGEST ---\n\n");
+      const compressed = await runAIStage({
         feature: "summarize",
         mode: "general",
         messages: [{ role: "user", content: `Compact this study digest while preserving every distinct topic, rule, authority, exception and example. Keep section order and do not add facts.\n\n${batch}` }],
-      }, onProgress);
-      next.push(compressed.answer);
-    }
-    digestParts = next;
+      });
+      return compressed.answer;
+    });
   }
   return digestParts.join("\n\n=== SOURCE DIGEST ===\n\n");
 }
@@ -197,11 +207,11 @@ export async function createGuidedCourse(subject: string, sources: SourceChoice[
   const grounding = hasReadableSourceText
     ? "Use ONLY the readable source digest below."
     : "No readable source text was selected. Create a general-knowledge study outline for the requested subject and say in the overview that it is not grounded in the selected materials. Do not imply that linked titles or metadata were read as source content.";
-  const prompt = `Create a complete guided law-study syllabus for: ${subject}. ${grounding} ${linkedMaterials ? `The following Library items are linked reference records; their titles and metadata are context only, not source content: ${linkedMaterials}.` : ""} ${preferences}\nReturn ONLY valid JSON with no markdown fences in this exact shape: {"overview":"...","lessons":[{"title":"...","objective":"...","explanation":"...","example":"...","sourceFocus":"...","checkpoint":"quiz","quiz":[{"question":"...","options":["...","...","...","..."],"answerIndex":0,"explanation":"..."}]}]}. Create 5 to 8 ordered lessons covering the entire readable digest when one is provided. Add a short quiz to every lesson, and mark every third lesson as checkpoint exam. Explain before testing; use plain language, story/examples where helpful, and never invent authorities. Do not append quotation-warning labels or explanatory text outside the JSON.\n\nSOURCE DIGEST:\n`;
+  const prompt = `Create a complete guided law-study syllabus for: ${subject}. ${grounding} ${linkedMaterials ? `The following Library items are linked reference records; their titles and metadata are context only, not source content: ${linkedMaterials}.` : ""} ${preferences}\nReturn ONLY valid JSON with no markdown fences in this exact shape: {"overview":"...","lessons":[{"title":"...","objective":"...","explanation":"...","example":"...","sourceFocus":"...","checkpoint":"quiz","quiz":[{"question":"...","options":["...","...","...","..."],"answerIndex":0,"explanation":"..."}]}]}. Create 8 to 16 ordered lessons scaled to the distinct chapters and themes in the readable digest. Represent every major chapter; group only closely related minor sections, and never collapse a long book into a handful of lessons. Give each ordinary lesson a three-question quiz that mixes rule recall with a short fact-pattern application. Mark every third lesson as checkpoint exam and give those checkpoints five scenario-based multiple-choice questions. Explain before testing; use plain language, story/examples where helpful, and never invent authorities. Do not append quotation-warning labels or explanatory text outside the JSON.\n\nSOURCE DIGEST:\n`;
   onProgress?.("Starting a staged read so every source section is covered…");
   const digest = docIds.length ? await buildSourceDigest(sources, docIds, onProgress) : "No AI-readable document was selected.";
   onProgress?.("Building the final syllabus from the complete staged digest…");
-  const final = await retryAI({ feature: "study_plan", mode: "general", messages: [{ role: "user", content: `${prompt}${digest}` }] }, onProgress);
+  const final = await runAIStage({ feature: "study_plan", mode: "general", messages: [{ role: "user", content: `${prompt}${digest}` }] });
   const syllabus = parseJson(final.answer, final.data);
   const user = (await db().auth.getUser()).data.user;
   if (!user) throw new Error("Sign in first.");
@@ -234,7 +244,7 @@ export async function evaluateWrittenCheckpoint(course: GuidedCourse, lessonInde
   const readable = course.source_labels.filter((source) => source.kind !== "material");
   const sourceMode = !course.source_document_ids.length ? "general" : readable.length > 0 && readable.every((source) => source.kind === "document" && source.scope === "library") ? "library" : "materials";
   const prior = previous ? `\nPrevious typed answer: ${previous.answer}\nPrevious checkpoint feedback: ${previous.feedback}\nPrevious missing points: ${previous.missing_points.join("; ")}` : "";
-  const result = await retryAI({ feature: "kaizen_check", mode: sourceMode, docIds: course.source_document_ids, messages: [{ role: "user", content: `Lesson: ${lesson.title}\nObjective: ${lesson.objective}\nTeaching output:\n${lesson.explanation}\n\nStudent typed answer:\n${answer.trim()}${prior}\n\nEvaluate this answer as the written Kaizen checkpoint. Return only the requested JSON.` }] });
+  const result = await runAIStage({ feature: "kaizen_check", mode: sourceMode, docIds: course.source_document_ids, messages: [{ role: "user", content: `Lesson: ${lesson.title}\nObjective: ${lesson.objective}\nTeaching output:\n${lesson.explanation}\n\nStudent typed answer:\n${answer.trim()}${prior}\n\nEvaluate this answer as the written Kaizen checkpoint. Return only the requested JSON.` }] });
   const raw = result.data && typeof result.data === "object" ? result.data as Record<string, unknown> : {};
   const score = Math.max(0, Math.min(100, Number(raw.score) || 0));
   const checkpoint: WrittenCheckpoint = { answer: answer.trim(), feedback: String(raw.feedback ?? result.answer), score, passed: Boolean(raw.passed) || score >= 70, missing_points: Array.isArray(raw.missing_points) ? raw.missing_points.map(String) : [], next_step: String(raw.next_step ?? "Rewrite the answer once using the feedback."), updated_at: new Date().toISOString() };
