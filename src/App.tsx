@@ -99,6 +99,7 @@ import {
 
 const FeaturesGuidePage = lazy(() => import("./FeaturesGuidePage"));
 const ScannerNotesPage = lazy(() => import("./ScannerNotesPage"));
+const KenyaLawCasesPage = lazy(() => import("./KenyaLawCasesPage"));
 
 const nav = [
   { id: "dashboard", label: "Home", icon: LayoutDashboard },
@@ -118,6 +119,7 @@ const nav = [
   { id: "research", label: "Research writer", icon: PenLine },
   { id: "arena", label: "Legal Arena", icon: Gavel },
   { id: "growth", label: "Growth studio", icon: Sparkles },
+  { id: "cases", label: "Case law", icon: BookOpen },
   { id: "counsellor", label: "Counsellor", icon: Users },
 ];
 const validViews = new Set([
@@ -598,6 +600,12 @@ function App() {
         <FeaturesGuidePage />
       </Suspense>
     );
+  if (view === "cases")
+    return (
+      <Suspense fallback={<div className="auth-page"><p className="subheading">Loading Kenya Law…</p></div>}>
+        <KenyaLawCasesPage />
+      </Suspense>
+    );
   if (authLoading)
     return (
       <div className="auth-page">
@@ -1074,7 +1082,7 @@ function App() {
               <PageHeading
                 eyebrow="From topic to finished paper"
                 title="Research writer."
-                subtitle="Plan, draft, critique and cite your essays and research papers with an assistant that marks every authority you must verify."
+                subtitle="Plan, draft and critique your papers with an assistant that uses readable selected sources and turns missing authorities into research leads, not guessed citations."
               />
               <ResearchWriter />
             </>

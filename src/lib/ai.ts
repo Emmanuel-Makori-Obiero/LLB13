@@ -61,7 +61,7 @@ export const AI_MODES: { value: AIMode; label: string; hint: string }[] = [
   {
     value: "general",
     label: "Any law",
-    hint: "General legal knowledge. Verify cases and provisions.",
+    hint: "Kenyan law, with the Constitution first. Case citations are included only when supported by selected sources.",
   },
 ];
 

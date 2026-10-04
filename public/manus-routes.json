@@ -101,6 +101,10 @@
       "title": "All platform features"
     },
     {
+      "path": "/cases",
+      "title": "Kenya Law case finder"
+    },
+    {
       "path": "/scanner",
       "title": "Scan and notes"
     }

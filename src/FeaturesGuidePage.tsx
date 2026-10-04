@@ -52,6 +52,7 @@ export default function FeaturesGuidePage() {
         <nav className="fg-nav" aria-label="Public navigation">
           <a href="/">Home</a>
           <a href="#feature-list">Features</a>
+          <a href="/cases">Case law</a>
           <a href="/login" className="fg-login">Sign in</a>
           <a href="/signup" className="fg-signup">Create account <ArrowRight size={14} /></a>
         </nav>
@@ -119,7 +120,7 @@ export default function FeaturesGuidePage() {
         })}
       </section>
 
-      <aside className="fg-caution"><span className="fg-caution-mark">13</span><p><strong>Use AI as a study partner, not a source of law.</strong> Check legal rules, cases and citations against the original authorities. Features marked “Setup or limits apply” may depend on account access, provider configuration or a current limitation.</p></aside>
+      <aside className="fg-caution"><span className="fg-caution-mark">13</span><p><strong>Kenyan law starts with the Constitution.</strong> Case citations require selected AI-readable source text; use the Kenya Law case finder to open official judgments. Features marked “Setup or limits apply” may depend on account access, provider configuration or a current limitation.</p></aside>
       <footer className="fg-footer"><a className="fg-brand" href="/"><span className="fg-brand-mark">13</span><span><strong>GROUP 13</strong><small>LAW SCHOOL HUB</small></span></a><span>Read closely · Think boldly · Verify the source</span><a href="#top">Back to top ↑</a></footer>
     </main>
   );

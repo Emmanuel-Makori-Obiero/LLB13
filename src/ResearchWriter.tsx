@@ -344,8 +344,10 @@ export function ResearchWriter() {
                 <p className="subheading">
                   Fill in Project details, then work through the tools in order:
                   research question, outline, draft each section, critique, then
-                  citations. Every authority from general knowledge is marked
-                  (verify): check it in the original before you cite it.
+                  citations. Authorities must come from readable selected source
+                  text; the assistant will not cite cases from memory. Search
+                  Kenya Law for an official judgment, then save its full text as
+                  an AI-readable document for case-specific analysis.
                 </p>
               </div>
             )}

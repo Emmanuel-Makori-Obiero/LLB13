@@ -42,7 +42,7 @@ const chapters = [
     number: "02",
     label: "Practise what matters",
     title: "Recall it. Apply it. Own it.",
-    copy: "Short quizzes, written checkpoints and exam-style questions turn passive reading into active legal reasoning—with space to repeat the hard parts.",
+    copy: "Short quizzes, written checkpoints and exam-style questions turn passive reading into active legal reasoning, with space to repeat the hard parts.",
     icon: CheckCircle2,
     tag: "Quizzes and exams",
   },
@@ -74,14 +74,44 @@ export function HelpButton({
   floating = false,
 }: HelpButtonProps) {
   const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     if (!open) return;
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+    const dialog = dialogRef.current;
+    const getFocusable = () => Array.from(
+      dialog?.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ) ?? [],
+    );
+    (getFocusable()[0] ?? dialog)?.focus();
+    const handleDialogKeys = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const items = getFocusable();
+      if (!items.length) {
+        event.preventDefault();
+        dialog?.focus();
+        return;
+      }
+      const currentIndex = items.indexOf(document.activeElement as HTMLElement);
+      if (event.shiftKey && currentIndex <= 0) {
+        event.preventDefault();
+        items[items.length - 1].focus();
+      } else if (!event.shiftKey && (currentIndex < 0 || currentIndex === items.length - 1)) {
+        event.preventDefault();
+        items[0].focus();
+      }
     };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
+    window.addEventListener("keydown", handleDialogKeys);
+    return () => {
+      window.removeEventListener("keydown", handleDialogKeys);
+      triggerRef.current?.focus();
+    };
   }, [open]);
 
   const navigate = (page: string) => {
@@ -94,6 +124,7 @@ export function HelpButton({
       <button
         type="button"
         className="g13-help-trigger"
+        ref={triggerRef}
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => setOpen(true)}
@@ -104,6 +135,8 @@ export function HelpButton({
         <div className="g13-help-scrim" onMouseDown={() => setOpen(false)}>
           <section
             className="g13-help-dialog"
+            ref={dialogRef}
+            tabIndex={-1}
             role="dialog"
             aria-modal="true"
             aria-labelledby="g13-help-title"
@@ -249,6 +282,7 @@ export default function LandingPage({
           <a href="#the-method">The method</a>
           <a href="#inside">Inside the hub</a>
           <a href="/features">All features</a>
+          <a href="/cases">Case law</a>
           <HelpButton onSignUp={signedInPreview ? undefined : onSignUp} onNavigate={exploreSection} />
         </nav>
         <div className="g13-header-actions">
@@ -290,7 +324,10 @@ export default function LandingPage({
                 </>
               )}
             </div>
-            <a className="g13-hero-guide-link" href="/features">See all platform features <ArrowRight size={14} /></a>
+            <div className="g13-hero-public-links">
+              <a className="g13-hero-guide-link" href="/features">See all platform features <ArrowRight size={14} /></a>
+              <a className="g13-hero-guide-link" href="/cases">Search Kenyan case law <ArrowRight size={14} /></a>
+            </div>
             <p className="g13-access-note" role={signedInPreview ? "status" : undefined} aria-live={signedInPreview ? "polite" : undefined}>
               {signedInPreview ? <><span className="g13-opening-dot" /> Opening your workspace…</> : <><LockKeyhole size={13} /> For approved Group 13 accounts.</>}
             </p>
@@ -342,7 +379,7 @@ export default function LandingPage({
         <section className="g13-experience" id="inside">
           <div className="g13-section-heading">
             <div><span className="g13-kicker">A WORKING STUDY SYSTEM</span><h2>Make each session count.</h2></div>
-            <span className="g13-section-index">01 — 03</span>
+            <span className="g13-section-index">01 / 03</span>
           </div>
           <div className="g13-experience-grid">
             <div className="g13-chapter-list" role="tablist" aria-label="Explore the learning method">
@@ -432,7 +469,7 @@ export default function LandingPage({
           <div className="g13-tools-intro">
             <span className="g13-kicker">ONE HUB. MORE ROOM TO THINK.</span>
             <h2>Built around your<br /><strong>real study day.</strong></h2>
-            <p>Move from the source to understanding, then test what you know—without losing your place.</p>
+            <p>Move from the source to understanding, then test what you know, without losing your place.</p>
             <button type="button" className="g13-text-link" onClick={signedInPreview ? openWorkspace : onSignUp}>{signedInPreview ? "Open the hub" : "See what you can do"} <ArrowRight size={14} /></button>
           </div>
           <div className="g13-tool-card g13-tool-card-large">
