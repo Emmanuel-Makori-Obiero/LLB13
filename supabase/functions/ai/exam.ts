@@ -10,7 +10,7 @@ type Result = {
 };
 export type Chain = (
   messages: Msg[],
-  opts: { temperature?: number; fast?: boolean },
+  opts: { temperature?: number; fast?: boolean; feature?: string },
 ) => Promise<Result>;
 
 export interface Ctx {
@@ -167,7 +167,7 @@ Return ONLY JSON, with no markdown fences:
         { role: "system", content: system },
         { role: "user", content: request },
       ],
-      { temperature: 0.7 },
+      { temperature: 0.7, feature: "exam_generate" },
     );
     const j = parseJson(r.text);
     const qs = Array.isArray(j?.questions) ? j.questions.slice(0, 8) : [];
@@ -209,7 +209,7 @@ Return ONLY JSON, with no markdown fences:
     });
   } catch {
     return c.reply(
-      { error: "The AI is busy right now. Please try again in a minute." },
+      { error: "Configured exam-generation providers could not complete this request. Check the exam key, model ID, and quota, then retry." },
       503,
     );
   }
@@ -288,7 +288,7 @@ Return ONLY JSON, with no markdown fences:
         { role: "system", content: system },
         { role: "user", content: request },
       ],
-      { temperature: 0.2 },
+      { temperature: 0.2, feature: "exam_grade" },
     );
     const j = parseJson(r.text);
     if (!j || typeof j !== "object")
@@ -331,7 +331,7 @@ Return ONLY JSON, with no markdown fences:
     });
   } catch {
     return c.reply(
-      { error: "The AI is busy right now. Please try again in a minute." },
+      { error: "Configured marking providers could not complete this request. Check the exam key, model ID, and quota, then retry." },
       503,
     );
   }
@@ -437,7 +437,7 @@ Return ONLY JSON, with no markdown fences: {"reply":"1 to 5 short sentences","go
     ...c.history,
   ];
   try {
-    const r = await c.callChain(messages, { temperature: 0.2, fast: true });
+    const r = await c.callChain(messages, { temperature: 0.2, fast: true, feature: "copilot" });
     const j = parseJson(r.text);
     const reply = clip(j?.reply, 1200).trim() || clip(r.text, 1200).trim();
     const seen = new Set<string>();

@@ -112,7 +112,7 @@ export default function LearningStudio() {
     setAudioBusy(true);
     setAudioNote("Creating a downloadable audio file…");
     try {
-      const result = await generateAudio({ text: speakable(script), title: topic || "Podcast episode" });
+      const result = await generateAudio({ text: script, title: topic || "Podcast episode" });
       setAudioUrl(result.signed_url);
       setAudioNote("Audio saved privately in Supabase. Use the download link below.");
     } catch (e) {
@@ -168,7 +168,7 @@ export default function LearningStudio() {
     try {
       setStage("Creating the narration audio…");
       const narration = await generateAudio({
-        text: speakable(script),
+        text: script,
         title: topic || "Narrated law lesson",
       });
       setRenderProgress(10);

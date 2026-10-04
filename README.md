@@ -25,6 +25,8 @@ On a deployed HTTPS URL, open the site on a phone and choose **Add to Home scree
 
 Open the app and choose **Create an account** on the sign-in screen. If email confirmation is enabled in Supabase Auth, confirm the email before signing in. The workspace is private: database access and material uploads require an authenticated Supabase user.
 
+The separate AI/media Edge Functions and media database migrations must also be deployed for podcast audio, image, and video generation. See [Media generation and app installation](docs/media-and-install-setup.md) for the required setup, provider secrets, and PWA install instructions.
+
 When both values are present, `src/data/repository.ts` uses Supabase as the only source of truth. Configuration or query errors are shown in the UI; the client no longer falls back to bundled demo data.
 
 The Library accepts either a web link or a file upload and stores uploaded files in the `materials` Supabase Storage bucket.
