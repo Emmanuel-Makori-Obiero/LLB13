@@ -2445,22 +2445,27 @@ function TodoPage({
 }
 
 let youtubeApiPromise: Promise<any> | null = null;
-
 function loadYouTubeApi() {
   if (window.YT?.Player) return Promise.resolve(window.YT);
   if (youtubeApiPromise) return youtubeApiPromise;
-  youtubeApiPromise = new Promise((resolve) => {
+  youtubeApiPromise = new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (value: any) => { if (!settled) { settled = true; window.clearInterval(poll); window.clearTimeout(timeout); resolve(value); } };
+    const fail = (error: Error) => { if (!settled) { settled = true; window.clearInterval(poll); window.clearTimeout(timeout); youtubeApiPromise = null; reject(error); } };
     const existing = document.getElementById("youtube-iframe-api");
     const previous = window.onYouTubeIframeAPIReady;
     window.onYouTubeIframeAPIReady = () => {
       previous?.();
-      resolve(window.YT);
+      if (window.YT?.Player) finish(window.YT);
     };
+    const poll = window.setInterval(() => { if (window.YT?.Player) finish(window.YT); }, 100);
+    const timeout = window.setTimeout(() => fail(new Error("YouTube did not finish loading. Check your connection or open the video directly on YouTube.")), 12000);
     if (!existing) {
       const script = document.createElement("script");
       script.id = "youtube-iframe-api";
       script.src = "https://www.youtube.com/iframe_api";
       script.async = true;
+      script.onerror = () => fail(new Error("YouTube could not load in this browser. Open the video directly on YouTube."));
       document.head.appendChild(script);
     }
   });
@@ -2490,6 +2495,7 @@ function GlobalMusicPlayer({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const youtubeContainerRef = useRef<HTMLDivElement | null>(null);
   const youtubePlayerRef = useRef<any>(null);
+  const [youtubeError, setYoutubeError] = useState("");
   const [minimized, setMinimized] = useState(() => localStorage.getItem("g13-music-minimized") === "true");
   const [panel, setPanel] = useState(() => {
     try {
@@ -2530,22 +2536,24 @@ function GlobalMusicPlayer({
   useEffect(() => {
     if (!current || current.kind !== "youtube" || !current.youtubeId) return;
     let active = true;
+    setYoutubeError("");
     void loadYouTubeApi().then((YT) => {
       if (!active || !youtubeContainerRef.current || !YT?.Player) return;
       youtubePlayerRef.current?.destroy();
       youtubePlayerRef.current = new YT.Player(youtubeContainerRef.current, {
         videoId: current.youtubeId,
-        playerVars: { autoplay: playing ? 1 : 0, controls: 1, playsinline: 1, rel: 0, modestbranding: 1 },
+        playerVars: { autoplay: playing ? 1 : 0, controls: 1, playsinline: 1, rel: 0, modestbranding: 1, origin: window.location.origin },
         events: {
-          onReady: (event: any) => { if (playing) event.target.playVideo(); },
+          onReady: (event: any) => { event.target.getIframe?.().setAttribute("allow", "autoplay; encrypted-media; picture-in-picture"); if (playing) event.target.playVideo(); },
           onStateChange: (event: any) => {
             if (event.data === 0) onEnded();
             if (event.data === 1) onPlaying(true);
             if (event.data === 2) onPlaying(false);
           },
+          onError: (event: any) => { onPlaying(false); setYoutubeError("YouTube could not play this video here. Try another video or open it directly on YouTube."); },
         },
       });
-    });
+    }).catch((error) => { if (active) { onPlaying(false); setYoutubeError(error instanceof Error ? error.message : "YouTube could not load."); } });
     return () => {
       active = false;
       youtubePlayerRef.current?.destroy();
@@ -2573,7 +2581,7 @@ function GlobalMusicPlayer({
       <button className="music-control music-play" aria-label={playing ? "Pause" : "Play"} onClick={onToggle}>{playing ? <Pause size={16} /> : <Play size={16} />}</button>
       <button className="music-control" aria-label="Next track" onClick={() => onStep(1)}><SkipForward size={16} /></button>
       {!minimized && <details className="music-queue-details"><summary>Queue</summary><div>{queue.map((track, trackIndex) => <button type="button" key={track.id} className={trackIndex === index ? "active" : ""} onClick={() => onSelect(trackIndex)}>{track.title}</button>)}</div></details>}
-      <div className="music-media" aria-hidden={minimized}>{current?.kind === "audio" ? <audio ref={audioRef} controls onPlay={() => onPlaying(true)} onPause={() => onPlaying(false)} onEnded={onEnded} /> : <div ref={youtubeContainerRef} className="global-youtube-player" aria-label="YouTube player" />}</div>
+      <div className="music-media" aria-hidden={minimized}>{current?.kind === "audio" ? <audio ref={audioRef} controls onPlay={() => onPlaying(true)} onPause={() => onPlaying(false)} onEnded={onEnded} /> : <><div ref={youtubeContainerRef} className="global-youtube-player" aria-label="YouTube player" />{youtubeError && <a className="youtube-fallback-link" href={safeUrl(current.url) || undefined} target="_blank" rel="noreferrer">Open on YouTube</a>}</>}</div>
       <button className="music-control" aria-label={minimized ? "Expand music player" : "Minimize music player"} onClick={() => setMinimized((value) => !value)}>{minimized ? <Maximize2 size={15} /> : <Minimize2 size={15} />}</button>
       {!minimized && <button className="music-resize-handle" aria-label="Resize music player" onPointerDown={beginResize}>↘</button>}
     </div>
