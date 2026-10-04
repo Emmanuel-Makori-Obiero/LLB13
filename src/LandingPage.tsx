@@ -268,7 +268,7 @@ export default function LandingPage({
           <div className="g13-hero-vignette" aria-hidden="true" />
           <div className="g13-hero-copy">
             <div className="g13-hero-eyebrow"><span /> A PRIVATE LEARNING SPACE FOR GROUP 13</div>
-            <h1>Study the law.<br /><em>Find your argument.</em></h1>
+            <h1>Study the law.<br /><strong>Find your argument.</strong></h1>
             <p className="g13-hero-lede">
               Keep casebooks, lecture notes, lessons and exam practice together,
               so more of your study time goes into understanding the law.
@@ -301,7 +301,7 @@ export default function LandingPage({
         <section className="g13-manifesto" id="the-method">
           <div className="g13-manifesto-stamp">THE GROUP 13 METHOD<br />READ · RECALL · REASON</div>
           <p className="g13-manifesto-copy">
-            The work is demanding.<br />Your study space should <em>make it clearer.</em>
+            The work is demanding.<br />Your study space should <strong>make it clearer.</strong>
           </p>
           <p className="g13-manifesto-side">
             A focused home for the reading, questions and small daily steps that
@@ -313,7 +313,7 @@ export default function LandingPage({
           <div className="g13-judge-copy">
             <div className="g13-scene-index"><span>IN THE COURTROOM</span><span>01 / 03</span></div>
             <span className="g13-kicker">THE MOMENT A REASON BECOMES A RULING</span>
-            <h2 id="g13-judge-title">Every argument<br /><em>must land.</em></h2>
+            <h2 id="g13-judge-title">Every argument<br /><strong>must land.</strong></h2>
             <p>Read closely. Test the rule against the facts. Then make the case for what should happen next.</p>
             <p className="g13-judge-instruction">Scroll into the scene. The gavel falls; the question becomes yours.</p>
             <button type="button" className="g13-judge-replay" onClick={replayJudgeScene}>
@@ -371,7 +371,7 @@ export default function LandingPage({
         <section className="g13-reading-room" aria-labelledby="g13-reading-title">
           <div className="g13-reading-copy">
             <span className="g13-kicker">A SOURCE IS WHERE THINKING STARTS</span>
-            <h2 id="g13-reading-title">Open the book.<br /><em>Find your way in.</em></h2>
+            <h2 id="g13-reading-title">Open the book.<br /><strong>Find your way in.</strong></h2>
             <p>Tap the cover to open a sample casebook. In the hub, your own long readings become an ordered path of lessons, recall and exam practice.</p>
             <button
               type="button"
@@ -429,7 +429,7 @@ export default function LandingPage({
         <section className="g13-tools" id="features" aria-label="What is inside Group 13 Hub">
           <div className="g13-tools-intro">
             <span className="g13-kicker">ONE HUB. MORE ROOM TO THINK.</span>
-            <h2>Built around your<br /><em>real study day.</em></h2>
+            <h2>Built around your<br /><strong>real study day.</strong></h2>
             <p>Move from the source to understanding, then test what you know—without losing your place.</p>
             <button type="button" className="g13-text-link" onClick={signedInPreview ? openWorkspace : onSignUp}>{signedInPreview ? "Open the hub" : "See what you can do"} <ArrowRight size={14} /></button>
           </div>
@@ -455,7 +455,7 @@ export default function LandingPage({
         <section className="g13-final-cta">
           <div className="g13-final-mark">13</div>
           <span className="g13-kicker">{signedInPreview ? "YOUR GROUP 13 WORKSPACE" : "YOUR NEXT GOOD STUDY SESSION STARTS HERE"}</span>
-          <h2>{signedInPreview ? <>Welcome back.<br /><em>Pick up your work.</em></> : <>Read closely.<br /><em>Think boldly.</em></>}</h2>
+          <h2>{signedInPreview ? <>Welcome back.<br /><strong>Pick up your work.</strong></> : <>Read closely.<br /><strong>Think boldly.</strong></>}</h2>
           <div className="g13-final-actions">
             <button type="button" className="g13-hero-primary" onClick={signedInPreview ? openWorkspace : onSignUp}>{signedInPreview ? "Open your workspace" : "Create your account"} <ArrowRight size={17} /></button>
             {!signedInPreview && <button type="button" className="g13-final-login" onClick={onSignIn}>Already have an account? Sign in</button>}
