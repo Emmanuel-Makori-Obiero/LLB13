@@ -3,6 +3,7 @@ import {
   Suspense,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type MouseEvent,
   type ReactNode,
@@ -18,6 +19,7 @@ import {
   Download,
   FileText,
   Film,
+  FolderOpen,
   Image as ImageIcon,
   Gavel,
   GraduationCap,
@@ -31,16 +33,22 @@ import {
   Minimize2,
   MoreHorizontal,
   PenLine,
+  Pause,
+  Play,
   Plus,
   Search,
   ScanLine,
   Settings,
   ShieldCheck,
+  SkipBack,
+  SkipForward,
   Sparkles,
   Trash2,
   UserCircle,
   Users,
   Video,
+  Music2,
+  Youtube,
   X,
 } from "lucide-react";
 import {
@@ -171,6 +179,8 @@ type UserProfile = {
   wallpaperUrl: string;
 };
 
+type PlayerTrack = { id: string; title: string; url: string; source: string };
+
 function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [showLandingPreview, setShowLandingPreview] = useState(false);
@@ -208,7 +218,31 @@ function App() {
   const [materialFormOpen, setMaterialFormOpen] = useState(false);
   const [editingMaterial, setEditingMaterial] = useState<Material | null>(null);
   const [assignmentFormOpen, setAssignmentFormOpen] = useState(false);
+  const [musicQueue, setMusicQueue] = useState<PlayerTrack[]>([]);
+  const [musicIndex, setMusicIndex] = useState(0);
+  const [musicPlaying, setMusicPlaying] = useState(false);
+  const musicAudioRef = useRef<HTMLAudioElement | null>(null);
   const isAdmin = adminState === "yes";
+
+  const playMusicQueue = (tracks: PlayerTrack[], index = 0) => {
+    if (!tracks.length) return;
+    setMusicQueue(tracks);
+    setMusicIndex(Math.max(0, Math.min(index, tracks.length - 1)));
+    setMusicPlaying(true);
+  };
+
+  const stepMusic = (direction: -1 | 1) => {
+    if (!musicQueue.length) return;
+    setMusicIndex((current) => (current + direction + musicQueue.length) % musicQueue.length);
+    setMusicPlaying(true);
+  };
+
+  useEffect(() => {
+    const audio = musicAudioRef.current;
+    if (!audio || !musicQueue[musicIndex]) return;
+    audio.load();
+    if (musicPlaying) void audio.play().catch(() => setMusicPlaying(false));
+  }, [musicIndex, musicQueue, musicPlaying]);
 
   useEffect(() => {
     if (!supabase) {
@@ -1049,6 +1083,7 @@ function App() {
           {view === "media" && (
             <MediaPage
               media={media}
+              onPlayQueue={playMusicQueue}
               onCreate={async (item) => {
                 const created = await repository.createMedia(item);
                 setMedia((current) => [...current, created]);
@@ -1152,6 +1187,16 @@ function App() {
           )}
         </div>
       </main>
+      {musicQueue.length > 0 && (
+        <div className="global-music-player" role="region" aria-label="Global music player">
+          <Music2 size={18} />
+          <div className="global-music-meta"><strong>{musicQueue[musicIndex]?.title}</strong><span>{musicQueue[musicIndex]?.source} · {musicIndex + 1} of {musicQueue.length}</span></div>
+          <button className="music-control" aria-label="Previous track" onClick={() => stepMusic(-1)}><SkipBack size={16} /></button>
+          <button className="music-control music-play" aria-label={musicPlaying ? "Pause" : "Play"} onClick={() => setMusicPlaying((current) => !current)}>{musicPlaying ? <Pause size={16} /> : <Play size={16} />}</button>
+          <button className="music-control" aria-label="Next track" onClick={() => stepMusic(1)}><SkipForward size={16} /></button>
+          <audio ref={musicAudioRef} src={musicQueue[musicIndex]?.url} onPlay={() => setMusicPlaying(true)} onPause={() => setMusicPlaying(false)} onEnded={() => stepMusic(1)} controls />
+        </div>
+      )}
       {notice && (
         <div className="toast">
           <Check size={15} />
@@ -2393,9 +2438,11 @@ function TodoPage({
 
 function MediaPage({
   media,
+  onPlayQueue,
   onCreate,
 }: {
   media: MediaResource[];
+  onPlayQueue: (tracks: PlayerTrack[], index?: number) => void;
   onCreate: (media: Omit<MediaResource, "id">) => Promise<void>;
 }) {
   const [form, setForm] = useState<Omit<MediaResource, "id">>({
@@ -2420,8 +2467,33 @@ function MediaPage({
   const [videoNote, setVideoNote] = useState("");
   const [generatedVideoUrl, setGeneratedVideoUrl] = useState<string | null>(null);
   const [checkingVideoId, setCheckingVideoId] = useState<string | null>(null);
+  const [localTracks, setLocalTracks] = useState<PlayerTrack[]>([]);
+  const [youtubeQuery, setYoutubeQuery] = useState("");
+  const [youtubeEmbedUrl, setYoutubeEmbedUrl] = useState("");
+  const folderInputRef = useRef<HTMLInputElement | null>(null);
   const change = (key: keyof typeof form, value: string) =>
     setForm((current) => ({ ...current, [key]: value }));
+
+  const addLocalTracks = (files: FileList | null) => {
+    if (!files?.length) return;
+    const tracks = Array.from(files).filter((file) => file.type.startsWith("audio/")).map((file) => ({
+      id: `${file.name}-${file.lastModified}-${file.size}`,
+      title: file.name.replace(/\.[^.]+$/, ""),
+      url: URL.createObjectURL(file),
+      source: "This device",
+    }));
+    const next = [...localTracks, ...tracks.filter((track) => !localTracks.some((item) => item.id === track.id))];
+    setLocalTracks(next);
+    onPlayQueue(next, 0);
+  };
+
+  const searchYoutube = (event: React.FormEvent) => {
+    event.preventDefault();
+    const query = youtubeQuery.trim();
+    if (!query) return;
+    const direct = /^https?:\/\//i.test(query) ? toEmbedUrl(query) : `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(query)}`;
+    setYoutubeEmbedUrl(direct);
+  };
 
   useEffect(() => {
     void listMediaAssets()
@@ -2578,8 +2650,24 @@ function MediaPage({
       <PageHeading
         eyebrow="Law in every format"
         title="Media."
-        subtitle="Keep links, generated lessons, and long-form film plans in one cloud-backed media space."
+        subtitle="Keep links, generated lessons, and long-form film plans in one cloud-backed media space. Your music queue stays available across the whole app."
       />
+      <div className="card card-pad music-listener-card">
+        <CardHeader label="Music listener" action="Global queue · private on this device" />
+        <p className="field-hint">Choose a folder of downloaded audio files. They are played locally in your browser and are never uploaded. Use the persistent player at the bottom of the screen to pause, go back, or play the next track from any page.</p>
+        <div className="music-listener-grid">
+          <div>
+            <input ref={folderInputRef} className="visually-hidden" type="file" accept="audio/*" multiple onChange={(event) => addLocalTracks(event.target.files)} />
+            <button className="primary-button" onClick={() => { folderInputRef.current?.setAttribute("webkitdirectory", ""); folderInputRef.current?.click(); }}><FolderOpen size={15} /> Choose music folder</button>
+            {!!localTracks.length && <div className="local-track-list">{localTracks.map((track, index) => <button className="local-track" key={track.id} onClick={() => onPlayQueue(localTracks, index)}><Music2 size={14} /><span>{track.title}</span><small>Play</small></button>)}</div>}
+          </div>
+          <form className="youtube-listener" onSubmit={searchYoutube}>
+            <label>Search YouTube or paste a YouTube link<input value={youtubeQuery} onChange={(event) => setYoutubeQuery(event.target.value)} placeholder="e.g. study jazz or https://youtu.be/..." /></label>
+            <button className="secondary-button" type="submit"><Youtube size={15} /> Play in app</button>
+            {youtubeEmbedUrl && <div className="youtube-listener-frame"><iframe src={youtubeEmbedUrl} title="YouTube music search" allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen /></div>}
+          </form>
+        </div>
+      </div>
       <div className="card card-pad media-form-card">
         <CardHeader label="Add a resource" action="Your private collection" />
         <form

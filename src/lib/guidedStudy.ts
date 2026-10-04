@@ -245,6 +245,21 @@ export async function listGuidedCourses() {
   return (data ?? []) as GuidedCourse[];
 }
 
+export async function deleteGuidedCourse(courseId: string) {
+  const user = (await db().auth.getUser()).data.user;
+  if (!user) throw new Error("Sign in first.");
+  const { error } = await db().from("guided_courses").delete().eq("id", courseId).eq("owner", user.id);
+  if (error) throw new Error(`Could not delete the syllabus: ${error.message}`);
+}
+
+export async function updateGuidedCourseVisibility(courseId: string, visibility: "private" | "group") {
+  const user = (await db().auth.getUser()).data.user;
+  if (!user) throw new Error("Sign in first.");
+  const { data, error } = await db().from("guided_courses").update({ visibility, updated_at: new Date().toISOString() }).eq("id", courseId).eq("owner", user.id).select("*").single();
+  if (error || !data) throw new Error(`Could not update syllabus sharing: ${error?.message ?? "unknown error"}`);
+  return data as GuidedCourse;
+}
+
 export async function getCourseProgress(courseId: string) {
   const { data, error } = await db().from("guided_course_progress").select("lesson_index,status,score,attempts,last_answer").eq("course_id", courseId).order("lesson_index").limit(100);
   if (error) throw new Error("Could not load learning progress.");
