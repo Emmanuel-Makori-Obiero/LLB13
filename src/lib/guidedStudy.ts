@@ -47,7 +47,7 @@ function parseWrittenCheckpoint(value: unknown): WrittenCheckpoint | null {
 }
 
 function extractJsonObject(text: string) {
-  const clean = text.replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  const clean = text.replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/\s*\(unverified quotation\)/gi, "").replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
   try { return JSON.parse(clean) as Partial<GuideSyllabus>; } catch { /* find JSON wrapped in prose */ }
   for (let start = 0; start < clean.length; start += 1) {
     if (clean[start] !== "{") continue;
@@ -91,7 +91,7 @@ function parseSyllabus(text: string, data?: unknown): GuideSyllabus | null {
     return {
     title: String(item.title ?? "Lesson"), objective: String(item.objective ?? "Understand the key rule."),
     explanation: String(item.explanation ?? item.summary ?? item.content ?? ""), example: String(item.example ?? ""), sourceFocus: item.sourceFocus ? String(item.sourceFocus) : undefined,
-    checkpoint: item.checkpoint === "exam" ? "exam" : "quiz",
+    checkpoint: String(item.checkpoint ?? "").toLowerCase().includes("exam") ? "exam" : "quiz",
     quiz: quiz.filter((q) => q && typeof q === "object" && typeof (q as { question?: unknown }).question === "string").map((q) => { const item = q as { question: string; options?: unknown; answerIndex?: unknown; explanation?: unknown }; return { question: item.question, options: Array.isArray(item.options) ? item.options.map(String) : [], answerIndex: Number(item.answerIndex) || 0, explanation: String(item.explanation ?? "") }; }),
   }; }) };
 }
