@@ -184,6 +184,7 @@ type PlayerTrack = { id: string; title: string; url: string; source: string };
 function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [showLandingPreview, setShowLandingPreview] = useState(false);
+  const [authCallbackNotice, setAuthCallbackNotice] = useState("");
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [adminState, setAdminState] = useState<"unknown" | "yes" | "no">(
@@ -282,11 +283,20 @@ function App() {
       const code = params.get("code");
       if (code) {
         const { error } = await supabase!.auth.exchangeCodeForSession(code);
-        if (error)
+        if (error) {
+          setAuthCallbackNotice("We could not complete that email confirmation. Request a new confirmation email and open it from the canonical Group 13 link.");
+          setView("login");
           console.error(
             "Could not complete the email confirmation:",
             error.message,
           );
+        }
+      }
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+      const callbackError = hashParams.get("error_description");
+      if (callbackError) {
+        setAuthCallbackNotice(callbackError.replace(/\+/g, " "));
+        setView("login");
       }
       const sessionResult = await supabase!.auth.getSession();
       if (!active) return;
@@ -667,6 +677,7 @@ function App() {
         <LoginPage
           configured={isSupabaseConfigured}
           initialMode={view === "signup" ? "sign-up" : "sign-in"}
+          initialNotice={authCallbackNotice}
           onSignedIn={(email) => {
             setUserEmail(email);
             setPage(view === "scanner" ? "scanner" : "dashboard");
