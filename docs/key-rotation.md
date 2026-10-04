@@ -12,7 +12,7 @@ HF_TOKEN_2
 HF_TOKEN_3
 ```
 
-The legacy names `GEMINI_API_KEY` and `HF_TOKEN` remain supported. Numbered secrets are tried first, and the legacy secret is used afterward if present. The AI function gives each provider/key pair its own in-memory cooldown after quota, authentication, timeout, or server errors. Audio and image generation rotate across HF tokens on bounded retries; video submission uses a different token for each provider attempt.
+The legacy names `GEMINI_API_KEY` and `HF_TOKEN` remain supported. Numbered secrets are tried first, and the legacy secret is used afterward if present. The AI function gives each provider/key pair its own in-memory cooldown after quota, authentication, timeout, or server errors. Image generation rotates across HF tokens on bounded retries; video submission uses a different token for each provider attempt. Podcast audio can optionally use Google's multi-speaker Gemini TTS; see [Media generation and app installation](media-and-install-setup.md). That mode is off by default and only runs when `GEMINI_TTS_ENABLED=true` is configured in Supabase.
 
 Set secrets from a trusted terminal, never in React code or GitHub:
 

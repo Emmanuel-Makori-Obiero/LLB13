@@ -2404,7 +2404,7 @@ function MediaPage({
         prompt: `${filmBrief.trim()}\nThis is segment ${index + 1} of 5. Preserve the same characters, setting, visual style, narration, and story continuity from the previous and next segments.`,
         continuity_notes: `Segment ${index + 1}/5. Keep the ending state ready for segment ${index + 2}. The provider worker should subdivide this 3-minute plan into supported short shots and stitch them.`,
       })));
-      setFilmNote("Film plan saved to Supabase: five connected 3-minute segments. Generation providers can now be assigned by the worker.");
+      setFilmNote("Film plan saved. This creates a storyboard and shot list only; the long-form video renderer is not implemented yet.");
       setFilmTitle("");
       setFilmBrief("");
     } catch (error) {
@@ -2490,8 +2490,8 @@ function MediaPage({
       </div>
 
       <div className="card card-pad" style={{ marginTop: 18 }}>
-        <CardHeader label="Video Studio" action="3-provider free fallback" />
-        <p className="field-hint">Generate one short cinematic clip. The server tries OpenKing Wan2.2, Pyramid Flow, then LTX-Video Fast, and saves the successful result to Supabase.</p>
+        <CardHeader label="Video Studio" action="Hugging Face Spaces · best effort" />
+        <p className="field-hint">Generate one short cinematic clip. Public GPU spaces can be unavailable or heavily queued. This requires the Supabase video functions and media migrations to be deployed; see the setup guide if the request fails or stays queued.</p>
         <form className="data-form" onSubmit={(event) => void buildVideo(event)}>
           <label>Video scene<textarea required minLength={12} rows={4} value={videoPrompt} onChange={(event) => setVideoPrompt(event.target.value)} placeholder="A law student walks through a quiet Nairobi courthouse at sunrise, cinematic camera movement, realistic documentary style" /></label>
           <button className="primary-button" type="submit" disabled={videoBusy}>{videoBusy ? "Generating cloud video…" : "Generate short video clip"}</button>
@@ -2502,7 +2502,7 @@ function MediaPage({
 
       <div className="card card-pad" style={{ marginTop: 18 }}>
         <CardHeader label="Image Studio" action="Hugging Face · Supabase Storage" />
-        <p className="field-hint">Describe an illustration, study diagram, or film reference image. The request runs serverlessly and the result is saved to your private cloud library.</p>
+        <p className="field-hint">Describe an illustration, study diagram, or film reference image. This route uses Hugging Face FLUX and needs a deployed image function, the media migration, and an HF_TOKEN secret in Supabase. The result is saved to your private cloud library.</p>
         <form className="data-form" onSubmit={(event) => void buildImage(event)}>
           <label>Image prompt<textarea required minLength={8} rows={4} value={imagePrompt} onChange={(event) => setImagePrompt(event.target.value)} placeholder="A clean editorial illustration of a Kenyan courtroom, warm paper texture, no text" /></label>
           <button className="primary-button" type="submit" disabled={imageBusy}>{imageBusy ? <><ImageIcon size={16} /> Generating…</> : <><Sparkles size={16} /> Generate image</>}</button>
@@ -2513,7 +2513,7 @@ function MediaPage({
 
       <div className="card card-pad" style={{ marginTop: 18 }}>
         <CardHeader label="Long-form film planner" action="Supabase cloud plan" />
-        <p className="field-hint">Create a connected 15-minute plan as five 3-minute segments. The eventual worker will split each segment into provider-supported short clips, preserve continuity, and stitch the result.</p>
+        <p className="field-hint">Save a connected 15-minute storyboard as five 3-minute segments. This currently saves the plan and shots only; it does not generate or stitch a 15-minute film.</p>
         <form className="data-form" onSubmit={(event) => void buildFilmPlan(event)}>
           <label>Film title<input required value={filmTitle} onChange={(event) => setFilmTitle(event.target.value)} placeholder="e.g. The rule of law in Kenya" /></label>
           <label>Film brief<textarea required rows={4} value={filmBrief} onChange={(event) => setFilmBrief(event.target.value)} placeholder="Describe the story, lesson, characters, visual style, and narration." /></label>
