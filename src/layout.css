@@ -700,3 +700,9 @@ body,
 
 .youtube-fallback-link{display:block;margin-top:4px;color:var(--paper);font-size:10px;text-decoration:underline}
 .music-volume{display:flex;align-items:center;gap:6px;color:rgba(255,255,255,.82);font-size:10px;white-space:nowrap}.music-volume input{width:78px;accent-color:var(--paper);cursor:pointer}.music-volume .music-control{flex:0 0 auto}
+
+/* Always-visible global music player toggle. */
+.music-toggle-button{position:relative;z-index:3;display:inline-flex;align-items:center;justify-content:center;gap:5px;flex:0 0 auto;min-width:84px;height:32px;padding:0 10px;border:1px solid rgba(255,255,255,.7);border-radius:7px;background:#fff;color:var(--forest);font-size:10px;font-weight:700;line-height:1;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.music-toggle-button:hover,.music-toggle-button:focus-visible{background:var(--clay);border-color:#fff;color:#fff;outline:2px solid #fff;outline-offset:2px}
+.global-music-player.is-minimized .music-toggle-button{min-width:72px;background:var(--clay);color:#fff;border-color:#fff}
+@media(max-width:760px){.music-toggle-button{min-width:78px;height:34px;padding:0 8px;font-size:10px}.global-music-player.is-minimized .music-toggle-button{min-width:70px}.global-music-player{z-index:60}}
