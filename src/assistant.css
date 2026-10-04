@@ -102,6 +102,21 @@
   padding-top: 12px;
   border-top: 1px solid var(--line);
 }
+.ta-quality {
+  margin: 14px 0;
+  padding: 12px 14px;
+  border: 1px solid #e5b9ad;
+  background: #fff7f4;
+  color: var(--oxblood);
+  font-size: 11px;
+  line-height: 1.55;
+}
+.ta-quality.pass { border-color: #b9cdb5; background: var(--moss); color: var(--forest); }
+.ta-quality-head { display: flex; align-items: center; gap: 7px; }
+.ta-quality-head .chip { margin-left: auto; }
+.ta-quality p { margin: 6px 0; }
+.ta-quality ul { margin: 6px 0 0 18px; padding: 0; }
+.ta-quality small { display: block; margin-top: 8px; }
 .sa-source {
   display: flex;
   gap: 8px;
@@ -556,6 +571,24 @@
   border-top: 1px solid var(--line);
   max-height: 70vh;
   overflow: auto;
+}
+.ta-result .sa-answer,
+.ta-note-body {
+  background: var(--white);
+  border: 1px solid var(--line);
+  padding: 16px 18px;
+}
+.ta-result .sa-answer .md,
+.ta-note-body .md {
+  max-width: 78ch;
+}
+.ta-result .md-h:first-child,
+.ta-note-body .md-h:first-child {
+  margin-top: 0;
+}
+.ta-result .md-table-wrap,
+.ta-note-body .md-table-wrap {
+  box-shadow: 0 3px 12px rgb(22 58 52 / 7%);
 }
 .ta-copy {
   margin-top: 14px;

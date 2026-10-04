@@ -97,6 +97,13 @@ const TOOLS: Tool[] = [
     needsInput: true,
     request: (i) => `Format these authorities:\n\n${i}`,
   },
+  {
+    feature: "rw_validate",
+    label: "Verify draft & citations",
+    placeholder: "Checks spelling, coherence, authority support and citation style against your selected sources.",
+    useDraft: true,
+    request: () => "Audit my complete draft and its citations. Return the requested validation JSON and do not rewrite the draft.",
+  },
 ];
 
 const clip = (text: string, max = 12000) =>
@@ -164,6 +171,10 @@ export function ResearchWriter() {
     }
     if (tool.feature === "rw_critique" && !draft.trim()) {
       setNote("Write or paste some of your draft first.");
+      return;
+    }
+    if (tool.feature === "rw_validate" && !draft.trim()) {
+      setNote("Write or paste your draft first so it can be verified.");
       return;
     }
     if (

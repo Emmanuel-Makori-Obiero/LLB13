@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  AlertTriangle,
+  CheckCircle2,
   Download,
   Globe,
   Layers,
@@ -97,6 +99,16 @@ type ExtractedAssignment = {
   source_excerpt: string;
   status: "pending" | "accepted" | "rejected";
 };
+type QualityReport = {
+  status: "pass" | "review";
+  score: number;
+  summary: string;
+  spelling_issues: { text: string; suggestion: string; reason: string }[];
+  meaning_issues: { text: string; issue: string; suggested_fix: string; source_support: string }[];
+  unsupported_claims: { text: string; reason: string }[];
+  missing_points: string[];
+  authority_checks: { authority: string; status: string; reason: string }[];
+};
 
 export function TranscriptAI({
   transcriptId,
@@ -126,6 +138,7 @@ export function TranscriptAI({
   const [reload, setReload] = useState(0);
   const [extracted, setExtracted] = useState<ExtractedAssignment[]>([]);
   const [assignmentMsg, setAssignmentMsg] = useState("");
+  const [quality, setQuality] = useState<QualityReport | null>(null);
 
   const mkTask = (a: Action) => ({
     feature: a.feature,
@@ -142,6 +155,7 @@ export function TranscriptAI({
     );
   };
   const generatedText = notesText || turn?.result?.answer || "";
+  const reviewed = quality?.status === "pass";
   const downloadNotesPdf = () =>
     downloadPdf(
       title,
@@ -154,6 +168,34 @@ export function TranscriptAI({
       generatedText,
       `${title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "lecture"}-${turn?.task.feature === "summarize" ? "summary" : "notes"}.doc`,
     );
+
+  const reviewOutput = async (text: string) => {
+    setStep("Checking spelling, meaning, source support and authorities");
+    try {
+      const result = await askAI({
+        feature: "quality_check",
+        mode: "materials",
+        docIds: [saved.current!.id],
+        messages: [{
+          role: "user",
+          content: `Audit this generated ${turn?.task.feature === "summarize" ? "summary" : "set of notes"} against the transcript in <sources>. Do not rewrite it.\n\nGENERATED TEXT:\n${text}`,
+        }],
+      });
+      const raw = (result.data ?? {}) as Partial<QualityReport>;
+      setQuality({
+        status: raw.status === "pass" ? "pass" : "review",
+        score: Math.max(0, Math.min(100, Number(raw.score ?? 0))),
+        summary: String(raw.summary ?? "The output needs a human review."),
+        spelling_issues: Array.isArray(raw.spelling_issues) ? raw.spelling_issues as QualityReport["spelling_issues"] : [],
+        meaning_issues: Array.isArray(raw.meaning_issues) ? raw.meaning_issues as QualityReport["meaning_issues"] : [],
+        unsupported_claims: Array.isArray(raw.unsupported_claims) ? raw.unsupported_claims as QualityReport["unsupported_claims"] : [],
+        missing_points: Array.isArray(raw.missing_points) ? raw.missing_points.map(String) : [],
+        authority_checks: Array.isArray(raw.authority_checks) ? raw.authority_checks as QualityReport["authority_checks"] : [],
+      });
+    } catch (error) {
+      setQuality({ status: "review", score: 0, summary: `Quality review could not complete: ${(error as Error).message}`, spelling_issues: [], meaning_issues: [], unsupported_claims: [], missing_points: [], authority_checks: [] });
+    }
+  };
 
   const run = async (action: Action) => {
     if (busy) return;
@@ -170,6 +212,7 @@ export function TranscriptAI({
     setBusy(action.feature);
     setTurn(null);
     setNotesText("");
+    setQuality(null);
     try {
       // Save the transcript once per visit so every button reads the same copy.
       if (!saved.current) {
@@ -247,6 +290,9 @@ export function TranscriptAI({
             result: { ...last, answer: shown, warnings: [], sources: [] },
           });
         }
+        const complete = done.join("\n\n---\n\n");
+        setNotesText(complete);
+        await reviewOutput(complete);
         return;
       }
 
@@ -286,6 +332,7 @@ export function TranscriptAI({
         );
       }
       setTurn({ id: 1, task, prompt: action.prompt, result });
+      if (action.feature === "summarize") await reviewOutput(result.answer);
     } catch (e) {
       setTurn({
         id: 1,
@@ -478,6 +525,25 @@ export function TranscriptAI({
             </div>
           )}
           {textual && !busy && (
+            <div className={`ta-quality ${reviewed ? "pass" : "review"}`}>
+              <div className="ta-quality-head">
+                {reviewed ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
+                <strong>{reviewed ? "Quality check passed" : "Human review required"}</strong>
+                {quality && <span className="chip">{quality.score}/100</span>}
+              </div>
+              <p>{quality?.summary ?? "The AI output has not passed its source and spelling check yet."}</p>
+              {quality && (quality.spelling_issues.length + quality.meaning_issues.length + quality.unsupported_claims.length + quality.missing_points.length > 0) && (
+                <ul>
+                  {quality.spelling_issues.map((item, i) => <li key={`spelling-${i}`}>Spelling: <strong>{item.text}</strong> → {item.suggestion}</li>)}
+                  {quality.meaning_issues.map((item, i) => <li key={`meaning-${i}`}>Meaning: <strong>{item.text}</strong> — {item.issue}</li>)}
+                  {quality.unsupported_claims.map((item, i) => <li key={`claim-${i}`}>Not verified: <strong>{item.text}</strong> — {item.reason}</li>)}
+                  {quality.missing_points.map((item, i) => <li key={`missing-${i}`}>Missing from output: {item}</li>)}
+                </ul>
+              )}
+              {!reviewed && <small>Correct or re-run the output after checking the original transcript. Downloads and saving stay locked until the check passes.</small>}
+            </div>
+          )}
+          {textual && !busy && reviewed && (
             <div className="ta-after">
               <button
                 type="button"
@@ -515,7 +581,7 @@ export function TranscriptAI({
               )}
             </div>
           )}
-          {textual && !busy && userId && (
+          {textual && !busy && reviewed && userId && (
             <div className="ta-share">
               <div className="ta-share-choice" role="radiogroup">
                 <label className={visibility === "private" ? "on" : ""}>
