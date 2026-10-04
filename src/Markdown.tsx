@@ -11,7 +11,9 @@ function inline(text: string, base: string): ReactNode[] {
   const out: ReactNode[] = [];
   let last = 0;
   let n = 0;
-  const plain = (s: string) => s.replace(/\*{2,}/g, "");
+  // Models occasionally emit an unmatched closing marker. Never show the
+  // Markdown control characters to students when that happens.
+  const plain = (s: string) => s.replace(/\*{2,}|_{2,}/g, "");
   for (const m of text.matchAll(INLINE)) {
     const t = m[0];
     const at = m.index ?? 0;
@@ -60,7 +62,10 @@ const cells = (row: string) =>
     .map((c) => c.trim());
 
 export function Markdown({ text }: { text: string }) {
-  const lines = text.replace(/\r/g, "").split("\n");
+  const lines = text
+    .replace(/\r/g, "")
+    .replace(/^\s*```(?:markdown|md)?\s*$/gim, "")
+    .split("\n");
   const blocks: ReactNode[] = [];
   let i = 0;
   let k = 0;

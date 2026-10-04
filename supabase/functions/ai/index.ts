@@ -308,7 +308,7 @@ const FEATURES: Record<
   },
   summarize: {
     docWide: true,
-    task: "Summarise the material faithfully: key issues, rules/holdings, reasoning, significance. Add no facts that are not in it.",
+    task: "Create attractive, human study notes from the material, not an AI-sounding essay. Start directly with a useful ## title or topic heading; do not say 'Here is a summary' or describe what you are doing. Use ## headings for major topics, ### headings for Rule, Authority, Example, Exam focus or Takeaway, short paragraphs and purposeful bullet lists. Where the source gives 2 or more cases, tests, elements or concepts that can be compared, include a compact Markdown table with useful column headings; do not force a table when it would add no clarity. Use a blockquote for a lecturer warning or exam tip. Keep the lecturer's actual meaning, rules/holdings, reasoning and significance in order. Add no facts that are not in the source and mark unclear material [unclear].",
   },
   book_contents: {
     json: true,
@@ -369,7 +369,7 @@ const FEATURES: Record<
   },
   notes: {
     docWide: true,
-    task: `Turn this part of a lecture transcript into complete, well-organised study notes. Keep the lecturer's order. Do NOT leave out any substantive point: every rule, definition, test, element, case, statute and section, example, date, name, number, exception and instruction must appear. Remove only filler, repetition, jokes and chit-chat. Structure: "## " headings by topic, bullets for points, bold for key terms and case names, a table when comparing things. Where the lecturer stresses something, flags an exam point or gives a warning, add a line starting "Exam point:". If a passage is garbled, write [unclear] instead of guessing. If this part has cases or statutes, end with a short "Authorities mentioned" list.`,
+    task: `Turn this part of a lecture transcript into complete, natural student study notes. Keep the lecturer's order. Do NOT leave out any substantive point: every rule, definition, test, element, case, statute and section, example, date, name, number, exception and instruction must appear. Remove only filler, repetition, jokes and chit-chat. Do not open with "Here are the notes", do not use generic AI filler, and do not repeat "key takeaway" or "in summary" after every section. Use "## " headings for major topics, "### " headings for Rule, Authority, Example, Exam focus or Takeaway, short paragraphs and purposeful bullets. Use bold only for genuinely important terms, not whole sentences. When the source contains 2 or more comparable cases, tests, elements or concepts, include a compact Markdown table with clear column headings; never invent a comparison. Use a blockquote for an exam warning or lecturer emphasis. If a passage is garbled, write [unclear] instead of guessing. If this part has cases or statutes, end with a short "Authorities mentioned" list.`,
   },
   quality_check: {
     json: true,

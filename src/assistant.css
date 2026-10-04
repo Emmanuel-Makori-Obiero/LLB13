@@ -572,6 +572,24 @@
   max-height: 70vh;
   overflow: auto;
 }
+.ta-result .sa-answer,
+.ta-note-body {
+  background: var(--white);
+  border: 1px solid var(--line);
+  padding: 16px 18px;
+}
+.ta-result .sa-answer .md,
+.ta-note-body .md {
+  max-width: 78ch;
+}
+.ta-result .md-h:first-child,
+.ta-note-body .md-h:first-child {
+  margin-top: 0;
+}
+.ta-result .md-table-wrap,
+.ta-note-body .md-table-wrap {
+  box-shadow: 0 3px 12px rgb(22 58 52 / 7%);
+}
 .ta-copy {
   margin-top: 14px;
 }
