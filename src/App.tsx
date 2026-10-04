@@ -163,6 +163,7 @@ type UserProfile = {
 
 function App() {
   const [authLoading, setAuthLoading] = useState(true);
+  const [showLandingPreview, setShowLandingPreview] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [adminState, setAdminState] = useState<"unknown" | "yes" | "no">(
@@ -245,7 +246,10 @@ function App() {
       }
       const sessionResult = await supabase!.auth.getSession();
       if (!active) return;
-      applySession(sessionResult.data.session);
+      const session = sessionResult.data.session;
+      applySession(session);
+      if (session?.user && window.location.pathname === "/")
+        setShowLandingPreview(true);
       if (code || window.location.hash.includes("access_token")) {
         window.history.replaceState({}, "", window.location.pathname);
       }
@@ -264,6 +268,12 @@ function App() {
       listener.subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (!showLandingPreview) return;
+    const timer = window.setTimeout(() => setShowLandingPreview(false), 1000);
+    return () => window.clearTimeout(timer);
+  }, [showLandingPreview]);
 
   useEffect(() => {
     if (!userEmail) {
@@ -582,6 +592,19 @@ function App() {
     );
   if (recovering && userEmail)
     return <ResetPasswordPage onDone={() => setRecovering(false)} />;
+  if (userEmail && showLandingPreview && window.location.pathname === "/")
+    return (
+      <LandingPage
+        configured={isSupabaseConfigured}
+        signedInPreview
+        onEnterWorkspace={() => {
+          setShowLandingPreview(false);
+          setPage("dashboard");
+        }}
+        onSignIn={() => setPage("dashboard")}
+        onSignUp={() => setPage("dashboard")}
+      />
+    );
   if (!userEmail) {
     if (view === "login" || view === "signup")
       return (

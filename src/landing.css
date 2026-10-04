@@ -11,6 +11,7 @@
   overflow: hidden;
 }
 .g13-scroll-progress { position: fixed; z-index: 80; inset: 0 auto auto 0; width: var(--page-progress, 0%); height: 2px; background: var(--g13-clay); transition: width .12s linear; }
+.g13-landing-preview .g13-scroll-progress { width: 100%; transform: scaleX(0); transform-origin: left; animation: g13-preview-progress 1s linear both; }
 .g13-site-header { position: absolute; z-index: 30; top: 0; left: 0; right: 0; display: flex; align-items: center; justify-content: space-between; gap: 25px; padding: 23px clamp(20px, 5.4vw, 82px); border-bottom: 1px solid #ffffff17; background: linear-gradient(180deg, #09110edb, #09110e20); }
 .landing-brand { display: inline-flex; align-items: center; gap: 11px; color: var(--g13-ink); text-decoration: none; flex: none; }
 .landing-brand-mark { display: grid; place-items: center; width: 38px; height: 38px; border: 1px solid #c96e52b5; color: #f5eadd; font: 600 22px/1 Fraunces, Georgia, serif; }
@@ -29,7 +30,9 @@
 .g13-signup-button:hover,.g13-hero-primary:hover { background: #d67c60; }
 .g13-hero { position: relative; isolation: isolate; display: flex; align-items: center; min-height: min(900px, 100svh); min-height: max(690px, 100svh); padding: 140px clamp(24px, 9vw, 138px) 110px; overflow: hidden; background: #0b1310; }
 .g13-hero-image,.g13-hero-grain,.g13-hero-vignette { position: absolute; z-index: -1; inset: 0; pointer-events: none; }
-.g13-hero-image { background-image: url('/landing-hero.webp'); background-size: cover; background-position: center 48%; transform: scale(1.012); animation: g13-hero-reveal 1.4s cubic-bezier(.22,.7,.2,1) both; }
+.g13-hero-image { background-image: url('/landing-hero-photo.webp'); background-size: cover; background-position: center 52%; transform: scale(1.012); animation: g13-hero-reveal 1.4s cubic-bezier(.22,.7,.2,1) both; }
+.g13-landing-preview .g13-hero-image { animation-duration: .45s; }
+.g13-landing-preview .g13-hero-copy { animation-duration: .35s; animation-delay: 0s; }
 .g13-hero-grain { z-index: 0; opacity: .17; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.78' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.25'/%3E%3C/svg%3E"); mix-blend-mode: soft-light; }
 .g13-hero-vignette { z-index: 0; background: linear-gradient(90deg, #07110ef2 0%, #07110ed9 31%, #07110e65 56%, #07110e13 100%), linear-gradient(0deg, #101714 0%, #10171400 19%, #10171400 75%, #10171438 100%); }
 .g13-hero::after { content: ''; position: absolute; z-index: 0; inset: 0; opacity: .17; background: radial-gradient(360px circle at var(--hero-x,72%) var(--hero-y,52%), #d9aa7155, transparent 75%); transition: opacity .35s; pointer-events: none; }
@@ -45,6 +48,7 @@
 .g13-hero-secondary:hover { background: #ffffff20; }
 .g13-hero-secondary span { color: var(--g13-brass); font-size: 16px; }
 .g13-access-note { display: flex; align-items: center; gap: 7px; margin: 15px 0 0; color: #d3d5cda3; font-size: 10px; }
+.g13-opening-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--g13-clay); box-shadow: 0 0 0 4px #c96e5226; }
 .g13-hero-index { position: absolute; z-index: 2; right: clamp(24px, 6vw, 92px); top: 43%; display: grid; justify-items: center; gap: 5px; color: #f3ead3aa; writing-mode: vertical-rl; }
 .g13-hero-index span,.g13-hero-index small { font-size: 8px; letter-spacing: .19em; }
 .g13-hero-index strong { font: 500 36px Fraunces, Georgia, serif; color: #d5b381; }
@@ -143,6 +147,7 @@
 @keyframes g13-copy-arrive { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes g13-cue { 0%,100% { transform: translateY(0); } 50% { transform: translateY(5px); } }
 @keyframes g13-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes g13-preview-progress { to { transform: scaleX(1); } }
 
 @media (max-width: 900px) {
   .g13-site-header { padding-inline: 24px; }
