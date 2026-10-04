@@ -8,6 +8,14 @@ type Notice = { tone: "error" | "info" | "success"; text: string } | null;
 const EMAIL_COOLDOWN = 60;
 const RATE_LIMIT_COOLDOWN = 300;
 const EMAIL_REQUEST_KEY = "group13-auth-email-request";
+const AUTH_APP_ORIGIN = (() => {
+  const configured = import.meta.env.VITE_APP_URL?.trim().replace(/\/$/, "");
+  if (configured) return configured;
+  const host = window.location.hostname;
+  return host === "localhost" || host === "127.0.0.1"
+    ? window.location.origin
+    : "https://llb-13.vercel.app";
+})();
 
 function friendlyError(message: string): string {
   const m = message.toLowerCase();
@@ -87,11 +95,13 @@ export default function LoginPage({
   configured,
   onSignedIn,
   initialMode = "sign-in",
+  initialNotice = "",
   onBackToHome,
 }: {
   configured: boolean;
   onSignedIn?: (email: string) => void;
   initialMode?: Mode;
+  initialNotice?: string;
   onBackToHome?: () => void;
 }) {
   const [mode, setMode] = useState<Mode>(initialMode);
@@ -105,6 +115,9 @@ export default function LoginPage({
   const [cooldown, setCooldown] = useState(0);
 
   useEffect(() => setMode(initialMode), [initialMode]);
+  useEffect(() => {
+    if (initialNotice) setNotice({ tone: "error", text: initialNotice });
+  }, [initialNotice]);
 
   const readEmailCooldown = (target: string) => {
     try {
@@ -172,7 +185,7 @@ export default function LoginPage({
       const { error } = await supabase.auth.resend({
         type: "signup",
         email: target,
-        options: { emailRedirectTo: window.location.origin },
+        options: { emailRedirectTo: AUTH_APP_ORIGIN },
       });
       if (error) {
         const message = friendlyError(error.message);
@@ -254,7 +267,7 @@ export default function LoginPage({
         email: cleanEmail,
         password,
         options: {
-          emailRedirectTo: window.location.origin,
+          emailRedirectTo: AUTH_APP_ORIGIN,
           data: name.trim() ? { display_name: name.trim() } : undefined,
         },
       });
@@ -315,7 +328,7 @@ export default function LoginPage({
     setBusy(true);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
-        redirectTo: window.location.origin,
+        redirectTo: AUTH_APP_ORIGIN,
       });
       setNotice(
         error
