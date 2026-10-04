@@ -112,6 +112,16 @@ function parseJson(text: string, data?: unknown): GuideSyllabus {
   return parsed;
 }
 
+function fallbackSyllabus(subject: string, digest: string, language: StudyLanguage): GuideSyllabus {
+  const sections = digest.split(/\n\n=== SOURCE DIGEST ===\n\n/).map((section) => section.trim()).filter(Boolean);
+  const lessons = (sections.length ? sections : [digest]).slice(0, 16).map((section, index) => {
+    const lines = section.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const title = lines.find((line) => /^SOURCE:|^##\s/.test(line))?.replace(/^(SOURCE:|##\s*)/, "").trim() || `Source section ${index + 1}`;
+    return { title, objective: language === "sw" ? "Soma na uhakiki hoja muhimu katika sehemu hii." : "Review the source-grounded points in this section.", explanation: section, example: "", checkpoint: "quiz" as const, quiz: [] };
+  });
+  return { overview: `AI providers were unavailable while creating this ${subject} guide. The original source text was preserved below so you can continue reading without invented content.`, lessons };
+}
+
 async function transcriptAsDocument(choice: SourceChoice) {
   const { data, error } = await db().from("transcript_chunks").select("idx,text").eq("transcript_id", choice.id).order("idx").limit(3000);
   if (error) throw new Error(`Could not load transcript ${choice.title}.`);
@@ -133,6 +143,13 @@ async function runAIStage(args: Parameters<typeof askAI>[0]): Promise<AIResult> 
     const detail = error instanceof Error ? error.message : "No provider returned a result.";
     throw new Error(`${stage} failed after the configured provider failover: ${detail}`);
   }
+}
+
+async function rawSourceSection(docId: string, part: number, size: number) {
+  const from = part * size;
+  const { data, error } = await db().from("ai_chunks").select("idx,content").eq("document_id", docId).order("idx").range(from, from + size - 1);
+  if (error || !data?.length) throw new Error("The source text could not be loaded for fallback reading.");
+  return data.map((row) => String(row.content ?? "")).filter(Boolean).join("\n\n");
 }
 
 const SOURCE_READ_CONCURRENCY = 3;
@@ -161,21 +178,31 @@ async function buildSourceDigest(sources: SourceChoice[], docIds: string[], onPr
     const sectionIndexes = Array.from({ length: parts }, (_, index) => index);
     const notes = await mapConcurrentOrdered(sectionIndexes, SOURCE_READ_CONCURRENCY, async (part) => {
       onProgress?.(`Reading ${source?.title ?? "source"}: section ${part + 1} of ${parts}…`);
-      const result = await runAIStage({
-        feature: "notes", mode, docIds: [docId], part, size: 10,
-        messages: [{ role: "user", content: "Create faithful coverage notes for this section. Preserve every rule, definition, authority, example, exception, date and exam warning. Do not invent or skip content." }],
-      });
-      return result.answer;
+      try {
+        const result = await runAIStage({
+          feature: "notes", mode, docIds: [docId], part, size: 10,
+          messages: [{ role: "user", content: "Create faithful coverage notes for this section. Preserve every rule, definition, authority, example, exception, date and exam warning. Do not invent or skip content." }],
+        });
+        return result.answer;
+      } catch {
+        onProgress?.(`AI reading is unavailable; keeping the original text for section ${part + 1} so no source content is lost…`);
+        return `## Source section ${part + 1}\n\n${await rawSourceSection(docId, part, 10)}`;
+      }
     });
     const reductionBatches = Array.from({ length: Math.ceil(notes.length / 4) }, (_, index) => notes.slice(index * 4, index * 4 + 4));
     const reduced = await mapConcurrentOrdered(reductionBatches, DIGEST_CONCURRENCY, async (batchNotes, index) => {
       onProgress?.(`Compressing ${source?.title ?? "source"}: digest ${index + 1} of ${reductionBatches.length}…`);
       const batch = batchNotes.join("\n\n--- NEXT SECTION ---\n\n");
-      const compressed = await runAIStage({
-        feature: "summarize", mode: "general",
-        messages: [{ role: "user", content: `Compress the following source-grounded coverage notes into a compact chapter/topic map. Keep all distinct legal rules, authorities, examples, exceptions and unresolved [unclear] markers. Do not add facts.\n\n${batch}` }],
-      });
-      return `SOURCE: ${source?.title ?? docId}\n${compressed.answer}`;
+      try {
+        const compressed = await runAIStage({
+          feature: "summarize", mode: "general",
+          messages: [{ role: "user", content: `Compress the following source-grounded coverage notes into a compact chapter/topic map. Keep all distinct legal rules, authorities, examples, exceptions and unresolved [unclear] markers. Do not add facts.\n\n${batch}` }],
+        });
+        return `SOURCE: ${source?.title ?? docId}\n${compressed.answer}`;
+      } catch {
+        onProgress?.(`AI compression is unavailable; preserving the original section text in the digest…`);
+        return `SOURCE: ${source?.title ?? docId}\n${batch}`;
+      }
     });
     digests.push(...reduced);
   }
@@ -230,8 +257,14 @@ export async function createGuidedCourse(subject: string, sources: SourceChoice[
   onProgress?.("Starting a staged read so every source section is covered…");
   const digest = docIds.length ? await buildSourceDigest(sources, docIds, onProgress) : "No AI-readable document was selected.";
   onProgress?.("Building the final syllabus from the complete staged digest…");
-  const final = await runAIStage({ feature: "study_plan", mode: "general", messages: [{ role: "user", content: `${prompt}${digest}` }] });
-  const syllabus = { ...parseJson(final.answer, final.data), language };
+  let syllabus: GuideSyllabus;
+  try {
+    const final = await runAIStage({ feature: "study_plan", mode: "general", messages: [{ role: "user", content: `${prompt}${digest}` }] });
+    syllabus = { ...parseJson(final.answer, final.data), language };
+  } catch {
+    onProgress?.("AI providers are unavailable; saving a source-preserving reading guide instead. You can regenerate the quizzes later.");
+    syllabus = { ...fallbackSyllabus(subject, digest, language), language };
+  }
   const user = (await db().auth.getUser()).data.user;
   if (!user) throw new Error("Sign in first.");
   const { data, error } = await db().from("guided_courses").insert({ owner: user.id, title: `${subject} guided syllabus`, subject, source_document_ids: docIds, source_labels: sources, syllabus, progress: 0, visibility }).select("*").single();
