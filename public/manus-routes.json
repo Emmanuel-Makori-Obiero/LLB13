@@ -73,6 +73,10 @@
       "title": "Media"
     },
     {
+      "path": "/music",
+      "title": "Music & media"
+    },
+    {
       "path": "/assistant",
       "title": "Study assistant"
     },

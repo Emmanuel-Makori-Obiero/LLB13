@@ -244,6 +244,9 @@ export async function generateImage(args: {
         detail = [body.error, body.detail].filter(Boolean).join(" — ") || detail;
       } catch { /* keep the SDK message */ }
     }
+    if (/hugging face 403|insufficient permissions|inference providers/i.test(detail)) {
+      throw new Error("Image generation is unavailable because the Hugging Face token cannot call Inference Providers. An administrator must replace HF_TOKEN_1 with a token that has Inference Providers permission, or explicitly enable the Gemini image fallback.");
+    }
     throw new Error(`Image generation failed: ${detail}`);
   }
   if (!data?.asset) throw new Error([data?.error, data?.detail].filter(Boolean).join(" — ") || "Image generation returned no asset.");
