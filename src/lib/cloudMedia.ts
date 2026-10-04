@@ -233,8 +233,18 @@ export async function generateImage(args: {
   const { data, error } = await client().functions.invoke("generate-image", {
     body: args,
   });
-  if (error) throw new Error(`Image generation failed: ${error.message}`);
-  if (!data?.asset) throw new Error(data?.error || "Image generation returned no asset.");
+  if (error) {
+    let detail = error.message;
+    const context = (error as unknown as { context?: Response }).context;
+    if (context) {
+      try {
+        const body = await context.clone().json() as { error?: string; detail?: string };
+        detail = [body.error, body.detail].filter(Boolean).join(" — ") || detail;
+      } catch { /* keep the SDK message */ }
+    }
+    throw new Error(`Image generation failed: ${detail}`);
+  }
+  if (!data?.asset) throw new Error([data?.error, data?.detail].filter(Boolean).join(" — ") || "Image generation returned no asset.");
   return data as { asset: MediaAsset; signed_url: string | null };
 }
 
@@ -248,14 +258,14 @@ export async function generateVideoJob(args: { prompt: string; projectId?: strin
     if (context) {
       try {
         const body = await context.clone().json() as { error?: string; detail?: string };
-        detail = body.error || body.detail || detail;
+        detail = [body.error, body.detail].filter(Boolean).join(" — ") || detail;
         if (/queue is full/i.test(body.detail || "")) detail = "The free video GPU queue is full right now. Wait a few minutes and try again.";
       } catch { /* keep the SDK message */ }
     }
     throw new Error(`Video job failed: ${detail}`);
   }
   if (!data?.asset?.id) throw new Error(data?.error || "Video provider returned no job.");
-  return data as { asset: MediaAsset; provider_job_id: string; provider?: string; fallback_attempts?: Array<{ provider: string; error: string }>; status_url: string };
+  return data as { asset: MediaAsset; provider_job_id?: string | null; provider?: string | null; fallback_attempts?: Array<{ provider: string; error: string }>; retry_after_seconds?: number; status_url: string };
 }
 
 export async function getVideoJobStatus(assetId: string) {
@@ -267,11 +277,11 @@ export async function getVideoJobStatus(assetId: string) {
     headers: { Authorization: `Bearer ${token}`, apikey: import.meta.env.VITE_SUPABASE_ANON_KEY },
   });
   const data = await response.json();
-  if (!response.ok) throw new Error(data?.error || "Could not check video status.");
-  return data as { asset: MediaAsset; status: "queued" | "processing" | "ready" | "failed"; signed_url?: string | null };
+  if (!response.ok) throw new Error([data?.error, data?.detail].filter(Boolean).join(" — ") || "Could not check video status.");
+  return data as { asset: MediaAsset; status: "queued" | "processing" | "ready" | "failed" | "deleted"; signed_url?: string | null; provider_error?: string; retrying?: boolean; retry_after_seconds?: number };
 }
 
-export async function generateAudio(args: { text: string; title: string }) {
+export async function generateAudio(args: { text: string; title: string; language?: "en" | "sw" }) {
   const { data, error } = await client().functions.invoke("generate-audio", { body: args });
   if (error) {
     let detail = error.message;
@@ -279,11 +289,11 @@ export async function generateAudio(args: { text: string; title: string }) {
     if (context) {
       try {
         const body = await context.clone().json() as { error?: string; detail?: string };
-        detail = body.error || body.detail || detail;
+        detail = [body.error, body.detail].filter(Boolean).join(" — ") || detail;
       } catch { /* keep SDK message */ }
     }
     throw new Error(`Audio generation failed: ${detail}`);
   }
   if (!data?.signed_url) throw new Error(data?.error || "Audio generation returned no file.");
-  return data as { asset: MediaAsset; signed_url: string };
+  return data as { asset: MediaAsset; signed_url: string; mime_type?: string };
 }

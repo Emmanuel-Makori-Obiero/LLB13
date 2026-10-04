@@ -86,11 +86,15 @@ function PasswordField({
 export default function LoginPage({
   configured,
   onSignedIn,
+  initialMode = "sign-in",
+  onBackToHome,
 }: {
   configured: boolean;
   onSignedIn?: (email: string) => void;
+  initialMode?: Mode;
+  onBackToHome?: () => void;
 }) {
-  const [mode, setMode] = useState<Mode>("sign-in");
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -99,6 +103,8 @@ export default function LoginPage({
   const [notice, setNotice] = useState<Notice>(null);
   const [pendingEmail, setPendingEmail] = useState<string | null>(null); // set once we are waiting for email confirmation
   const [cooldown, setCooldown] = useState(0);
+
+  useEffect(() => setMode(initialMode), [initialMode]);
 
   const readEmailCooldown = (target: string) => {
     try {
@@ -162,27 +168,33 @@ export default function LoginPage({
       return;
     }
     setBusy(true);
-    const { error } = await supabase.auth.resend({
-      type: "signup",
-      email: target,
-      options: { emailRedirectTo: window.location.origin },
-    });
-    setBusy(false);
-    if (error) {
-      const message = friendlyError(error.message);
-      if (
-        message !== error.message ||
-        /rate|too many|only request this after/i.test(error.message)
-      )
-        rememberEmailRequest(target, RATE_LIMIT_COOLDOWN);
+    try {
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email: target,
+        options: { emailRedirectTo: window.location.origin },
+      });
+      if (error) {
+        const message = friendlyError(error.message);
+        if (
+          message !== error.message ||
+          /rate|too many|only request this after/i.test(error.message)
+        )
+          rememberEmailRequest(target, RATE_LIMIT_COOLDOWN);
+        setNotice({ tone: "error", text: message });
+        return;
+      }
+      rememberEmailRequest(target, EMAIL_COOLDOWN);
+      setNotice({
+        tone: "success",
+        text: `Confirmation email sent to ${target}. Check your spam folder too.`,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? friendlyError(error.message) : "Could not send the confirmation email. Check your connection and try again.";
       setNotice({ tone: "error", text: message });
-      return;
+    } finally {
+      setBusy(false);
     }
-    rememberEmailRequest(target, EMAIL_COOLDOWN);
-    setNotice({
-      tone: "success",
-      text: `Confirmation email sent to ${target}. Check your spam folder too.`,
-    });
   };
 
   const submit = async (event: React.FormEvent) => {
@@ -301,18 +313,23 @@ export default function LoginPage({
       return;
     }
     setBusy(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
-      redirectTo: window.location.origin,
-    });
-    setBusy(false);
-    setNotice(
-      error
-        ? { tone: "error", text: friendlyError(error.message) }
-        : {
-            tone: "success",
-            text: "If that email has an account, a reset link is on its way.",
-          },
-    );
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+        redirectTo: window.location.origin,
+      });
+      setNotice(
+        error
+          ? { tone: "error", text: friendlyError(error.message) }
+          : {
+              tone: "success",
+              text: "If that email has an account, a reset link is on its way.",
+            },
+      );
+    } catch (error) {
+      setNotice({ tone: "error", text: friendlyError(error instanceof Error ? error.message : "Could not send a password reset email.") });
+    } finally {
+      setBusy(false);
+    }
   };
 
   const isSignUp = mode === "sign-up";
@@ -336,6 +353,16 @@ export default function LoginPage({
           <div className="auth-mobile-logo">
             <Logo />
           </div>
+
+          {onBackToHome && (
+            <button
+              type="button"
+              className="auth-home-link"
+              onClick={onBackToHome}
+            >
+              ← Back to Group 13 home
+            </button>
+          )}
 
           {!configured ? (
             <div className="auth-notice error">
@@ -511,14 +538,19 @@ export function ResetPasswordPage({ onDone }: { onDone: () => void }) {
       return;
     }
     setBusy(true);
-    const { error } = await supabase.auth.updateUser({ password });
-    setBusy(false);
-    if (error) {
-      setNotice({ tone: "error", text: friendlyError(error.message) });
-      return;
+    try {
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) {
+        setNotice({ tone: "error", text: friendlyError(error.message) });
+        return;
+      }
+      window.history.replaceState({}, "", "/");
+      onDone();
+    } catch (error) {
+      setNotice({ tone: "error", text: friendlyError(error instanceof Error ? error.message : "Could not update your password.") });
+    } finally {
+      setBusy(false);
     }
-    window.history.replaceState({}, "", "/");
-    onDone();
   };
 
   return (

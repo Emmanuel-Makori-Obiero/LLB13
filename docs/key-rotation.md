@@ -1,4 +1,4 @@
-# Gemini and Hugging Face key rotation
+# AI and media provider key rotation
 
 The Edge Functions now discover these server-only secret names:
 
@@ -10,9 +10,15 @@ GEMINI_API_KEY_3
 HF_TOKEN_1
 HF_TOKEN_2
 HF_TOKEN_3
+
+ELEVENLABS_API_KEY_1
+ELEVENLABS_API_KEY_2
+ELEVENLABS_API_KEY_3
 ```
 
-The legacy names `GEMINI_API_KEY` and `HF_TOKEN` remain supported. Numbered secrets are tried first, and the legacy secret is used afterward if present. The AI function gives each provider/key pair its own in-memory cooldown after quota, authentication, timeout, or server errors. Image generation rotates across HF tokens on bounded retries; video submission uses a different token for each provider attempt. Podcast audio can optionally use Google's multi-speaker Gemini TTS; see [Media generation and app installation](media-and-install-setup.md). That mode is off by default and only runs when `GEMINI_TTS_ENABLED=true` is configured in Supabase.
+The legacy names `GEMINI_API_KEY` and `HF_TOKEN` remain supported. Numbered secrets are tried first, and the legacy secret is used afterward if present. The AI function gives each provider/key pair its own in-memory cooldown after quota, authentication, timeout, or server errors. Image generation rotates across HF tokens on bounded retries; video submission rotates across HF token entries, records only the selected non-secret slot number, and uses that same credential slot for status polling and download. Keep the selected numbered secret configured while its video job is active; no raw provider key is stored in media metadata. Updated podcast and guided-lesson narration uses ElevenLabs text-to-dialogue first for English and Kiswahili, then saves MP3 audio privately. The moot-judge room offers opt-in English ElevenLabs voice replies with audio replay controls. The app does not fall back to robotic browser speech. Optional Gemini TTS fallback for English is off unless `GEMINI_TTS_ENABLED=true`; the Hugging Face TTS fallback is also off unless `HF_TTS_FALLBACK_ENABLED=true`. See [Media generation and app installation](media-and-install-setup.md).
+
+Gemini image generation is separate from chat AI. It is tried only after the configured Hugging Face route fails and only if `GEMINI_IMAGE_ENABLED=true`. Google does not list the current image models on its free API tier; do not enable this flag unless the project owner accepts possible API charges. See the [Supabase production audit](supabase-production-audit-2026-10-04.md) for the live project/source comparison and the unapplied RLS review migration.
 
 Set secrets from a trusted terminal, never in React code or GitHub:
 
@@ -21,6 +27,7 @@ supabase secrets set \
   GEMINI_API_KEY_1="<key-1>" \
   GEMINI_API_KEY_2="<key-2>" \
   GEMINI_API_KEY_3="<key-3>" \
+  ELEVENLABS_API_KEY_1="<key-1>" \
   HF_TOKEN_1="<token-1>" \
   HF_TOKEN_2="<token-2>" \
   HF_TOKEN_3="<token-3>" \

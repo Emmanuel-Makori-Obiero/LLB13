@@ -1,0 +1,30 @@
+{
+  "routes": [
+    { "path": "/", "title": "Group 13 Hub" },
+    { "path": "/dashboard", "title": "Dashboard" },
+    { "path": "/login", "title": "Sign in" },
+    { "path": "/signup", "title": "Create account" },
+    { "path": "/timetable", "title": "Timetable" },
+    { "path": "/todos", "title": "My to-do" },
+    { "path": "/assignments", "title": "Assignments" },
+    { "path": "/library", "title": "Library" },
+    { "path": "/library/materials/:id", "title": "Reading" },
+    { "path": "/guide", "title": "Guided study" },
+    { "path": "/assignment-helper", "title": "AI assignment helper" },
+    { "path": "/units", "title": "Units" },
+    { "path": "/units/:id", "title": "Unit" },
+    { "path": "/discussions", "title": "Discussions" },
+    { "path": "/meetings/:id", "title": "Meeting room" },
+    { "path": "/members", "title": "Members" },
+    { "path": "/transcribe", "title": "Transcribe" },
+    { "path": "/media", "title": "Media" },
+    { "path": "/assistant", "title": "Study assistant" },
+    { "path": "/research", "title": "Research writer" },
+    { "path": "/arena", "title": "Legal Arena" },
+    { "path": "/growth", "title": "Growth studio" },
+    { "path": "/counsellor", "title": "Counsellor" },
+    { "path": "/admin", "title": "Admin" },
+    { "path": "/settings", "title": "Settings" },
+    { "path": "/account", "title": "Account" }
+  ]
+}

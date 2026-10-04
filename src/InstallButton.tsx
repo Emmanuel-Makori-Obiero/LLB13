@@ -8,10 +8,27 @@ type InstallPromptEvent = Event & {
 
 type DeviceKind = "ios" | "android" | "legacy" | "desktop";
 let deferredPrompt: InstallPromptEvent | null = null;
+let installedGlobally = false;
+const installListeners = new Set<() => void>();
+const notifyInstallState = () => installListeners.forEach((listener) => listener());
+
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeinstallprompt", (event) => {
+    event.preventDefault();
+    deferredPrompt = event as InstallPromptEvent;
+    notifyInstallState();
+  });
+  window.addEventListener("appinstalled", () => {
+    deferredPrompt = null;
+    installedGlobally = true;
+    notifyInstallState();
+  });
+}
 
 function deviceKind(): DeviceKind {
   const ua = navigator.userAgent.toLowerCase();
-  if (/iphone|ipad|ipod/.test(ua)) return "ios";
+  const isIPad = navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
+  if (/iphone|ipad|ipod/.test(ua) || isIPad) return "ios";
   if (/android/.test(ua)) {
     // Older Nokia/Asha-style Android webviews and old Android browsers cannot install PWAs.
     if (
@@ -42,23 +59,18 @@ export default function InstallButton({
     const iosInstalled = Boolean(
       (navigator as Navigator & { standalone?: boolean }).standalone,
     );
-    if (iosInstalled || window.matchMedia("(display-mode: standalone)").matches)
+    if (iosInstalled || window.matchMedia("(display-mode: standalone)").matches) {
+      installedGlobally = true;
       setInstalled(true);
-    const onBeforeInstallPrompt = (event: Event) => {
-      event.preventDefault();
-      deferredPrompt = event as InstallPromptEvent;
-      setCanInstall(true);
+    }
+    const sync = () => {
+      setCanInstall(Boolean(deferredPrompt));
+      setInstalled(installedGlobally);
     };
-    const onInstalled = () => {
-      deferredPrompt = null;
-      setCanInstall(false);
-      setInstalled(true);
-    };
-    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
-    window.addEventListener("appinstalled", onInstalled);
+    installListeners.add(sync);
+    sync();
     return () => {
-      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
-      window.removeEventListener("appinstalled", onInstalled);
+      installListeners.delete(sync);
     };
   }, []);
 
