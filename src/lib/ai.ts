@@ -95,6 +95,9 @@ export async function askAI(args: {
     try {
       const body = await (error as { context?: Response }).context?.json();
       msg = body?.error ?? msg;
+      if (Number(body?.retry_after_seconds) > 0) {
+        msg += ` The provider chain is paused for about ${Number(body.retry_after_seconds)} seconds before retrying.`;
+      }
       if (Array.isArray(body?.attempts) && body.attempts.length)
         msg += ` [${body.attempts
           .map(

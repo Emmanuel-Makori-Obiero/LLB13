@@ -152,8 +152,11 @@ async function rawSourceSection(docId: string, part: number, size: number) {
   return data.map((row) => String(row.content ?? "")).filter(Boolean).join("\n\n");
 }
 
-const SOURCE_READ_CONCURRENCY = 3;
-const DIGEST_CONCURRENCY = 2;
+// Ordered handoff: one active reader walks the book, then one summarizer arranges
+// the completed notes. This prevents three requests consuming the same provider
+// quota at once and lets the next model take over cleanly after a cooldown.
+const SOURCE_READ_CONCURRENCY = 1;
+const DIGEST_CONCURRENCY = 1;
 async function mapConcurrentOrdered<T, R>(items: T[], limit: number, mapper: (item: T, index: number) => Promise<R>): Promise<R[]> {
   const results = new Array<R>(items.length);
   let nextIndex = 0;
@@ -212,12 +215,17 @@ async function buildSourceDigest(sources: SourceChoice[], docIds: string[], onPr
     onProgress?.(`Compacting the full-book digest in ${compactBatches.length} ordered groups…`);
     digestParts = await mapConcurrentOrdered(compactBatches, DIGEST_CONCURRENCY, async (batchParts) => {
       const batch = batchParts.join("\n\n--- NEXT DIGEST ---\n\n");
-      const compressed = await runAIStage({
-        feature: "summarize",
-        mode: "general",
-        messages: [{ role: "user", content: `Compact this study digest while preserving every distinct topic, rule, authority, exception and example. Keep section order and do not add facts.\n\n${batch}` }],
-      });
-      return compressed.answer;
+      try {
+        const compressed = await runAIStage({
+          feature: "summarize",
+          mode: "general",
+          messages: [{ role: "user", content: `Compact this study digest while preserving every distinct topic, rule, authority, exception and example. Keep section order and do not add facts.\n\n${batch}` }],
+        });
+        return compressed.answer;
+      } catch {
+        onProgress?.("AI compaction is paused; preserving the ordered digest so the course can still be saved.");
+        return batch;
+      }
     });
   }
   return digestParts.join("\n\n=== SOURCE DIGEST ===\n\n");

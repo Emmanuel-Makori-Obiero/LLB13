@@ -45,6 +45,8 @@ export default function TimetablePage({
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Lesson | null>(null);
   const [viewerName, setViewerName] = useState("");
+  const [personalLessons, setPersonalLessons] = useState<Lesson[]>([]);
+  const [schedule, setSchedule] = useState<"personal" | "group">("personal");
   const [showPast, setShowPast] = useState(false);
   const [f, setF] = useState({
     unit: "",
@@ -86,6 +88,9 @@ export default function TimetablePage({
       if (typeof name === "string") setViewerName(name);
     });
   }, []);
+  useEffect(() => {
+    void repository.getPersonalTimetable().then(setPersonalLessons).catch((error) => setNotice(error instanceof Error ? error.message : "Could not load your personal timetable."));
+  }, [setNotice]);
   const editAllowed = (lesson: Lesson) => {
     if (canEdit) return canEdit(lesson);
     if (canDelete(lesson)) return true;
@@ -129,14 +134,14 @@ export default function TimetablePage({
         venue: f.venue.trim() || null,
       };
       if (editing) {
-        const updated = await repository.updateLesson(editing.id, payload);
-        onRemoved(editing.id);
-        onAdded(updated);
+        const updated = schedule === "personal" ? await repository.updatePersonalLesson(editing.id, payload) : await repository.updateLesson(editing.id, payload);
+        if (schedule === "personal") setPersonalLessons((current) => [...current.filter((item) => item.id !== editing.id), updated]);
+        else { onRemoved(editing.id); onAdded(updated); }
         setNotice("Lesson updated.");
       } else {
-        const created = await repository.createLesson(payload);
-        onAdded(created);
-        setNotice("Lesson added to the timetable.");
+        const created = schedule === "personal" ? await repository.createPersonalLesson(payload) : await repository.createLesson(payload);
+        if (schedule === "personal") setPersonalLessons((current) => [...current, created]); else onAdded(created);
+        setNotice(schedule === "personal" ? "Personal event added." : "Lesson added to the group timetable.");
       }
       setOpen(false);
       setEditing(null);
@@ -153,15 +158,16 @@ export default function TimetablePage({
   };
   const remove = async (l: Lesson) => {
     try {
-      await repository.deleteLesson(l.id);
-      onRemoved(l.id);
-      setNotice("Lesson removed.");
+      if (schedule === "personal") { await repository.deletePersonalLesson(l.id); setPersonalLessons((current) => current.filter((item) => item.id !== l.id)); }
+      else { await repository.deleteLesson(l.id); onRemoved(l.id); }
+      setNotice(schedule === "personal" ? "Personal event removed." : "Group lesson removed.");
     } catch (e) {
       setNotice(e instanceof Error ? e.message : "Could not remove lesson.");
     }
   };
 
-  const visible = lessons.filter((l) => showPast || l.lesson_date >= today());
+  const activeLessons = schedule === "personal" ? personalLessons : lessons;
+  const visible = activeLessons.filter((l) => showPast || l.lesson_date >= today());
   const days = [...new Set(visible.map((l) => l.lesson_date))].sort();
 
   return (
@@ -169,11 +175,11 @@ export default function TimetablePage({
       <div className="page-head">
         <div>
           <h1 className="heading">Timetable.</h1>
-          <p className="subheading">
-            Lessons by date and time, with the unit representatives for each.
-          </p>
+          <p className="subheading">Keep your own study plan separate from the shared Group 13 class timetable.</p>
         </div>
         <div className="page-actions">
+          <button className={schedule === "personal" ? "primary-button" : "secondary-button"} onClick={() => setSchedule("personal")}>My timetable</button>
+          <button className={schedule === "group" ? "primary-button" : "secondary-button"} onClick={() => setSchedule("group")}>Group timetable</button>
           <button
             className="secondary-button"
             onClick={() => setShowPast((v) => !v)}
@@ -189,8 +195,7 @@ export default function TimetablePage({
         <div className="card card-pad empty-state">
           <CalendarDays size={22} />
           <p>
-            No upcoming lessons yet. Tap “Add lesson” to put the first one on
-            the timetable.
+            No upcoming {schedule === "personal" ? "personal events" : "Group 13 lessons"} yet. Tap “Add lesson” to put the first one here.
           </p>
         </div>
       )}
@@ -226,9 +231,9 @@ export default function TimetablePage({
                       )}
                     </div>
                   </div>
-                  {(editAllowed(l) || canDelete(l)) && (
+                  {(schedule === "personal" || editAllowed(l) || canDelete(l)) && (
                     <div className="row-end lesson-actions">
-                      {editAllowed(l) && (
+                      {(schedule === "personal" || editAllowed(l)) && (
                         <button
                           className="icon-button"
                           aria-label="Edit lesson"
@@ -237,7 +242,7 @@ export default function TimetablePage({
                           <Pencil size={14} />
                         </button>
                       )}
-                      {canDelete(l) && (
+                      {(schedule === "personal" || canDelete(l)) && (
                         <button
                           className="icon-button"
                           aria-label="Remove lesson"
@@ -262,7 +267,7 @@ export default function TimetablePage({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="detail-title">
-              <h2>{editing ? "Edit lesson" : "Add lesson"}</h2>
+              <h2>{editing ? "Edit event" : schedule === "personal" ? "Add personal event" : "Add group lesson"}</h2>
             </div>
             {units.length === 0 ? (
               <p className="field-hint">
@@ -320,7 +325,7 @@ export default function TimetablePage({
                 </div>
                 <div>
                   <div className="field-hint" style={{ marginBottom: 6 }}>
-                    Unit representatives (tap to select one or more)
+                    {schedule === "personal" ? "People or group involved (optional)" : "Unit representatives (tap to select one or more)"}
                   </div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                     {members.map((m) => {

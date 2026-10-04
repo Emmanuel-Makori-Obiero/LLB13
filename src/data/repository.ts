@@ -61,12 +61,16 @@ export type Group13Repository = {
     representatives: string[],
   ) => Promise<void>;
   getTimetable: () => Promise<Lesson[]>;
+  getPersonalTimetable: () => Promise<Lesson[]>;
   createLesson: (lesson: Omit<Lesson, "id" | "created_by">) => Promise<Lesson>;
+  createPersonalLesson: (lesson: Omit<Lesson, "id" | "created_by">) => Promise<Lesson>;
   updateLesson: (
     id: string,
     lesson: Omit<Lesson, "id" | "created_by">,
   ) => Promise<Lesson>;
+  updatePersonalLesson: (id: string, lesson: Omit<Lesson, "id" | "created_by">) => Promise<Lesson>;
   deleteLesson: (id: string) => Promise<void>;
+  deletePersonalLesson: (id: string) => Promise<void>;
   getTimetableProposals: () => Promise<TimetableProposal[]>;
   createTimetableProposal: (
     proposal: Pick<
@@ -195,6 +199,14 @@ const supabaseRepository: Group13Repository = {
         .order("lesson_date")
         .order("start_time"),
     ),
+  getPersonalTimetable: () =>
+    readRequired<Lesson>("personal_timetable", async () =>
+      supabase!
+        .from("personal_timetable")
+        .select("id,unit,topic,lesson_date,start_time,end_time,representative,representatives,venue,owner")
+        .order("lesson_date")
+        .order("start_time"),
+    ),
   createLesson: async (lesson) => {
     if (!supabase) throw new Error("Not connected.");
     const { data, error } = await supabase
@@ -206,6 +218,16 @@ const supabaseRepository: Group13Repository = {
       .single();
     if (error) throw new Error(`Could not add lesson: ${error.message}`);
     return data as Lesson;
+  },
+  createPersonalLesson: async (lesson) => {
+    if (!supabase) throw new Error("Not connected.");
+    const { data, error } = await supabase
+      .from("personal_timetable")
+      .insert(lesson)
+      .select("id,unit,topic,lesson_date,start_time,end_time,representative,representatives,venue,owner")
+      .single();
+    if (error) throw new Error(`Could not add personal event: ${error.message}`);
+    return { ...data, created_by: data.owner } as Lesson;
   },
   updateLesson: async (id, lesson) => {
     if (!supabase) throw new Error("Not connected.");
@@ -220,10 +242,26 @@ const supabaseRepository: Group13Repository = {
     if (error) throw new Error(`Could not update lesson: ${error.message}`);
     return data as Lesson;
   },
+  updatePersonalLesson: async (id, lesson) => {
+    if (!supabase) throw new Error("Not connected.");
+    const { data, error } = await supabase
+      .from("personal_timetable")
+      .update(lesson)
+      .eq("id", id)
+      .select("id,unit,topic,lesson_date,start_time,end_time,representative,representatives,venue,owner")
+      .single();
+    if (error) throw new Error(`Could not update personal event: ${error.message}`);
+    return { ...data, created_by: data.owner } as Lesson;
+  },
   deleteLesson: async (id) => {
     if (!supabase) throw new Error("Not connected.");
     const { error } = await supabase.from("timetable").delete().eq("id", id);
     if (error) throw new Error(`Could not delete lesson: ${error.message}`);
+  },
+  deletePersonalLesson: async (id) => {
+    if (!supabase) throw new Error("Not connected.");
+    const { error } = await supabase.from("personal_timetable").delete().eq("id", id);
+    if (error) throw new Error(`Could not delete personal event: ${error.message}`);
   },
   getTimetableProposals: () =>
     readRequired<TimetableProposal>("timetable_proposals", async () =>

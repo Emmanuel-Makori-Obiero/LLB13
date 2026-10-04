@@ -54,7 +54,10 @@ const e = (
 export const DEFAULT_CHAIN: Entry[] = [
   e("gemini", "gemini-3.6-flash", "effort", false, 16000),
   e("gemini", "gemini-3.5-flash", "effort", false, 16000),
+  e("gemini", "gemini-2.5-flash", "effort", false, 12000),
+  e("gemini", "gemini-2.5-flash-lite", "effort", false, 8000),
   e("groq", "openai/gpt-oss-120b", "effort"),
+  e("groq", "llama-3.1-8b-instant"),
   e("cerebras", "gpt-oss-120b", "effort"),
   e("openrouter", "deepseek/deepseek-v4-flash:free", "openrouter"),
   e("openrouter", "nvidia/nemotron-3-ultra-550b-a55b:free", "openrouter"),
@@ -65,9 +68,12 @@ export const DEFAULT_CHAIN: Entry[] = [
   e("openrouter", "arcee-ai/trinity-large-thinking:free", "openrouter"),
   e("openrouter", "nvidia/nemotron-3-super-120b-a12b:free", "openrouter"),
   e("openrouter", "qwen/qwen3-next-80b-a3b-instruct:free", "openrouter"),
+  e("openrouter", "qwen/qwen3-32b:free", "openrouter"),
+  e("openrouter", "deepseek/deepseek-r1-0528:free", "openrouter"),
   e("groq", "llama-3.3-70b-versatile"),
   e("openrouter", "meta-llama/llama-3.3-70b-instruct:free", "openrouter"),
   e("openrouter", "google/gemma-4-31b-it:free", "openrouter", true),
+  e("openrouter", "google/gemma-3-27b-it:free", "openrouter", true),
   e("gemini", "gemini-3.5-flash-lite", "effort", false, 16000),
   e("openrouter", "openrouter/free", "openrouter"), // last resort: OpenRouter picks any live free model
 ];
@@ -98,6 +104,7 @@ function chain(feature?: string): Entry[] {
 }
 
 const cooldownUntil = new Map<string, number>(); // per warm isolate; good enough for a fallback breaker
+const preferredByFeature = new Map<string, string>();
 const id = (x: Entry) => `${x.provider}:${x.model}:${x.keyEnv}`;
 
 function mergeSystem(msgs: Msg[]): Msg[] {
@@ -110,6 +117,14 @@ function mergeSystem(msgs: Msg[]): Msg[] {
   if (i >= 0)
     rest[i] = { role: "user", content: `${sys}\n\n---\n\n${rest[i].content}` };
   return rest;
+}
+
+function orderedChain(feature?: string) {
+  const entries = chain(feature);
+  const preferred = feature ? preferredByFeature.get(feature) : undefined;
+  if (!preferred) return entries;
+  const index = entries.findIndex((entry) => id(entry) === preferred);
+  return index <= 0 ? entries : [entries[index], ...entries.slice(0, index), ...entries.slice(index + 1)];
 }
 
 function clean(text: string): string {
@@ -177,8 +192,9 @@ export async function callChain(
   const deadline = opts.deadlineMs ?? 120_000;
   const perCall = opts.perCallMs ?? 45_000;
   const attempts: Attempt[] = [];
+  let retryAfterMs = 0;
 
-  for (const ent of chain(opts.feature)) {
+  for (const ent of orderedChain(opts.feature)) {
     const keys = secretKeys(ent.keyEnv);
     for (const [keyIndex, key] of keys.entries()) {
       const eid = `${id(ent)}#${keyIndex + 1}`;
@@ -218,6 +234,7 @@ export async function callChain(
               const text = clean(data?.choices?.[0]?.message?.content ?? "");
               if (text) {
                 attempts.push({ id: eid, status: "ok" });
+                if (opts.feature) preferredByFeature.set(opts.feature, id(ent));
                 return { text, provider: ent.provider, model: ent.model, attempts };
               }
               if (withReasoning) continue;
@@ -232,6 +249,7 @@ export async function callChain(
               break;
             }
             const retryAfter = Number(res.headers.get("retry-after")) || 0;
+            retryAfterMs = Math.max(retryAfterMs, retryAfter * 1000);
             const cool = res.status === 429 ? Math.max(retryAfter * 1000, 60_000) : res.status === 401 || res.status === 403 ? 15 * 60_000 : res.status === 404 || res.status === 400 ? 30 * 60_000 : 45_000;
             cooldownUntil.set(eid, Date.now() + cool);
             let detail: string | undefined;
@@ -250,7 +268,7 @@ export async function callChain(
       }
     }
   }
-  throw Object.assign(new Error("All AI providers are busy or unavailable"), { attempts });
+  throw Object.assign(new Error("All AI providers are busy or unavailable"), { attempts, retryAfterMs });
 }
 
 // ===== handler =====
@@ -859,6 +877,7 @@ Deno.serve(async (req) => {
       {
         error: "The configured AI providers could not complete this request. Check the provider key, model ID, and current quota, then try again.",
         attempts: (err as { attempts?: unknown }).attempts ?? [],
+        retry_after_seconds: Math.ceil(Number((err as { retryAfterMs?: number }).retryAfterMs ?? 0) / 1000),
       },
       503,
     );
