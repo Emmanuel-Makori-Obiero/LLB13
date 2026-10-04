@@ -2,7 +2,8 @@ import { supabase } from './data/repository'
 import type { Material } from './data/types'
 
 export function safeUrl(value?: string | null) { try { const url = new URL((value ?? '').trim()); return ['http:', 'https:'].includes(url.protocol) ? url.toString() : '' } catch { return '' } }
-export function toEmbedUrl(value: string) { const url = safeUrl(value); if (!url) return ''; const parsed = new URL(url); const host = parsed.hostname.replace(/^(www|m)\./, ''); if (host === 'youtu.be') return `https://www.youtube.com/embed/${parsed.pathname.slice(1)}`; if (host === 'youtube.com' && parsed.searchParams.get('v')) return `https://www.youtube.com/embed/${parsed.searchParams.get('v')}`; return url }
+export function youtubeVideoId(value: string) { const url = safeUrl(value); if (!url) return ''; const parsed = new URL(url); const host = parsed.hostname.replace(/^(www|m)\./, ''); if (host === 'youtu.be') return parsed.pathname.slice(1).split('/')[0]; if (host === 'youtube.com' && parsed.searchParams.get('v')) return parsed.searchParams.get('v') ?? ''; if (host === 'youtube.com' && parsed.pathname.startsWith('/shorts/')) return parsed.pathname.split('/')[2] ?? ''; return ''; }
+export function toEmbedUrl(value: string) { const id = youtubeVideoId(value); return id ? `https://www.youtube.com/embed/${id}` : safeUrl(value) }
 export function readerUrl(material: Material) {
   const url = safeUrl(material.url)
   if (!url) return ''
