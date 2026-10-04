@@ -23,6 +23,7 @@ import {
   Image as ImageIcon,
   Gavel,
   GraduationCap,
+  Grip,
   LayoutDashboard,
   Library,
   LogOut,
@@ -92,6 +93,7 @@ import BookReader from "./BookReader";
 import LearningStudio from "./LearningStudio";
 import GuidedStudyPage from "./GuidedStudyPage";
 import AssignmentHelperPage from "./AssignmentHelperPage";
+import GamesHub from "./GamesHub";
 import {
   createFilmProject,
   createMediaShare,
@@ -125,7 +127,7 @@ const nav = [
   { id: "transcribe", label: "Transcribe", icon: Mic },
   { id: "assistant", label: "Study assistant", icon: Sparkles },
   { id: "research", label: "Research writer", icon: PenLine },
-  { id: "arena", label: "Legal Arena", icon: Gavel },
+  { id: "arena", label: "Games Hub", icon: Gavel },
   { id: "growth", label: "Growth studio", icon: Sparkles },
   { id: "cases", label: "Case law", icon: BookOpen },
   { id: "counsellor", label: "Counsellor", icon: Users },
@@ -1112,13 +1114,7 @@ function App() {
               }}
             />
           )}
-          {view === "arena" && (
-            <ArenaPage
-              materials={materials}
-              setPage={setPage}
-              openReader={openReader}
-            />
-          )}
+          {view === "arena" && <GamesHub materials={materials} />}
           {view === "members" && <SectionedMembersPage members={members} />}
           {view === "assistant" && (
             <>
@@ -2494,6 +2490,32 @@ function GlobalMusicPlayer({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const youtubeContainerRef = useRef<HTMLDivElement | null>(null);
   const youtubePlayerRef = useRef<any>(null);
+  const [minimized, setMinimized] = useState(() => localStorage.getItem("g13-music-minimized") === "true");
+  const [panel, setPanel] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("g13-music-panel") || "null");
+      return { left: Number(saved?.left) || Math.max(12, window.innerWidth - 560), top: Number(saved?.top) || Math.max(12, window.innerHeight - 110), width: Number(saved?.width) || 520, height: Number(saved?.height) || 74 };
+    } catch { return { left: 24, top: Math.max(12, window.innerHeight - 110), width: 520, height: 74 }; }
+  });
+  const dragRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
+  const resizeRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem("g13-music-panel", JSON.stringify(panel));
+    localStorage.setItem("g13-music-minimized", String(minimized));
+  }, [panel, minimized]);
+  useEffect(() => {
+    const move = (event: PointerEvent) => {
+      if (dragRef.current) setPanel((value) => ({ ...value, left: Math.max(8, Math.min(window.innerWidth - 120, dragRef.current!.left + event.clientX - dragRef.current!.x)), top: Math.max(8, Math.min(window.innerHeight - 54, dragRef.current!.top + event.clientY - dragRef.current!.y)) }));
+      if (resizeRef.current) setPanel((value) => ({ ...value, width: Math.max(300, Math.min(window.innerWidth - value.left - 8, resizeRef.current!.width + event.clientX - resizeRef.current!.x)), height: Math.max(58, Math.min(window.innerHeight - value.top - 8, resizeRef.current!.height + event.clientY - resizeRef.current!.y)) }));
+    };
+    const stop = () => { dragRef.current = null; resizeRef.current = null; };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
+    return () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", stop); };
+  }, []);
+  const beginDrag = (event: React.PointerEvent) => { event.preventDefault(); dragRef.current = { x: event.clientX, y: event.clientY, left: panel.left, top: panel.top }; };
+  const beginResize = (event: React.PointerEvent) => { event.preventDefault(); event.stopPropagation(); resizeRef.current = { x: event.clientX, y: event.clientY, width: panel.width, height: panel.height }; };
 
   useEffect(() => {
     if (!current || current.kind !== "audio") return;
@@ -2543,14 +2565,16 @@ function GlobalMusicPlayer({
   }, [playing, current?.kind, current?.id]);
 
   return (
-    <div className="global-music-player" role="region" aria-label="Global music player">
+    <div className={`global-music-player ${minimized ? "is-minimized" : ""}`} style={{ left: panel.left, top: panel.top, width: minimized ? "auto" : panel.width, minHeight: minimized ? 0 : panel.height }} role="region" aria-label="Global music player">
+      <button className="music-drag-handle" aria-label="Move music player" onPointerDown={beginDrag}><Grip size={15} /></button>
       <Music2 size={18} />
-      <div className="global-music-meta"><strong>{current?.title}</strong><span>{current?.source} · {index + 1} of {queue.length}</span></div>
+      {!minimized && <div className="global-music-meta"><strong>{current?.title}</strong><span>{current?.source} · {index + 1} of {queue.length}</span></div>}
       <button className="music-control" aria-label="Previous track" onClick={() => onStep(-1)}><SkipBack size={16} /></button>
       <button className="music-control music-play" aria-label={playing ? "Pause" : "Play"} onClick={onToggle}>{playing ? <Pause size={16} /> : <Play size={16} />}</button>
       <button className="music-control" aria-label="Next track" onClick={() => onStep(1)}><SkipForward size={16} /></button>
-      <details className="music-queue-details"><summary>Queue</summary><div>{queue.map((track, trackIndex) => <button type="button" key={track.id} className={trackIndex === index ? "active" : ""} onClick={() => onSelect(trackIndex)}>{track.title}</button>)}</div></details>
-      {current?.kind === "audio" ? <audio ref={audioRef} controls onPlay={() => onPlaying(true)} onPause={() => onPlaying(false)} onEnded={onEnded} /> : <div ref={youtubeContainerRef} className="global-youtube-player" aria-label="YouTube player" />}
+      {!minimized && <><details className="music-queue-details"><summary>Queue</summary><div>{queue.map((track, trackIndex) => <button type="button" key={track.id} className={trackIndex === index ? "active" : ""} onClick={() => onSelect(trackIndex)}>{track.title}</button>)}</div></details>{current?.kind === "audio" ? <audio ref={audioRef} controls onPlay={() => onPlaying(true)} onPause={() => onPlaying(false)} onEnded={onEnded} /> : <div ref={youtubeContainerRef} className="global-youtube-player" aria-label="YouTube player" />}</>}
+      <button className="music-control" aria-label={minimized ? "Expand music player" : "Minimize music player"} onClick={() => setMinimized((value) => !value)}>{minimized ? <Maximize2 size={15} /> : <Minimize2 size={15} />}</button>
+      {!minimized && <button className="music-resize-handle" aria-label="Resize music player" onPointerDown={beginResize}>↘</button>}
     </div>
   );
 }
