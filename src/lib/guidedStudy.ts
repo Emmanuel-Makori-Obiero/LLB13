@@ -11,7 +11,8 @@ export type GuideLesson = {
   quiz: { question: string; options: string[]; answerIndex: number; explanation: string }[];
   checkpoint?: "quiz" | "exam";
 };
-export type GuideSyllabus = { overview: string; lessons: GuideLesson[] };
+export type StudyLanguage = "en" | "sw";
+export type GuideSyllabus = { overview: string; lessons: GuideLesson[]; language?: StudyLanguage };
 export type GuidedCourse = {
   id: string;
   owner: string;
@@ -196,7 +197,7 @@ export async function listGuideSources(): Promise<SourceChoice[]> {
   ];
 }
 
-export async function createGuidedCourse(subject: string, sources: SourceChoice[], preferences: string, visibility: "private" | "group" = "private", onProgress?: GuideProgress): Promise<GuidedCourse> {
+export async function createGuidedCourse(subject: string, sources: SourceChoice[], preferences: string, visibility: "private" | "group" = "private", onProgress?: GuideProgress, language: StudyLanguage = "en"): Promise<GuidedCourse> {
   if (!sources.length) throw new Error("Choose at least one book, saved document, or transcript.");
   const docIds: string[] = [];
   for (const source of sources) if (source.kind === "transcript") docIds.push((await transcriptAsDocument(source)).id); else if (source.kind === "document") docIds.push(source.id);
@@ -207,12 +208,15 @@ export async function createGuidedCourse(subject: string, sources: SourceChoice[
   const grounding = hasReadableSourceText
     ? "Use ONLY the readable source digest below."
     : "No readable source text was selected. Create a general-knowledge study outline for the requested subject and say in the overview that it is not grounded in the selected materials. Do not imply that linked titles or metadata were read as source content.";
-  const prompt = `Create a complete guided law-study syllabus for: ${subject}. ${grounding} ${linkedMaterials ? `The following Library items are linked reference records; their titles and metadata are context only, not source content: ${linkedMaterials}.` : ""} ${preferences}\nReturn ONLY valid JSON with no markdown fences in this exact shape: {"overview":"...","lessons":[{"title":"...","objective":"...","explanation":"...","example":"...","sourceFocus":"...","checkpoint":"quiz","quiz":[{"question":"...","options":["...","...","...","..."],"answerIndex":0,"explanation":"..."}]}]}. Create 8 to 16 ordered lessons scaled to the distinct chapters and themes in the readable digest. Represent every major chapter; group only closely related minor sections, and never collapse a long book into a handful of lessons. Give each ordinary lesson a three-question quiz that mixes rule recall with a short fact-pattern application. Mark every third lesson as checkpoint exam and give those checkpoints five scenario-based multiple-choice questions. Explain before testing; use plain language, story/examples where helpful, and never invent authorities. Do not append quotation-warning labels or explanatory text outside the JSON.\n\nSOURCE DIGEST:\n`;
+  const languageInstruction = language === "sw"
+    ? "Write the overview, every lesson title and goal, explanations, examples, quiz questions, answer options and feedback in fluent, natural Kiswahili used in Kenya. Preserve case names, statute titles, citations, legal Latin and official legal terms exactly as they appear in the source; do not invent translations for authorities."
+    : "Write in clear Kenyan English with natural, direct teaching language. Preserve case names, statute titles, citations and legal terms exactly as they appear in the source.";
+  const prompt = `Create a complete guided law-study syllabus for: ${subject}. ${grounding} ${linkedMaterials ? `The following Library items are linked reference records; their titles and metadata are context only, not source content: ${linkedMaterials}.` : ""} ${preferences} ${languageInstruction}\nReturn ONLY valid JSON with no markdown fences in this exact shape: {"overview":"...","lessons":[{"title":"...","objective":"...","explanation":"...","example":"...","sourceFocus":"...","checkpoint":"quiz","quiz":[{"question":"...","options":["...","...","...","..."],"answerIndex":0,"explanation":"..."}]}]}. Create 8 to 16 ordered lessons scaled to the distinct chapters and themes in the readable digest. Represent every major chapter; group only closely related minor sections, and never collapse a long book into a handful of lessons. Give each ordinary lesson a three-question quiz that mixes rule recall with a short fact-pattern application. Mark every third lesson as checkpoint exam and give those checkpoints five scenario-based multiple-choice questions. Explain before testing; use plain language, story/examples where helpful, and never invent authorities. Do not append quotation-warning labels or explanatory text outside the JSON.\n\nSOURCE DIGEST:\n`;
   onProgress?.("Starting a staged read so every source section is covered…");
   const digest = docIds.length ? await buildSourceDigest(sources, docIds, onProgress) : "No AI-readable document was selected.";
   onProgress?.("Building the final syllabus from the complete staged digest…");
   const final = await runAIStage({ feature: "study_plan", mode: "general", messages: [{ role: "user", content: `${prompt}${digest}` }] });
-  const syllabus = parseJson(final.answer, final.data);
+  const syllabus = { ...parseJson(final.answer, final.data), language };
   const user = (await db().auth.getUser()).data.user;
   if (!user) throw new Error("Sign in first.");
   const { data, error } = await db().from("guided_courses").insert({ owner: user.id, title: `${subject} guided syllabus`, subject, source_document_ids: docIds, source_labels: sources, syllabus, progress: 0, visibility }).select("*").single();
@@ -244,7 +248,10 @@ export async function evaluateWrittenCheckpoint(course: GuidedCourse, lessonInde
   const readable = course.source_labels.filter((source) => source.kind !== "material");
   const sourceMode = !course.source_document_ids.length ? "general" : readable.length > 0 && readable.every((source) => source.kind === "document" && source.scope === "library") ? "library" : "materials";
   const prior = previous ? `\nPrevious typed answer: ${previous.answer}\nPrevious checkpoint feedback: ${previous.feedback}\nPrevious missing points: ${previous.missing_points.join("; ")}` : "";
-  const result = await runAIStage({ feature: "kaizen_check", mode: sourceMode, docIds: course.source_document_ids, messages: [{ role: "user", content: `Lesson: ${lesson.title}\nObjective: ${lesson.objective}\nTeaching output:\n${lesson.explanation}\n\nStudent typed answer:\n${answer.trim()}${prior}\n\nEvaluate this answer as the written Kaizen checkpoint. Return only the requested JSON.` }] });
+  const languageInstruction = course.syllabus.language === "sw"
+    ? "Write feedback, missing points, and next step in fluent Kenyan Kiswahili; preserve official legal names and citations."
+    : "Write feedback, missing points, and next step in clear Kenyan English.";
+  const result = await runAIStage({ feature: "kaizen_check", mode: sourceMode, docIds: course.source_document_ids, messages: [{ role: "user", content: `Lesson: ${lesson.title}\nObjective: ${lesson.objective}\nTeaching output:\n${lesson.explanation}\n\nStudent typed answer:\n${answer.trim()}${prior}\n\nEvaluate this answer as the written Kaizen checkpoint. ${languageInstruction} Return only the requested JSON.` }] });
   const raw = result.data && typeof result.data === "object" ? result.data as Record<string, unknown> : {};
   const score = Math.max(0, Math.min(100, Number(raw.score) || 0));
   const checkpoint: WrittenCheckpoint = { answer: answer.trim(), feedback: String(raw.feedback ?? result.answer), score, passed: Boolean(raw.passed) || score >= 70, missing_points: Array.isArray(raw.missing_points) ? raw.missing_points.map(String) : [], next_step: String(raw.next_step ?? "Rewrite the answer once using the feedback."), updated_at: new Date().toISOString() };

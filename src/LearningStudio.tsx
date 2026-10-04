@@ -1,12 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BookOpen,
   Download,
+  Headphones,
   Loader2,
   Mic,
-  Music,
-  Play,
-  Square,
   Upload,
   Video,
 } from "lucide-react";
@@ -25,16 +23,6 @@ const perspectives = [
   "Act as a demanding moot coach. Test the strongest argument, counterargument, application, exam traps, and what a student must verify before relying on it.",
 ];
 
-function speakable(text: string) {
-  return text
-    .replace(/^\s*(SCENE\s*\d+[^\n]*|VISUAL:|SOURCE NOTE:)[^\n]*\n?/gim, "")
-    .replace(/^\s*(HOST|TUTOR|SPEAKER\s*[12])\s*:\s*/gim, "")
-    .replace(/[#*_`>\[\]]/g, "")
-    .replace(/\(verify\)/gi, "verify")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 export default function LearningStudio() {
   const [docs, setDocs] = useState<Doc[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
@@ -46,14 +34,17 @@ export default function LearningStudio() {
   const [error, setError] = useState("");
   const [panel, setPanel] = useState<string[]>([]);
   const [script, setScript] = useState("");
-  const [playing, setPlaying] = useState(false);
+  const [spokenLanguage, setSpokenLanguage] = useState<"en" | "sw">("en");
+  const [scriptLanguage, setScriptLanguage] = useState<"en" | "sw">("en");
   const [slide, setSlide] = useState(0);
   const [rendering, setRendering] = useState(false);
   const [renderProgress, setRenderProgress] = useState(0);
   const [uploadingSource, setUploadingSource] = useState(false);
   const [audioBusy, setAudioBusy] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [audioMimeType, setAudioMimeType] = useState("audio/mpeg");
   const [audioNote, setAudioNote] = useState("");
+  const audioRequestId = useRef(0);
 
   useEffect(() => {
     void listMyMaterials()
@@ -108,69 +99,58 @@ export default function LearningStudio() {
     }
   };
   const downloadAudio = async () => {
-    if (!script || audioBusy) return;
+    if (!script || audioBusy || rendering) return;
+    const requestId = ++audioRequestId.current;
+    const scriptSnapshot = script;
+    const languageSnapshot = scriptLanguage || spokenLanguage;
     setAudioBusy(true);
-    setAudioNote("Creating a downloadable audio file…");
+    setAudioUrl(null);
+    setAudioNote("Creating fluent voice audio…");
     try {
-      const result = await generateAudio({ text: script, title: topic || "Podcast episode" });
+      const result = await generateAudio({ text: scriptSnapshot, title: topic || "Podcast episode", language: languageSnapshot });
+      if (requestId !== audioRequestId.current) return;
       setAudioUrl(result.signed_url);
-      setAudioNote("Audio saved privately in Supabase. Use the download link below.");
+      setAudioMimeType(result.mime_type || "audio/mpeg");
+      setAudioNote("Natural voice audio saved privately. Use the player or download link below.");
     } catch (e) {
-      setAudioNote(e instanceof Error ? e.message : "Could not create audio.");
+      if (requestId === audioRequestId.current) setAudioNote(e instanceof Error ? e.message : "Could not create audio.");
     } finally {
-      setAudioBusy(false);
+      if (requestId === audioRequestId.current) setAudioBusy(false);
     }
   };
-  const play = () => {
-    if (!script) return;
-    if (!("speechSynthesis" in window)) {
-      setError("Speech playback is not supported in this browser. Download the script instead.");
-      return;
-    }
-    if (playing) {
-      window.speechSynthesis.cancel();
-      setPlaying(false);
-      return;
-    }
-    const voices = window.speechSynthesis.getVoices();
-    window.speechSynthesis.cancel();
-    const defaultVoice = voices.find((voice) => /en[-_]KE/i.test(voice.lang)) ?? voices.find((voice) => /en[-_](GB|AU|US)/i.test(voice.lang));
-    const alternateVoice = voices.find((voice) => /en[-_](GB|AU|US)/i.test(voice.lang) && voice !== defaultVoice) ?? defaultVoice;
-    const lines = script.split(/\n+/).map((line) => {
-      const match = line.match(/^\s*(HOST|TUTOR)\s*:\s*(.*)$/i);
-      return { speaker: match?.[1]?.toUpperCase() ?? "HOST", text: match?.[2] ?? line };
-    }).filter((line) => line.text.trim());
-    let index = 0;
-    const speakNext = () => {
-      const line = lines[index++];
-      if (!line) {
-        setPlaying(false);
-        return;
-      }
-      const utterance = new SpeechSynthesisUtterance(speakable(line.text));
-      utterance.lang = "en-KE";
-      utterance.rate = 0.9;
-      utterance.pitch = line.speaker === "TUTOR" ? 0.98 : 1.03;
-      utterance.voice = line.speaker === "TUTOR" ? alternateVoice ?? null : defaultVoice ?? null;
-      utterance.onend = speakNext;
-      utterance.onerror = () => setPlaying(false);
-      window.speechSynthesis.speak(utterance);
-    };
-    speakNext();
-    setPlaying(true);
-  };
-
   const renderMp4 = async () => {
-    if (!pages.length || rendering) return;
+    if (!pages.length || rendering || audioBusy) return;
     setRendering(true);
     setRenderProgress(0);
     setError("");
     try {
       setStage("Creating the narration audio…");
-      const narration = await generateAudio({
-        text: script,
-        title: topic || "Narrated law lesson",
+      const narration = audioUrl
+        ? { signed_url: audioUrl, mime_type: audioMimeType }
+        : await generateAudio({
+            text: script,
+            title: topic || "Narrated law lesson",
+            language: scriptLanguage || spokenLanguage,
+          });
+      setAudioUrl(narration.signed_url);
+      setAudioMimeType(narration.mime_type || "audio/mpeg");
+      setAudioNote("The MP4 export is using the same natural voice narration shown in the audio player.");
+      const narrationDuration = await new Promise<number>((resolve) => {
+        const probe = document.createElement("audio");
+        probe.preload = "metadata";
+        let timeout = 0;
+        const finish = (duration: number) => {
+          window.clearTimeout(timeout);
+          probe.removeAttribute("src");
+          probe.load();
+          resolve(Number.isFinite(duration) ? duration : 0);
+        };
+        probe.onloadedmetadata = () => finish(probe.duration);
+        probe.onerror = () => finish(0);
+        timeout = window.setTimeout(() => finish(0), 10_000);
+        probe.src = narration.signed_url;
       });
+      const sceneDurationMs = Math.max(5200, (narrationDuration * 1000) / pages.length);
       setRenderProgress(10);
       const canvas = document.createElement("canvas");
       canvas.width = 1280;
@@ -238,7 +218,7 @@ export default function LearningStudio() {
       };
       for (let index = 0; index < pages.length; index += 1) {
         draw(pages[index], index);
-        await new Promise((resolve) => window.setTimeout(resolve, 5200));
+        await new Promise((resolve) => window.setTimeout(resolve, sceneDurationMs));
         setRenderProgress(10 + Math.round(((index + 1) / pages.length) * 70));
       }
       recorder.stop();
@@ -258,13 +238,14 @@ export default function LearningStudio() {
         ),
       });
       await ffmpeg.writeFile("lesson.webm", await fetchFile(webm));
-      await ffmpeg.writeFile("narration.wav", await fetchFile(narration.signed_url));
+      const narrationFile = narration.mime_type === "audio/mpeg" ? "narration.mp3" : narration.mime_type === "audio/ogg" ? "narration.ogg" : "narration.wav";
+      await ffmpeg.writeFile(narrationFile, await fetchFile(narration.signed_url));
       setStage("Combining slides and narration…");
       await ffmpeg.exec([
         "-i",
         "lesson.webm",
         "-i",
-        "narration.wav",
+        narrationFile,
         "-map",
         "0:v:0",
         "-map",
@@ -305,7 +286,8 @@ export default function LearningStudio() {
   };
 
   const generate = async () => {
-    if (!topic.trim() || !selected.length || working) return;
+    if (!topic.trim() || !selected.length || working || audioBusy || rendering) return;
+    audioRequestId.current += 1;
     setWorking(true);
     setGenerationProgress(5);
     setError("");
@@ -314,6 +296,11 @@ export default function LearningStudio() {
     setSlide(0);
     try {
       const findings: string[] = [];
+      setAudioUrl(null);
+      setAudioNote("");
+      const languageInstruction = spokenLanguage === "sw"
+        ? "Write in fluent, natural Kiswahili used in Kenya. Preserve case names, statute titles, citations and official legal terms in their original form."
+        : "Write in clear Kenyan English, with natural spoken phrasing. Preserve case names, statute titles and citations exactly.";
       for (let index = 0; index < perspectives.length; index += 1) {
         setStage(`AI perspective ${index + 1} of ${perspectives.length}…`);
         setGenerationProgress(10 + index * 20);
@@ -324,7 +311,7 @@ export default function LearningStudio() {
           messages: [
             {
               role: "user",
-              content: `${perspectives[index]}\n\nTopic: ${topic.trim()}\nReturn a focused memo for a later script editor. Do not invent authorities.`,
+              content: `${perspectives[index]}\n${languageInstruction}\n\nTopic: ${topic.trim()}\nReturn a focused memo for a later script editor. Do not invent authorities.`,
             },
           ],
         });
@@ -344,7 +331,7 @@ export default function LearningStudio() {
         messages: [
           {
             role: "user",
-            content: `Topic: ${topic.trim()}\n\nIndependent research memos from the AI panel:\n${findings.map((item, i) => `MEMO ${i + 1}\n${item}`).join("\n\n")}\n\nCreate the final ${mode} now. Keep it faithful to the selected sources, cite source markers when available, and mark uncertain law for verification.`,
+            content: `Topic: ${topic.trim()}\n${languageInstruction}\n\nIndependent research memos from the AI panel:\n${findings.map((item, i) => `MEMO ${i + 1}\n${item}`).join("\n\n")}\n\nCreate the final ${mode} now. Keep it faithful to the selected sources, cite source markers when available, and mark uncertain law for verification.`,
           },
         ],
       });
@@ -362,6 +349,7 @@ export default function LearningStudio() {
         throw new Error("The narration editor returned an incomplete scene script. Please try again.");
       }
       setScript(finalScript);
+      setScriptLanguage(spokenLanguage);
       setGenerationProgress(100);
       setStage("Complete — your episode is ready.");
     } catch (e) {
@@ -414,6 +402,14 @@ export default function LearningStudio() {
               <Video size={15} /> Narrated video lesson
             </button>
           </div>
+          <label className="studio-language-select">
+            <span>Script &amp; narration language</span>
+            <select value={spokenLanguage} onChange={(event) => setSpokenLanguage(event.target.value as "en" | "sw")}>
+              <option value="en">English · natural conversational voice</option>
+              <option value="sw">Kiswahili · sauti ya kawaida</option>
+            </select>
+            <small>New scripts follow this language. Existing scripts keep their original language until rebuilt.</small>
+          </label>
           {(working || stage) && (
             <div className="studio-progress" aria-live="polite">
               <div className="studio-progress-top">
@@ -429,7 +425,7 @@ export default function LearningStudio() {
           <button
             className="primary-button studio-generate"
             onClick={() => void generate()}
-            disabled={working || !topic.trim() || !selected.length}
+            disabled={working || audioBusy || rendering || !topic.trim() || !selected.length}
           >
             {working ? (
               <>
@@ -458,30 +454,18 @@ export default function LearningStudio() {
                   </p>
                 </div>
                 <div className="studio-output-actions">
-                  <button className="secondary-button" onClick={play}>
-                    {playing ? (
-                      <>
-                        <Square size={13} /> Stop
-                      </>
-                    ) : (
-                      <>
-                        <Play size={13} /> Listen
-                      </>
-                    )}
-                  </button>
                   <button className="secondary-button" onClick={download}>
                     Download script
                   </button>
-                  {mode === "podcast" && (
-                    <button className="secondary-button" onClick={() => void downloadAudio()} disabled={audioBusy}>
-                      <Music size={13} /> {audioBusy ? "Creating audio…" : "Download audio"}
-                    </button>
-                  )}
+                  <button className="secondary-button" onClick={() => void downloadAudio()} disabled={audioBusy || rendering}>
+                    {audioBusy ? <Loader2 size={13} className="studio-spin" /> : <Headphones size={13} />}
+                    {audioBusy ? "Creating fluent audio…" : audioUrl ? "Regenerate voice audio" : "Generate fluent audio"}
+                  </button>
                   {mode === "video" && (
                     <button
                       className="primary-button"
                       onClick={() => void renderMp4()}
-                      disabled={rendering}
+                      disabled={rendering || audioBusy}
                     >
                       <Download size={13} />{" "}
                       {rendering
@@ -490,15 +474,16 @@ export default function LearningStudio() {
                     </button>
                   )}
                 </div>
-                {mode === "podcast" && audioNote && <p className="field-hint">{audioNote}</p>}
-                {mode === "podcast" && audioUrl && <div className="studio-audio-download"><audio controls src={audioUrl} /><a className="secondary-button" href={audioUrl} download={`${(topic || "podcast").replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.wav`}>Download WAV</a></div>}
+                <p className="field-hint">Voice generation sends this script to ElevenLabs, uses your account quota, and saves private audio in Supabase. Avoid confidential client material.</p>
+                {audioNote && <p className="field-hint">{audioNote}</p>}
+                {audioUrl && <div className="studio-audio-download"><audio controls src={audioUrl} /><a className="secondary-button" href={audioUrl} download={`${(topic || "podcast").replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.${audioMimeType === "audio/mpeg" ? "mp3" : audioMimeType === "audio/ogg" ? "ogg" : "wav"}`}>Download audio</a></div>}
               </div>
               {mode === "video" && (
                 <>
                   <p className="field-hint studio-export-note">
                     The MP4 contains the lesson scenes, captions, and source
-                    reminder. Use Listen for browser narration while reviewing
-                    the script.
+                    reminder. Export MP4 uses the selected language and the same
+                    natural AI narration provider as the audio player.
                   </p>
                   <div className="studio-slide">
                     <span>

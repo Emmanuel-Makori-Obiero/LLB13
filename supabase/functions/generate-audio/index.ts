@@ -44,6 +44,114 @@ function speechTurns(script: string): Turn[] {
   return turns;
 }
 
+function chunkSpeechTurns(turns: Turn[], maxCharacters = 1600): Turn[][] {
+  const chunks: Turn[][] = [];
+  let current: Turn[] = [];
+  let length = 0;
+  const flush = () => {
+    if (current.length) chunks.push(current);
+    current = [];
+    length = 0;
+  };
+  const append = (speaker: Speaker, text: string) => {
+    const clean = text.trim();
+    if (!clean) return;
+    if (length + clean.length + (current.length ? 1 : 0) > maxCharacters) flush();
+    const previous = current.at(-1);
+    if (previous?.speaker === speaker) previous.text += ` ${clean}`;
+    else current.push({ speaker, text: clean });
+    length += clean.length + 1;
+  };
+
+  for (const turn of turns) {
+    const sentences = turn.text.match(/[^.!?]+[.!?]+|[^.!?]+$/g) ?? [turn.text];
+    for (const sentence of sentences) {
+      const clean = sentence.trim();
+      if (clean.length <= maxCharacters) {
+        append(turn.speaker, clean);
+        continue;
+      }
+      for (const word of clean.split(/\s+/)) append(turn.speaker, word);
+    }
+  }
+  flush();
+  return chunks;
+}
+
+function stripMp3Metadata(bytes: Uint8Array): Uint8Array {
+  let start = 0;
+  if (bytes.length >= 10 && String.fromCharCode(...bytes.slice(0, 3)) === "ID3") {
+    const size = ((bytes[6] & 0x7f) << 21) | ((bytes[7] & 0x7f) << 14) |
+      ((bytes[8] & 0x7f) << 7) | (bytes[9] & 0x7f);
+    start = Math.min(bytes.length, 10 + size + ((bytes[5] & 0x10) ? 10 : 0));
+  }
+  let end = bytes.length;
+  if (end >= 128 && String.fromCharCode(...bytes.slice(end - 128, end - 125)) === "TAG") end -= 128;
+  return bytes.slice(start, end);
+}
+
+async function generateElevenLabsAudio(
+  text: string,
+  keys: string[],
+  language: "en" | "sw",
+  model: string,
+  hostVoiceId: string,
+  tutorVoiceId: string,
+): Promise<AudioResult> {
+  const turns = speechTurns(text);
+  if (!turns.length) throw new Error("The script contains no speakable text.");
+  const chunks = chunkSpeechTurns(turns);
+  const outputs: Uint8Array[] = [];
+  const chunkTexts = chunks.map((chunk) => chunk.map((turn) => turn.text).join(" "));
+  for (let index = 0; index < chunks.length; index += 1) {
+    const chunk = chunks[index];
+    const body = {
+      model_id: model,
+      language_code: language,
+      apply_text_normalization: "auto",
+      ...(index > 0 ? { previous_text: chunkTexts[index - 1].slice(-100) } : {}),
+      ...(index + 1 < chunks.length ? { future_text: chunkTexts[index + 1].slice(0, 100) } : {}),
+      inputs: chunk.map((turn) => ({
+        text: turn.text,
+        voice_id: turn.speaker === "TUTOR" ? tutorVoiceId : hostVoiceId,
+      })),
+    };
+    let generated: Response | null = null;
+    const failures: string[] = [];
+    for (const key of keys) {
+      try {
+        generated = await fetch("https://api.elevenlabs.io/v1/text-to-dialogue?output_format=mp3_44100_128", {
+          method: "POST",
+          headers: { "xi-api-key": key, "Content-Type": "application/json", Accept: "audio/mpeg" },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(120_000),
+        });
+        if (generated.ok) break;
+        const detail = (await generated.text()).slice(0, 500);
+        failures.push(`ElevenLabs ${generated.status}: ${detail}`);
+      } catch (error) {
+        failures.push(error instanceof Error ? error.message : String(error));
+      }
+    }
+    if (!generated?.ok) throw new Error(failures.slice(-2).join("; ") || "ElevenLabs did not return audio.");
+    const contentType = generated.headers.get("content-type") || "audio/mpeg";
+    const bytes = new Uint8Array(await generated.arrayBuffer());
+    if (!contentType.toLowerCase().includes("audio") || bytes.length < 100) {
+      throw new Error("ElevenLabs returned an empty or non-audio response.");
+    }
+    outputs.push(bytes);
+  }
+  if (outputs.length === 1) {
+    return { bytes: outputs[0], mimeType: "audio/mpeg", provider: "elevenlabs", model, voices: new Set(turns.map((turn) => turn.speaker)).size };
+  }
+  const frames = outputs.map(stripMp3Metadata);
+  const total = frames.reduce((sum, bytes) => sum + bytes.length, 0);
+  const combined = new Uint8Array(total);
+  let offset = 0;
+  for (const part of frames) { combined.set(part, offset); offset += part.length; }
+  return { bytes: combined, mimeType: "audio/mpeg", provider: "elevenlabs-chunked", model, voices: new Set(turns.map((turn) => turn.speaker)).size };
+}
+
 function extractAudioBase64(value: unknown, inAudioBlock = false): string | null {
   if (Array.isArray(value)) {
     for (const item of value) {
@@ -172,43 +280,52 @@ Deno.serve(async (req) => {
   const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const hfTokens = secretKeys("HF_TOKEN");
   const geminiKeys = secretKeys("GEMINI_API_KEY");
+  const elevenLabsKeys = secretKeys("ELEVENLABS_API_KEY");
   const geminiEnabled = Deno.env.get("GEMINI_TTS_ENABLED")?.toLowerCase() === "true";
+  const hfFallbackEnabled = Deno.env.get("HF_TTS_FALLBACK_ENABLED")?.toLowerCase() === "true";
   if (!url || !anon || !service) return json({ error: "Audio generation is missing Supabase server configuration." }, 503);
-  if (!hfTokens.length && !(geminiEnabled && geminiKeys.length)) {
-    return json({ error: "Audio provider not configured. Set HF_TOKEN_1, or set GEMINI_TTS_ENABLED=true and configure GEMINI_API_KEY_1 in Supabase secrets." }, 503);
-  }
   const authHeader = req.headers.get("Authorization") || "";
   const userClient = createClient(url, anon, { global: { headers: { Authorization: authHeader } } });
   const { data: auth } = await userClient.auth.getUser();
   if (!auth.user) return json({ error: "Sign in before creating audio." }, 401);
 
-  let body: { text?: string; title?: string };
+  let body: { text?: string; title?: string; language?: "en" | "sw" };
   try { body = await req.json(); } catch { return json({ error: "Invalid JSON body." }, 400); }
   const text = String(body.text || "").trim();
+  const language: "en" | "sw" = body.language === "sw" ? "sw" : "en";
   if (text.length < 20) return json({ error: "The lesson or podcast script is too short." }, 400);
   if (text.length > 12000) return json({ error: "This script is too long for one audio request. Shorten the episode or generate it in parts." }, 400);
   const turns = speechTurns(text);
   const plainText = turns.map((turn) => turn.text).join("\n");
+  if (!elevenLabsKeys.length && !(language === "en" && geminiEnabled && geminiKeys.length) && !(language === "en" && hfFallbackEnabled && hfTokens.length)) {
+    return json({ error: language === "sw" ? "Kiswahili voice audio needs ELEVENLABS_API_KEY_1 in Supabase Edge Function secrets. No robotic English-only fallback is used." : "Fluent audio is not configured. Add ELEVENLABS_API_KEY_1 in Supabase Edge Function secrets, then deploy generate-audio." }, 503);
+  }
   const hfModel = Deno.env.get("HF_TTS_MODEL") || "facebook/mms-tts-eng";
   const hfEndpoint = Deno.env.get("HF_TTS_URL") || `https://router.huggingface.co/hf-inference/models/${hfModel}`;
   const geminiModel = Deno.env.get("GEMINI_TTS_MODEL") || "gemini-3.8-flash-tts";
+  const elevenLabsModel = Deno.env.get("ELEVENLABS_DIALOGUE_MODEL") || "eleven_v3";
+  const hostVoiceId = Deno.env.get("ELEVENLABS_HOST_VOICE_ID") || "Xb7hH8MSUJpSbSDYk0k2";
+  const tutorVoiceId = Deno.env.get("ELEVENLABS_TUTOR_VOICE_ID") || "onwK4e9ZLuTAKqWW03F9";
   const failures: string[] = [];
   let audio: AudioResult | null = null;
 
-  if (geminiEnabled && geminiKeys.length) {
+  if (elevenLabsKeys.length) {
+    try { audio = await generateElevenLabsAudio(text, elevenLabsKeys, language, elevenLabsModel, hostVoiceId, tutorVoiceId); }
+    catch (error) { failures.push(error instanceof Error ? error.message : String(error)); }
+  }
+  if (!audio && language === "en" && geminiEnabled && geminiKeys.length) {
     try { audio = await generateGeminiAudio(text, geminiKeys, geminiModel); }
     catch (error) { failures.push(error instanceof Error ? error.message : String(error)); }
   }
-  if (!audio && hfTokens.length) {
+  if (!audio && language === "en" && hfFallbackEnabled && hfTokens.length) {
     try { audio = await generateHuggingFaceAudio(plainText, hfTokens, hfModel, hfEndpoint); }
     catch (error) { failures.push(error instanceof Error ? error.message : String(error)); }
   }
   if (!audio) {
-    const status = geminiEnabled && geminiKeys.length && !hfTokens.length ? 502 : 503;
-    return json({ error: "No configured audio provider completed this request.", detail: failures.join("; ") || "Enable Gemini TTS or configure an HF token." }, status);
+    return json({ error: "No configured fluent audio provider completed this request.", detail: failures.join("; ") || "Check the ElevenLabs key, model and voice IDs in Supabase secrets." }, elevenLabsKeys.length ? 502 : 503);
   }
 
-  const extension = audio.mimeType === "audio/ogg" ? "ogg" : "wav";
+  const extension = audio.mimeType === "audio/ogg" ? "ogg" : audio.mimeType === "audio/mpeg" ? "mp3" : "wav";
   const admin = createClient(url, service);
   const assetId = crypto.randomUUID();
   const storagePath = `${auth.user.id}/generated/${assetId}.${extension}`;
@@ -223,7 +340,7 @@ Deno.serve(async (req) => {
     mime_type: audio.mimeType,
     status: "ready",
     provider: audio.provider,
-    metadata: { model: audio.model, characters: text.length, voices: audio.voices },
+    metadata: { model: audio.model, characters: text.length, voices: audio.voices, language },
   }).select("id,title,kind,storage_path,mime_type,status,provider,created_at").single();
   if (error) {
     await admin.storage.from("media").remove([storagePath]);

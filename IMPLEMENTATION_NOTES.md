@@ -22,11 +22,9 @@
   - Adds `media_assets`, `media_shares`, `film_projects`, and `film_shots`.
   - Adds owner/shared RLS policies, indexes, timestamps, and a private `media` bucket.
 
-## Apply the cloud schema
+## Historical cloud-schema note — do not replay on production
 
-Run `supabase/migrations/002-cloud-media.sql` in the linked Supabase project after the existing base schema and AI migration. The application will not be able to load cloud media or film plans until this migration has been applied.
-
-The migration deliberately uses a private Storage bucket. Sharing is implemented with an expiring signed URL rather than exposing the whole bucket publicly. The share record remains available for auditing/revocation, but a seven-day URL cannot be retroactively invalidated unless the underlying asset is deleted or the storage policy is changed.
+This section describes the initial implementation only. The live LLB13 Supabase project already contains the media tables and private storage schema, and its migration ledger has entries that are not represented by this repository's legacy SQL filenames. **Do not run `002-cloud-media.sql` against production or use a blanket `supabase db push` until the full remote history has been reconciled.** See [`docs/supabase-production-audit-2026-10-04.md`](docs/supabase-production-audit-2026-10-04.md) for the verified live state. The original design uses private storage and expiring signed links rather than a public bucket.
 
 ## Video generation reality
 
@@ -41,15 +39,13 @@ The provider audit found no legitimate unlimited free production API. The practi
 
 The app should keep provider keys server-side. Do not put them in React/browser code and do not attempt to bypass quotas or use leaked credentials.
 
-## Validation
+## Historical validation
 
-- `npm run check` passed.
-- `npm run build` passed.
-- `git diff --check` passed.
+The check results recorded in the original implementation pass do not validate later landing-page, voice, video-status, or Supabase-audit changes. Run the current repository checks before release; see the production audit and media setup guide for the current rollout procedure.
 
-## GitHub
+## Repository/release note
 
-These changes are currently local in the cloned repository. They have **not** been pushed to GitHub. Review the diff, apply the Supabase migration, test the signed-in flows, then commit and push from the repository owner’s GitHub credentials.
+This file predates the current repository release workflow and is not a deployment checklist. Do not apply its historical migration instructions to production. Use the production audit and media setup guide for current Edge Function deployment, migration-history reconciliation, and approval gates.
 
 ## Automated video worker
 

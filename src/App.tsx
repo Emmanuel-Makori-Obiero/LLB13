@@ -60,6 +60,7 @@ import type {
 import { unitReps } from "./data/types";
 import MeetingRoom from "./MeetingRoom";
 import LoginPage, { ResetPasswordPage } from "./AuthPage";
+import LandingPage, { HelpButton } from "./LandingPage";
 import { downloadInfo, readerUrl, safeUrl, toEmbedUrl } from "./links";
 import AdminPage from "./AdminPage";
 import InstallButton from "./InstallButton";
@@ -123,6 +124,8 @@ const validViews = new Set([
   "admin",
   "account",
   "guide",
+  "login",
+  "signup",
 ]);
 const viewFromPath = () => {
   const path = window.location.pathname.replace(/^\/+|\/+$/g, "");
@@ -160,6 +163,7 @@ type UserProfile = {
 
 function App() {
   const [authLoading, setAuthLoading] = useState(true);
+  const [showLandingPreview, setShowLandingPreview] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [adminState, setAdminState] = useState<"unknown" | "yes" | "no">(
@@ -242,7 +246,10 @@ function App() {
       }
       const sessionResult = await supabase!.auth.getSession();
       if (!active) return;
-      applySession(sessionResult.data.session);
+      const session = sessionResult.data.session;
+      applySession(session);
+      if (session?.user && window.location.pathname === "/")
+        setShowLandingPreview(true);
       if (code || window.location.hash.includes("access_token")) {
         window.history.replaceState({}, "", window.location.pathname);
       }
@@ -261,6 +268,12 @@ function App() {
       listener.subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (!showLandingPreview) return;
+    const timer = window.setTimeout(() => setShowLandingPreview(false), 1000);
+    return () => window.clearTimeout(timer);
+  }, [showLandingPreview]);
 
   useEffect(() => {
     if (!userEmail) {
@@ -395,6 +408,10 @@ function App() {
     setSearch("");
     if (target !== "transcribe") setTranscribeUnit(undefined);
   };
+  useEffect(() => {
+    if (userEmail && (view === "login" || view === "signup"))
+      setPage("dashboard");
+  }, [userEmail, view]);
   const openTranscribeForUnit = (unitName: string) => {
     window.history.pushState({}, "", "/transcribe");
     setTranscribeUnit(unitName);
@@ -567,7 +584,6 @@ function App() {
     );
   };
 
-  if (!isSupabaseConfigured) return <LoginPage configured={false} />;
   if (authLoading)
     return (
       <div className="auth-page">
@@ -576,7 +592,40 @@ function App() {
     );
   if (recovering && userEmail)
     return <ResetPasswordPage onDone={() => setRecovering(false)} />;
-  if (!userEmail) return <LoginPage configured onSignedIn={setUserEmail} />;
+  if (userEmail && showLandingPreview && window.location.pathname === "/")
+    return (
+      <LandingPage
+        configured={isSupabaseConfigured}
+        signedInPreview
+        onEnterWorkspace={() => {
+          setShowLandingPreview(false);
+          setPage("dashboard");
+        }}
+        onSignIn={() => setPage("dashboard")}
+        onSignUp={() => setPage("dashboard")}
+      />
+    );
+  if (!userEmail) {
+    if (view === "login" || view === "signup")
+      return (
+        <LoginPage
+          configured={isSupabaseConfigured}
+          initialMode={view === "signup" ? "sign-up" : "sign-in"}
+          onSignedIn={(email) => {
+            setUserEmail(email);
+            setPage("dashboard");
+          }}
+          onBackToHome={() => setPage("dashboard")}
+        />
+      );
+    return (
+      <LandingPage
+        configured={isSupabaseConfigured}
+        onSignIn={() => setPage("login")}
+        onSignUp={() => setPage("signup")}
+      />
+    );
+  }
 
   return (
     <div
@@ -591,6 +640,7 @@ function App() {
           : undefined
       }
     >
+      <HelpButton floating onNavigate={setPage} />
       <aside className="sidebar">
         <Brand />
         <nav>
@@ -2342,6 +2392,7 @@ function MediaPage({
   const [videoBusy, setVideoBusy] = useState(false);
   const [videoNote, setVideoNote] = useState("");
   const [generatedVideoUrl, setGeneratedVideoUrl] = useState<string | null>(null);
+  const [checkingVideoId, setCheckingVideoId] = useState<string | null>(null);
   const change = (key: keyof typeof form, value: string) =>
     setForm((current) => ({ ...current, [key]: value }));
 
@@ -2357,6 +2408,34 @@ function MediaPage({
       if (url) window.open(url, "_blank", "noopener,noreferrer");
     } catch (error) {
       setCloudError(error instanceof Error ? error.message : "Could not open cloud media.");
+    }
+  };
+
+  const refreshVideoStatus = async (asset: MediaAsset) => {
+    if (checkingVideoId || videoBusy) return;
+    setCheckingVideoId(asset.id);
+    setCloudError("");
+    try {
+      const status = await getVideoJobStatus(asset.id);
+      setCloudAssets((current) => current.map((item) => item.id === asset.id
+        ? { ...item, ...status.asset, metadata: { ...item.metadata, ...status.asset.metadata } }
+        : item));
+      if (status.status === "ready") {
+        const url = status.signed_url || await getMediaAssetUrl(status.asset);
+        setGeneratedVideoUrl(url);
+        setCloudError("Video finished. Open it above or from Cloud media.");
+      } else if (status.status === "failed") {
+        const metadata = status.asset.metadata || {};
+        setCloudError(status.provider_error || String(metadata.last_error || "The available video providers could not finish this clip."));
+      } else if (status.status === "deleted") {
+        setCloudError("This video asset was deleted; status checks will not restart its provider job.");
+      } else {
+        setCloudError(status.provider_error || `Video is still ${status.status}${status.retry_after_seconds ? `; check again in about ${status.retry_after_seconds} seconds` : status.retrying ? "; a fallback provider is being tried" : ". Check again in about 30 seconds"}.`);
+      }
+    } catch (error) {
+      setCloudError(error instanceof Error ? error.message : "Could not check video status.");
+    } finally {
+      setCheckingVideoId(null);
     }
   };
 
@@ -2441,20 +2520,25 @@ function MediaPage({
     try {
       const job = await generateVideoJob({ prompt: videoPrompt.trim() });
       setCloudAssets((current) => [job.asset, ...current]);
-      setVideoNote(`Queued with ${job.provider || "a free video provider"}; waiting for the cloud GPU…`);
+      setVideoNote(job.provider
+        ? `Accepted by ${job.provider}; waiting for the cloud GPU…`
+        : "No free provider accepted the first submission; checking the saved job status before confirming failure…");
       for (let attempt = 0; attempt < 24; attempt += 1) {
         await new Promise((resolve) => window.setTimeout(resolve, 8000));
         const status = await getVideoJobStatus(job.asset.id);
+        setCloudAssets((current) => current.map((item) => item.id === job.asset.id
+          ? { ...item, ...status.asset, metadata: { ...item.metadata, ...status.asset.metadata } }
+          : item));
         if (status.status === "ready") {
-          setGeneratedVideoUrl(status.signed_url ?? null);
+          setGeneratedVideoUrl(status.signed_url || await getMediaAssetUrl(status.asset));
           setVideoNote("Video ready and saved privately in Supabase Storage.");
-          setCloudAssets((current) => current.map((item) => item.id === job.asset.id ? status.asset : item));
           return;
         }
-        if (status.status === "failed") throw new Error("All attempted free video providers could not complete this clip.");
-        setVideoNote(`Cloud GPU job is ${status.status}… (${Math.min(99, Math.round(((attempt + 1) / 24) * 100))}%)`);
+        if (status.status === "failed") throw new Error(status.provider_error || String(status.asset.metadata?.last_error || "All attempted free video providers could not complete this clip."));
+        if (status.status === "deleted") throw new Error("This video asset was deleted and will not be restarted.");
+        setVideoNote(status.provider_error || `Cloud GPU job is ${status.status}… (${Math.min(99, Math.round(((attempt + 1) / 24) * 100))}%)`);
       }
-      setVideoNote("The clip is still queued. You can leave this page open and try again from Cloud media later.");
+      setVideoNote("This clip is still queued or processing. It remains in Cloud media; use “Refresh video status” there rather than submitting a duplicate job.");
     } catch (error) {
       setVideoNote(error instanceof Error ? error.message : "Could not generate video.");
     } finally {
@@ -2491,7 +2575,7 @@ function MediaPage({
 
       <div className="card card-pad" style={{ marginTop: 18 }}>
         <CardHeader label="Video Studio" action="Hugging Face Spaces · best effort" />
-        <p className="field-hint">Generate one short cinematic clip. Public GPU spaces can be unavailable or heavily queued. This requires the Supabase video functions and media migrations to be deployed; see the setup guide if the request fails or stays queued.</p>
+        <p className="field-hint">Generate one short clip through a public GPU queue. Jobs may wait, fail, or take several minutes; this is not the narrated-slide MP4 export in Learning Studio. It requires the Supabase video functions and media storage to be deployed.</p>
         <form className="data-form" onSubmit={(event) => void buildVideo(event)}>
           <label>Video scene<textarea required minLength={12} rows={4} value={videoPrompt} onChange={(event) => setVideoPrompt(event.target.value)} placeholder="A law student walks through a quiet Nairobi courthouse at sunrise, cinematic camera movement, realistic documentary style" /></label>
           <button className="primary-button" type="submit" disabled={videoBusy}>{videoBusy ? "Generating cloud video…" : "Generate short video clip"}</button>
@@ -2501,8 +2585,8 @@ function MediaPage({
       </div>
 
       <div className="card card-pad" style={{ marginTop: 18 }}>
-        <CardHeader label="Image Studio" action="Hugging Face · Supabase Storage" />
-        <p className="field-hint">Describe an illustration, study diagram, or film reference image. This route uses Hugging Face FLUX and needs a deployed image function, the media migration, and an HF_TOKEN secret in Supabase. The result is saved to your private cloud library.</p>
+        <CardHeader label="Image Studio" action="Hugging Face first · optional Gemini fallback" />
+        <p className="field-hint">Describe an illustration, study diagram, or film reference image. The deployed function must have its image provider secret and private media storage configured. Hugging Face is tried first. Gemini image API is a separate, billable fallback and stays disabled unless an administrator explicitly opts in with GEMINI_IMAGE_ENABLED=true.</p>
         <form className="data-form" onSubmit={(event) => void buildImage(event)}>
           <label>Image prompt<textarea required minLength={8} rows={4} value={imagePrompt} onChange={(event) => setImagePrompt(event.target.value)} placeholder="A clean editorial illustration of a Kenyan courtroom, warm paper texture, no text" /></label>
           <button className="primary-button" type="submit" disabled={imageBusy}>{imageBusy ? <><ImageIcon size={16} /> Generating…</> : <><Sparkles size={16} /> Generate image</>}</button>
@@ -2523,7 +2607,7 @@ function MediaPage({
       </div>
 
       {cloudError && <div className="connection-error" style={{ marginTop: 18 }}>{cloudError}</div>}
-      {cloudAssets.length > 0 && <><PageHeading eyebrow="Generated and uploaded" title="Cloud media." subtitle="Files are stored privately in Supabase Storage and can be opened from any signed-in device." /><div className="media-grid">{cloudAssets.map((asset) => <article className="card media-card" key={asset.id}><div className="media-link-card"><Film size={24} /><strong>{asset.title}</strong><span className="chip">{asset.kind} · {asset.status}</span><div className="media-actions"><button className="secondary-button" onClick={() => void openCloudAsset(asset)}>Open cloud file</button><button className="secondary-button" onClick={() => void shareCloudAsset(asset)}>Copy 7-day link</button><button className="danger-button" onClick={() => void removeCloudAsset(asset)}>Delete</button></div></div></article>)}</div></>}
+        {cloudAssets.length > 0 && <><PageHeading eyebrow="Generated and uploaded" title="Cloud media." subtitle="Files are stored privately in Supabase Storage and can be opened from any signed-in device." /><div className="media-grid">{cloudAssets.map((asset) => <article className="card media-card" key={asset.id}><div className="media-link-card"><Film size={24} /><strong>{asset.title}</strong><span className="chip">{asset.kind} · {asset.status}</span><div className="media-actions">{(asset.kind === "video_lesson" || asset.kind === "film_clip") && (asset.status === "queued" || asset.status === "processing") && <button className="secondary-button" disabled={videoBusy || checkingVideoId === asset.id} onClick={() => void refreshVideoStatus(asset)}>{checkingVideoId === asset.id ? "Checking…" : videoBusy ? "Generation checking…" : "Refresh video status"}</button>}<button className="secondary-button" onClick={() => void openCloudAsset(asset)}>Open cloud file</button><button className="secondary-button" onClick={() => void shareCloudAsset(asset)}>Copy 7-day link</button><button className="danger-button" onClick={() => void removeCloudAsset(asset)}>Delete</button></div></div></article>)}</div></>}
 
       <div className="media-grid">
         {media.map((item) => (

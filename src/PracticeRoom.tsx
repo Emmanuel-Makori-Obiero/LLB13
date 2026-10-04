@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { askAI, type AIMessage } from "./lib/ai";
+import { generateAudio } from "./lib/cloudMedia";
 
 type RecognitionEvent = {
   results: {
@@ -85,7 +86,7 @@ export default function PracticeRoom() {
   const [transcript, setTranscript] = useState("");
   const [listening, setListening] = useState(false);
   const [autoSend, setAutoSend] = useState(true);
-  const [speakReplies, setSpeakReplies] = useState(true);
+  const [speakReplies, setSpeakReplies] = useState(false);
   const [state, setState] = useState<JudgeState>("idle");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -94,12 +95,16 @@ export default function PracticeRoom() {
   const [camera, setCamera] = useState(false);
   const [recording, setRecording] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(true);
+  const [audioByTurn, setAudioByTurn] = useState<Record<number, string>>({});
+  const speakRepliesRef = useRef(false);
   const streamRef = useRef<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const recognitionRef = useRef<Recognition | null>(null);
   const pauseTimer = useRef<number | null>(null);
   const ackTimer = useRef<number | null>(null);
   const speechText = useRef("");
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const voiceRequest = useRef(0);
   const chunks = useRef<Blob[]>([]);
   const recorder = useRef<MediaRecorder | null>(null);
 
@@ -117,9 +122,10 @@ export default function PracticeRoom() {
       (window as SpeechWindow).webkitSpeechRecognition;
     setSpeechSupported(Boolean(Ctor));
     return () => {
+      voiceRequest.current += 1;
       recognitionRef.current?.stop();
       streamRef.current?.getTracks().forEach((track) => track.stop());
-      window.speechSynthesis?.cancel();
+      audioRef.current?.pause();
       if (pauseTimer.current) window.clearTimeout(pauseTimer.current);
       if (ackTimer.current) window.clearTimeout(ackTimer.current);
     };
@@ -134,40 +140,52 @@ export default function PracticeRoom() {
     return () => window.clearInterval(timer);
   }, [startedAt]);
 
-  const speak = (text: string, nextState: JudgeState = "speaking") => {
-    if (!speakReplies || !("speechSynthesis" in window)) return;
-    window.speechSynthesis.cancel();
-    setState(nextState);
+  const speak = (text: string, replyIndex: number) => {
+    if (!speakRepliesRef.current) return;
+    const requestId = ++voiceRequest.current;
     const spoken = text
       .replace(/^#+\s*/gm, "")
       .replace(/[*_`]/g, "")
       .replace(/\[(S\d+)\]/g, "source $1")
       .replace(/\s+/g, " ")
       .trim();
-    const utterance = new SpeechSynthesisUtterance(spoken);
-    utterance.lang = "en-KE";
-    utterance.rate = 0.91;
-    utterance.pitch = 0.98;
-    const voices = window.speechSynthesis.getVoices();
-    utterance.voice =
-      voices.find((voice) => /en[-_]KE/i.test(voice.lang)) ??
-      voices.find((voice) => /en[-_](GB|AU|US)/i.test(voice.lang)) ??
-      null;
-    utterance.onend = () => {
-      if (!listening) setState("idle");
-    };
-    window.speechSynthesis.speak(utterance);
+    setState("speaking");
+    void generateAudio({ text: spoken, title: "Moot judge reply", language: "en" })
+      .then(async (result) => {
+        if (requestId !== voiceRequest.current) return;
+        setAudioByTurn((current) => ({ ...current, [replyIndex]: result.signed_url }));
+        audioRef.current?.pause();
+        const player = new Audio(result.signed_url);
+        audioRef.current = player;
+        player.onended = () => {
+          if (requestId === voiceRequest.current)
+            setState((current) => current === "listening" ? current : "idle");
+        };
+        try {
+          await player.play();
+        } catch {
+          if (requestId === voiceRequest.current) setState("question");
+        }
+      })
+      .catch((error: unknown) => {
+        if (requestId !== voiceRequest.current) return;
+        setError(error instanceof Error ? `Natural judge voice unavailable: ${error.message}` : "Natural judge voice is unavailable.");
+        setState("warning");
+      });
   };
 
   const stopJudgeVoice = () => {
-    window.speechSynthesis?.cancel();
+    voiceRequest.current += 1;
+    audioRef.current?.pause();
+    if (audioRef.current) audioRef.current.currentTime = 0;
     if (!listening && !busy) setState("idle");
   };
 
   const send = async (value?: string) => {
     const text = (value ?? speechText.current).trim();
     if (!text || busy || limitReached) return;
-    window.speechSynthesis?.cancel();
+    voiceRequest.current += 1;
+    audioRef.current?.pause();
     if (pauseTimer.current) window.clearTimeout(pauseTimer.current);
     if (ackTimer.current) window.clearTimeout(ackTimer.current);
     speechText.current = "";
@@ -192,15 +210,13 @@ export default function PracticeRoom() {
           },
         ],
       });
+      const replyIndex = next.length;
       setMessages((current) => [
         ...current,
         { role: "assistant", content: result.answer },
       ]);
-      setState(result.answer.includes("?") ? "question" : "speaking");
-      speak(
-        result.answer,
-        result.answer.includes("?") ? "question" : "speaking",
-      );
+      setState(speakRepliesRef.current ? "speaking" : result.answer.includes("?") ? "question" : "idle");
+      speak(result.answer, replyIndex);
     } catch (e) {
       setError(e instanceof Error ? e.message : "The judge is unavailable.");
       setState("warning");
@@ -225,7 +241,6 @@ export default function PracticeRoom() {
     recognition.interimResults = true;
     recognition.lang = "en-KE";
     recognition.onresult = (event) => {
-      window.speechSynthesis?.cancel();
       setState("listening");
       let all = "";
       for (let index = 0; index < event.results.length; index += 1)
@@ -234,7 +249,7 @@ export default function PracticeRoom() {
       setTranscript(all);
       if (ackTimer.current) window.clearTimeout(ackTimer.current);
       ackTimer.current = window.setTimeout(() => {
-        if (listening && !busy) speak("Mm-hm, go on.", "listening");
+        if (listening && !busy) setState("listening");
       }, ACK_AFTER_MS);
       if (pauseTimer.current) window.clearTimeout(pauseTimer.current);
       if (autoSend)
@@ -341,6 +356,7 @@ export default function PracticeRoom() {
     stopJudgeVoice();
     recorder.current?.stop();
     setMessages([]);
+    setAudioByTurn({});
     setTranscript("");
     speechText.current = "";
     setStartedAt(null);
@@ -355,8 +371,8 @@ export default function PracticeRoom() {
         <div>
           <div className="section-label">Live one-on-one judge room</div>
           <p className="subheading">
-            Talk naturally. Pause to submit. The judge answers aloud and asks
-            the next question.
+            Talk naturally. Pause to submit. The judge asks focused questions;
+            turn on natural voice replies if you want to listen.
           </p>
         </div>
         <span className="chip">
@@ -414,9 +430,14 @@ export default function PracticeRoom() {
               <input
                 type="checkbox"
                 checked={speakReplies}
-                onChange={(event) => setSpeakReplies(event.target.checked)}
+                onChange={(event) => {
+                  const enabled = event.target.checked;
+                  speakRepliesRef.current = enabled;
+                  setSpeakReplies(enabled);
+                  if (!enabled) stopJudgeVoice();
+                }}
               />{" "}
-              Judge speaks aloud
+              Judge speaks aloud · natural ElevenLabs voice
             </label>
             <button className="secondary-button" onClick={stopJudgeVoice}>
               Stop voice
@@ -428,10 +449,12 @@ export default function PracticeRoom() {
               use the text box.
             </p>
           )}
-          <p className="field-hint">
-            Use headphones to prevent the judge's voice from being picked up by
-            the microphone. Camera video is saved locally; the current AI
-            endpoint judges the transcript, not video frames.
+            <p className="field-hint">
+              Voice replies are off until enabled. When enabled, reply text is
+              sent to ElevenLabs, uses your quota, and saves private audio for
+              replay. Avoid confidential client details. Use headphones to prevent the judge's voice from
+              being picked up by the microphone. Camera video is saved locally;
+              the current AI endpoint judges the transcript, not video frames.
           </p>
         </div>
         <div>
@@ -449,6 +472,19 @@ export default function PracticeRoom() {
               >
                 <span>{message.role === "user" ? "You" : "AI judge"}</span>
                 <p>{message.content}</p>
+                {message.role === "assistant" && audioByTurn[index] && (
+                  <audio
+                    className="moot-reply-audio"
+                    controls
+                    preload="none"
+                    src={audioByTurn[index]}
+                    aria-label="Listen to the judge reply in a natural voice"
+                    onPlay={(event) => {
+                      audioRef.current?.pause();
+                      audioRef.current = event.currentTarget;
+                    }}
+                  />
+                )}
               </div>
             ))}
           </div>

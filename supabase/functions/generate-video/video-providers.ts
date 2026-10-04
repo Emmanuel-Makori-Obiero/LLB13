@@ -54,10 +54,15 @@ export function providerChain(): VideoProvider[] {
 }
 
 export async function submitVideo(provider: VideoProvider, prompt: string, seed: number, headers: Record<string, string>) {
-  const response = await fetch(`${clean(provider.space)}/gradio_api/call/${provider.apiName}`, {
+  const space = new URL(clean(provider.space));
+  if (space.protocol !== "https:" || space.username || space.password) {
+    throw new Error(`${provider.label} must use a credential-safe HTTPS Space URL.`);
+  }
+  const response = await fetch(`${space.origin}/gradio_api/call/${provider.apiName}`, {
     method: "POST",
     headers: { ...headers, "Content-Type": "application/json" },
     body: JSON.stringify({ data: provider.buildInput(prompt, seed) }),
+    redirect: "manual",
     signal: AbortSignal.timeout(15_000),
   });
   const text = await response.text();
