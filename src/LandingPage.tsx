@@ -248,6 +248,7 @@ export default function LandingPage({
         <nav className="g13-site-nav" aria-label="Main navigation">
           <a href="#the-method">The method</a>
           <a href="#inside">Inside the hub</a>
+          <a href="/features">All features</a>
           <HelpButton onSignUp={signedInPreview ? undefined : onSignUp} onNavigate={exploreSection} />
         </nav>
         <div className="g13-header-actions">
@@ -289,6 +290,7 @@ export default function LandingPage({
                 </>
               )}
             </div>
+            <a className="g13-hero-guide-link" href="/features">See all platform features <ArrowRight size={14} /></a>
             <p className="g13-access-note" role={signedInPreview ? "status" : undefined} aria-live={signedInPreview ? "polite" : undefined}>
               {signedInPreview ? <><span className="g13-opening-dot" /> Opening your workspace…</> : <><LockKeyhole size={13} /> For approved Group 13 accounts.</>}
             </p>
@@ -460,6 +462,7 @@ export default function LandingPage({
             <button type="button" className="g13-hero-primary" onClick={signedInPreview ? openWorkspace : onSignUp}>{signedInPreview ? "Open your workspace" : "Create your account"} <ArrowRight size={17} /></button>
             {!signedInPreview && <button type="button" className="g13-final-login" onClick={onSignIn}>Already have an account? Sign in</button>}
           </div>
+          <a className="g13-final-guide-link" href="/features">See every feature and how to use it <ArrowRight size={14} /></a>
           {!signedInPreview && <p>Account creation is available to approved Group 13 emails.</p>}
         </section>
       </main>

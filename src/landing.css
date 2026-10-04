@@ -510,3 +510,50 @@
 @media (max-width: 640px) {
   .g13-hero-index { display: none; }
 }
+
+
+/* One grounded forest-green accent; real photo and footage keep their original tones. */
+.g13-landing { --g13-forest: #163a34; }
+.g13-hero-image { filter: none; }
+.g13-judge-video { filter: none; }
+.g13-hero-eyebrow span { background: #163a34; }
+.g13-section-heading .g13-kicker,
+.g13-reading-copy .g13-kicker,
+.g13-install-band .g13-kicker,
+.g13-chapter-icon,
+.g13-chapter-detail .g13-kicker,
+.g13-text-link,
+.g13-book-toggle,
+.g13-help-kicker,
+.g13-help-note strong { color: #163a34; }
+.g13-chapter-icon,
+.g13-chapter-list button.active,
+.g13-help-note { border-color: #163a34; }
+.g13-help-note { border-left-color: #163a34; }
+.g13-signup-button,
+.g13-hero-primary,
+.g13-install-button,
+.g13-help-cta,
+.g13-help-install-button { border-color: #163a34; background: #163a34; color: #ffffff; }
+.g13-signup-button:hover,
+.g13-hero-primary:hover,
+.g13-install-button:hover,
+.g13-help-cta:hover,
+.g13-help-install-button:hover { border-color: #000000; background: #000000; color: #ffffff; }
+.g13-hero-guide-link,
+.g13-final-guide-link { display: inline-flex; align-items: center; gap: 8px; width: fit-content; border-bottom: 1px solid #163a34; color: #ffffff; font-size: 10px; font-weight: 700; text-decoration: none; }
+.g13-hero-guide-link { margin-top: 15px; padding-bottom: 5px; }
+.g13-hero-guide-link svg,
+.g13-final-guide-link svg { color: #163a34; }
+.g13-hero-guide-link:hover,
+.g13-final-guide-link:hover { color: #ffffff; border-color: #ffffff; }
+.g13-final-guide-link { margin-top: 17px; padding-bottom: 5px; }
+.g13-login-button:focus-visible,
+.g13-signup-button:focus-visible,
+.g13-hero-primary:focus-visible,
+.g13-hero-secondary:focus-visible,
+.g13-hero-guide-link:focus-visible,
+.g13-final-guide-link:focus-visible { outline-color: #163a34; }
+@media (max-width: 640px) {
+  .g13-hero-guide-link { margin-top: 11px; }
+}

@@ -1,4 +1,6 @@
 import {
+  lazy,
+  Suspense,
   useEffect,
   useMemo,
   useState,
@@ -31,6 +33,7 @@ import {
   PenLine,
   Plus,
   Search,
+  ScanLine,
   Settings,
   ShieldCheck,
   Sparkles,
@@ -94,12 +97,16 @@ import {
   type MediaAsset,
 } from "./lib/cloudMedia";
 
+const FeaturesGuidePage = lazy(() => import("./FeaturesGuidePage"));
+const ScannerNotesPage = lazy(() => import("./ScannerNotesPage"));
+
 const nav = [
   { id: "dashboard", label: "Home", icon: LayoutDashboard },
   { id: "timetable", label: "Timetable", icon: CalendarDays },
   { id: "todos", label: "My to-do", icon: CheckSquare },
   { id: "assignments", label: "Assignments", icon: FileText },
   { id: "library", label: "Library", icon: Library },
+  { id: "scanner", label: "Scan & notes", icon: ScanLine },
   { id: "guide", label: "Guided study", icon: GraduationCap },
   { id: "assignment-helper", label: "AI assignment helper", icon: Sparkles },
   { id: "units", label: "Units", icon: BookOpen },
@@ -124,6 +131,7 @@ const validViews = new Set([
   "admin",
   "account",
   "guide",
+  "features",
   "login",
   "signup",
 ]);
@@ -584,6 +592,12 @@ function App() {
     );
   };
 
+  if (view === "features")
+    return (
+      <Suspense fallback={<div className="auth-page"><p className="subheading">Loading the feature guide…</p></div>}>
+        <FeaturesGuidePage />
+      </Suspense>
+    );
   if (authLoading)
     return (
       <div className="auth-page">
@@ -606,14 +620,14 @@ function App() {
       />
     );
   if (!userEmail) {
-    if (view === "login" || view === "signup")
+    if (view === "login" || view === "signup" || view === "scanner")
       return (
         <LoginPage
           configured={isSupabaseConfigured}
           initialMode={view === "signup" ? "sign-up" : "sign-in"}
           onSignedIn={(email) => {
             setUserEmail(email);
-            setPage("dashboard");
+            setPage(view === "scanner" ? "scanner" : "dashboard");
           }}
           onBackToHome={() => setPage("dashboard")}
         />
@@ -645,7 +659,7 @@ function App() {
         <Brand />
         <nav>
           <div className="nav-label">Main</div>
-          {nav.slice(0, 8).map((item) => (
+          {nav.slice(0, 9).map((item) => (
             <NavItem
               key={item.id}
               {...item}
@@ -654,7 +668,7 @@ function App() {
             />
           ))}
           <div className="nav-label">More</div>
-          {nav.slice(8).map((item) => (
+          {nav.slice(9).map((item) => (
             <NavItem
               key={item.id}
               {...item}
@@ -751,7 +765,7 @@ function App() {
               </div>
             </button>
             <div className="nav-label">Main</div>
-            {nav.slice(0, 8).map((item) => (
+            {nav.slice(0, 9).map((item) => (
               <NavItem
                 key={item.id}
                 {...item}
@@ -760,7 +774,7 @@ function App() {
               />
             ))}
             <div className="nav-label">More</div>
-            {nav.slice(8).map((item) => (
+            {nav.slice(9).map((item) => (
               <NavItem
                 key={item.id}
                 {...item}
@@ -896,6 +910,11 @@ function App() {
               }
               setNotice={setNotice}
             />
+          )}
+          {view === "scanner" && (
+            <Suspense fallback={<div className="subheading">Opening your scan notes…</div>}>
+              <ScannerNotesPage userId={userId} />
+            </Suspense>
           )}
           {view === "timetable" && (
             <TimetablePage

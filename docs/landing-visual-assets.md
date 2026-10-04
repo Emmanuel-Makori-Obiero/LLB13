@@ -10,7 +10,7 @@ The landing page uses a real Pexels photograph instead of generated hero artwork
 - **License:** [Pexels License](https://www.pexels.com/license/). Pexels permits free use and modification, including on websites and apps; attribution is not required, but credit is recorded here. Do not imply endorsement by the people pictured.
 - **Local asset:** `public/landing-hero-photo.webp` (resized and encoded as WebP; original composition preserved).
 
-The source image was downloaded from the photo page's official Pexels download link. The original file remains intact. The interface uses only black and white; the genuine photograph is shown in high-contrast monochrome with natural tonal detail so the people and setting remain documentary rather than synthetic or posterized.
+The source image was downloaded from the photo page's official Pexels download link. The original file remains intact. The interface uses an ink-and-paper black/white palette with a single forest-green accent; the genuine photograph and courtroom footage retain their natural source color and tonal detail so the people and setting remain documentary rather than synthetic or posterized.
 
 ## Courtroom interaction clip
 

@@ -988,3 +988,12 @@ h2 {
 .auth-pending-icon { background: #ffffff; color: #000000; }
 
 .auth-field input { border-color: #000000; }
+
+
+/* Single forest-green accent shared by public sign-in and sign-up. */
+.auth-home-link,.auth-link { color: #163a34; }
+.auth-home-link:hover,.auth-link:hover { color: #163a34; }
+.auth-tabs button.active,.auth-submit { border-color: #163a34; background: #163a34; color: #ffffff; }
+.auth-submit:hover:not(:disabled) { border-color: #000000; background: #000000; color: #ffffff; }
+.auth-field input:focus { border-color: #163a34; box-shadow: 0 0 0 2px #163a34; }
+.auth-shell :focus-visible { outline: 2px solid #163a34; outline-offset: 2px; }
