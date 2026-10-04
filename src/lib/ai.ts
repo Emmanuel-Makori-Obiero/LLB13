@@ -30,6 +30,7 @@ export type AIFeature =
   | "quiz"
   | "flashcards"
   | "notes"
+  | "quality_check"
   | "extract_assignments"
   | "counsellor"
   | "rw_question"
@@ -38,6 +39,7 @@ export type AIFeature =
   | "rw_improve"
   | "rw_critique"
   | "rw_citations"
+  | "rw_validate"
   | "rw_bookends"
   | "podcast_script"
   | "video_script";

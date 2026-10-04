@@ -370,6 +370,11 @@ const FEATURES: Record<
     docWide: true,
     task: `Turn this part of a lecture transcript into complete, well-organised study notes. Keep the lecturer's order. Do NOT leave out any substantive point: every rule, definition, test, element, case, statute and section, example, date, name, number, exception and instruction must appear. Remove only filler, repetition, jokes and chit-chat. Structure: "## " headings by topic, bullets for points, bold for key terms and case names, a table when comparing things. Where the lecturer stresses something, flags an exam point or gives a warning, add a line starting "Exam point:". If a passage is garbled, write [unclear] instead of guessing. If this part has cases or statutes, end with a short "Authorities mentioned" list.`,
   },
+  quality_check: {
+    json: true,
+    docWide: true,
+    task: 'Audit the generated notes or summary against the supplied transcript. Return ONLY JSON: {"status":"pass|review","score":0,"spelling_issues":[{"text":"","suggestion":"","reason":""}],"meaning_issues":[{"text":"","issue":"","suggested_fix":"","source_support":""}],"unsupported_claims":[{"text":"","reason":""}],"missing_points":[""],"authority_checks":[{"authority":"","status":"confirmed|unclear|not_found","reason":""}],"summary":""}. Check spelling of names, cases, statutes, sections, dates and numbers; whether each claim makes sense; whether it is actually supported by the transcript; and whether any garbled passage was silently guessed. Treat the transcript as the authority: if it is itself unclear, mark review and say so. Never silently rewrite the output or invent a correction. Pass only when there are no material meaning, support or authority problems; minor style suggestions alone may still pass.',
+  },
   rw_question: {
     task: "Help the student develop a focused, arguable legal research question from their topic. Give 3 to 5 candidate questions. For each, explain why it is contestable and give likely thesis directions, then suggest legal issues or neutral Kenya Law search phrases to investigate. Do not name a case or citation unless it appears in <sources>; never turn a guessed authority into a '(verify)' lead. End by recommending one question and saying why.",
   },
@@ -386,7 +391,12 @@ const FEATURES: Record<
     task: "Review the draft as a demanding supervisor. Cover: clarity of thesis, structure and flow, depth of analysis, use of authority, treatment of counter-arguments, originality, and writing quality. Quote short phrases from the draft when pointing to problems. Flag unsupported claims and authorities that may be wrong or misdescribed. Finish with the 5 most important fixes in priority order.",
   },
   rw_citations: {
-    task: "Format the authorities the student lists in the chosen citation style (OSCOLA unless another is stated). Give (1) footnote form and (2) bibliography or table entries, grouped as cases, legislation, and secondary sources. Do not invent details such as years, report series, volumes or pinpoint pages: put [check: what is missing] instead. Say which entries you could not format reliably.",
+    task: "Format and audit the authorities the student lists in the chosen citation style (OSCOLA unless another is stated). Give (1) footnote form and (2) bibliography or table entries, grouped as cases, legislation, and secondary sources. Check every available author, case name, year, report series, volume, page, publisher, URL, access date and pinpoint against the supplied sources. Do not invent or normalise missing details: put [check: what is missing] instead. Explicitly separate confirmed entries from entries needing source verification, and state which style rules were applied.",
+  },
+  rw_validate: {
+    json: true,
+    docWide: true,
+    task: 'Audit the student draft for spelling and grammar errors that change meaning, unsupported legal claims, misdescribed authorities, missing or inconsistent citations, and compliance with the requested citation style. Return ONLY JSON: {"status":"pass|review","score":0,"spelling_issues":[{"text":"","suggestion":"","reason":""}],"citation_issues":[{"text":"","issue":"","suggested_fix":"","source_support":""}],"unsupported_claims":[{"text":"","reason":""}],"missing_citations":[""],"summary":""}. Pass only when the draft is internally coherent and all material authority and citation problems are resolved. Do not invent replacement authorities or citation details.',
   },
   rw_bookends: {
     task: "Write the requested abstract, introduction or conclusion in formal academic prose, based on the student's draft or outline. An introduction must state context, the research question, the thesis and a roadmap. A conclusion must answer the question and add no new argument. Do not invent authorities; use [CITATION NEEDED: ...] where one is required.",
@@ -555,6 +565,9 @@ Use this foundation for constitutional hierarchy only. It does not supply the te
   }
   if (feature === "notes") {
     return `${base}${task}\nGROUNDING (strict): Use ONLY the transcript text in <sources>. Ignore the constitutional foundation for this note-taking task. Add nothing from memory. Do not use citation markers such as [S1].`;
+  }
+  if (feature === "quality_check" || feature === "rw_validate") {
+    return `${base}${task}\nGROUNDING (strict): Treat <sources> as the only evidence. The generated text in the student's request is the object being audited, not a source. Do not repair it silently, and do not introduce a case, statute, quotation, spelling or citation detail that is absent from <sources>. If the transcript/source itself is unclear or incomplete, mark review rather than guessing. Follow the JSON shape exactly.`;
   }
   if (hasSources && (mode === "materials" || mode === "library")) {
     return `${base}${task}\nGROUNDING (strict): Use ONLY the provided <sources> and the Article 2 constitutional-hierarchy foundation above. Cite selected material inline as [S1], [S2] etc., using only the ids provided. If a requested case or provision is not in the selected sources, say what source is missing and direct the student to the Kenya Law case finder at /cases. Do not fill the gap from memory.`;
