@@ -391,8 +391,8 @@ export default function LoginPage({
               </div>
               <h1>Check your email</h1>
               <p className="auth-lead">
-                We sent a confirmation link to <strong>{pendingEmail}</strong>.
-                Open it, then come back and sign in.
+                Supabase accepted the confirmation request for <strong>{pendingEmail}</strong>.
+                Open the link if it arrives, then come back and sign in.
               </p>
               {notice && (
                 <div className={`auth-notice ${notice.tone}`}>
@@ -410,8 +410,7 @@ export default function LoginPage({
                   : "Resend confirmation email"}
               </button>
               <p className="auth-hint">
-                Nothing after a few minutes? Check spam or junk, and make sure
-                the address is spelled correctly.
+                The timer only prevents repeated requests; it does not prove delivery. Nothing after a few minutes? Check spam or junk, confirm the address is spelled correctly, or ask the administrator to configure SMTP email delivery.
               </p>
               <button
                 type="button"
