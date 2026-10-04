@@ -298,7 +298,7 @@
 .g13-book-lines.short { width: 68%; }
 .g13-book-page-number { position: absolute; right: 12%; bottom: 8%; color: #ffffff; font: 11px "Source Serif 4", Georgia, serif; }
 .g13-book-cover { position: absolute; z-index: 3; inset: 0; transform-origin: left center; transform-style: preserve-3d; transition: transform .95s cubic-bezier(.18,.8,.24,1); }
-.g13-book-control.is-open .g13-book-cover { transform: rotateY(-118deg); }
+.g13-book-control.is-open .g13-book-cover { transform: rotateY(-176deg); }
 .g13-book-front,.g13-book-inside { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 16px; padding: 12%; backface-visibility: hidden; }
 .g13-book-front { border: 1px solid #000000; background: linear-gradient(135deg, #000000 0%, #000000 70%, #000000 100%); color: #ffffff; box-shadow: inset 9px 0 transparent, inset -4px 0 transparent; }
 .g13-book-front > small { color: #ffffff; }

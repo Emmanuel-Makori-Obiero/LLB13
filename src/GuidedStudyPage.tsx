@@ -10,18 +10,21 @@ import {
   Loader2,
   RefreshCw,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 import { Markdown } from "./Markdown";
 import { askAI } from "./lib/ai";
 import { generateAudio } from "./lib/cloudMedia";
 import {
   createGuidedCourse,
+  deleteGuidedCourse,
   evaluateWrittenCheckpoint,
   getCourseProgress,
   listGuideSources,
   listGuidedCourses,
   resumeLessonIndex,
   saveLessonProgress,
+  updateGuidedCourseVisibility,
   type CourseProgress,
   type GuidedCourse,
   type GuideLesson,
@@ -29,6 +32,7 @@ import {
   type StudyLanguage,
 } from "./lib/guidedStudy";
 import { downloadPdf, downloadWord } from "./export";
+import { supabase } from "./data/repository";
 
 type LessonAudio = { url: string; mimeType: string; courseId: string; lessonIndex: number };
 
@@ -49,6 +53,7 @@ export default function GuidedStudyPage() {
   const [writtenAnswer, setWrittenAnswer] = useState("");
   const [visibility, setVisibility] = useState<"private" | "group">("private");
   const [courseLanguage, setCourseLanguage] = useState<StudyLanguage>("en");
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [lessonAudio, setLessonAudio] = useState<LessonAudio | null>(null);
   const [audioBusy, setAudioBusy] = useState(false);
   const activeLessonKey = useRef("");
@@ -87,7 +92,10 @@ export default function GuidedStudyPage() {
     }
   };
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    void load();
+    void supabase?.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id ?? null));
+  }, []);
   useEffect(() => {
     activeLessonKey.current = `${course?.id ?? ""}:${lessonIndex}`;
     audioRequestId.current += 1;
@@ -189,6 +197,34 @@ export default function GuidedStudyPage() {
     setAudioBusy(false);
     setWrittenAnswer("");
     setPicked({});
+  };
+
+  const removeCourse = async (item: GuidedCourse) => {
+    if (!window.confirm(`Delete “${item.subject}” and its saved progress?`)) return;
+    setBusy(true);
+    try {
+      await deleteGuidedCourse(item.id);
+      setCourses((current) => current.filter((courseItem) => courseItem.id !== item.id));
+      setNotice("The syllabus and its saved progress were deleted.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not delete the syllabus.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const changeCourseVisibility = async (item: GuidedCourse) => {
+    const visibility = item.visibility === "group" ? "private" : "group";
+    setBusy(true);
+    try {
+      const updated = await updateGuidedCourseVisibility(item.id, visibility);
+      setCourses((current) => current.map((courseItem) => courseItem.id === item.id ? { ...courseItem, ...updated } : courseItem));
+      setNotice(visibility === "group" ? "Syllabus shared with Group 13." : "Syllabus is private again.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not update syllabus sharing.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const submitWrittenAnswer = async () => {
@@ -366,7 +402,7 @@ export default function GuidedStudyPage() {
 
       {!course && <>
         <div className="card card-pad guide-builder">
-          <div className="section-label">Build a new guided syllabus</div>
+          <div className="section-label">Build and save a new guided syllabus</div>
           <label>Subject or unit<input value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="e.g. Torts: negligence" /></label>
           <label>Course and narration language
             <select value={courseLanguage} onChange={(event) => setCourseLanguage(event.target.value as StudyLanguage)}>
@@ -406,7 +442,13 @@ export default function GuidedStudyPage() {
           <div className="guide-courses">{courses.map((item) => <article className="guide-course" key={item.id}>
             <div><strong>{item.subject}</strong><span>{item.syllabus.lessons.length} lessons · {item.source_labels.length} sources · {item.syllabus.language === "sw" ? "Kiswahili" : "English"} · {item.visibility === "group" ? "Shared with Group 13" : "Only you"}</span></div>
             <div className="guide-mini-progress"><span style={{ width: `${item.progress}%` }} /></div><b>{item.progress}%</b>
-            <button className="primary-button small-action" disabled={busy} onClick={() => void open(item)}>{item.progress > 0 && item.progress < 100 ? "Continue learning" : item.progress >= 100 ? "Review course" : "Start learning"} <ChevronRight size={13} /></button>
+            <div className="guide-course-actions">
+              <button className="primary-button small-action" disabled={busy} onClick={() => void open(item)}>{item.progress > 0 && item.progress < 100 ? "Continue learning" : item.progress >= 100 ? "Review course" : "Start learning"} <ChevronRight size={13} /></button>
+              {item.owner === currentUserId && <>
+                <button className="secondary-button small-action" disabled={busy} onClick={() => void changeCourseVisibility(item)}>{item.visibility === "group" ? "Make private" : "Share with Group 13"}</button>
+                <button className="danger-button small-action" disabled={busy} onClick={() => void removeCourse(item)}><Trash2 size={13} /> Delete</button>
+              </>}
+            </div>
           </article>)}</div>
         </div>}
       </>}
