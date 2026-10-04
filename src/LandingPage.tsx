@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties, type PointerEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   ArrowDown,
   ArrowRight,
@@ -9,6 +9,7 @@ import {
   Headphones,
   Library,
   LockKeyhole,
+  RotateCcw,
   X,
 } from "lucide-react";
 import InstallButton from "./InstallButton";
@@ -179,47 +180,69 @@ export default function LandingPage({
   onEnterWorkspace,
 }: LandingPageProps) {
   const [activeChapter, setActiveChapter] = useState(0);
-  const [scrollProgress, setScrollProgress] = useState(0);
-  const [heroPoint, setHeroPoint] = useState({ x: 72, y: 52 });
+  const [bookOpen, setBookOpen] = useState(false);
+  const [gavelImpact, setGavelImpact] = useState(false);
+  const judgeSceneRef = useRef<HTMLElement>(null);
+  const judgeVideoRef = useRef<HTMLVideoElement>(null);
+  const wasJudgeSceneVisible = useRef(false);
   const current = chapters[activeChapter];
   const ActiveIcon = current.icon;
   const openWorkspace = onEnterWorkspace ?? onSignIn;
 
   useEffect(() => {
-    const update = () => {
-      const distance = document.documentElement.scrollHeight - window.innerHeight;
-      setScrollProgress(distance > 0 ? Math.min(100, (window.scrollY / distance) * 100) : 0);
+    const section = judgeSceneRef.current;
+    const video = judgeVideoRef.current;
+    if (!section || !video) return;
+
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let hasLanded = false;
+    const observer = new IntersectionObserver(([entry]) => {
+      const inView = Boolean(entry?.isIntersecting && entry.intersectionRatio >= 0.35);
+      if (inView && !wasJudgeSceneVisible.current) {
+        wasJudgeSceneVisible.current = true;
+        if (!reduceMotion) {
+          video.currentTime = 0;
+          hasLanded = false;
+          setGavelImpact(false);
+          void video.play().catch(() => {});
+        }
+      } else if (!inView && wasJudgeSceneVisible.current) {
+        wasJudgeSceneVisible.current = false;
+        video.pause();
+      }
+    }, { threshold: [0, 0.35] });
+    const updateImpact = () => {
+      const landed = video.currentTime >= 3.8;
+      if (landed !== hasLanded) {
+        hasLanded = landed;
+        setGavelImpact(landed);
+      }
     };
-    update();
-    window.addEventListener("scroll", update, { passive: true });
-    window.addEventListener("resize", update);
+    video.addEventListener("timeupdate", updateImpact);
+    observer.observe(section);
     return () => {
-      window.removeEventListener("scroll", update);
-      window.removeEventListener("resize", update);
+      observer.disconnect();
+      wasJudgeSceneVisible.current = false;
+      video.removeEventListener("timeupdate", updateImpact);
+      video.pause();
     };
   }, []);
 
-  const moveSpotlight = (event: PointerEvent<HTMLElement>) => {
-    if (event.pointerType === "touch") return;
-    const rect = event.currentTarget.getBoundingClientRect();
-    setHeroPoint({
-      x: Math.round(((event.clientX - rect.left) / rect.width) * 100),
-      y: Math.round(((event.clientY - rect.top) / rect.height) * 100),
-    });
+  const replayJudgeScene = () => {
+    const video = judgeVideoRef.current;
+    if (!video) return;
+    video.currentTime = 0;
+    setGavelImpact(false);
+    void video.play().catch(() => {});
   };
 
-  const heroStyle = {
-    "--hero-x": `${heroPoint.x}%`,
-    "--hero-y": `${heroPoint.y}%`,
-  } as CSSProperties;
   const exploreSection = (page: string) => {
     const target = page === "guide" ? "inside" : page === "library" || page === "assistant" ? "features" : "the-method";
     document.getElementById(target)?.scrollIntoView({ behavior: "smooth" });
   };
 
   return (
-    <div className={`g13-landing${signedInPreview ? " g13-landing-preview" : ""}`} style={{ "--page-progress": `${scrollProgress}%` } as CSSProperties}>
-      <div className="g13-scroll-progress" aria-hidden="true" />
+    <div className={`g13-landing${signedInPreview ? " g13-landing-preview" : ""}`}>
       <header className="g13-site-header">
         <Brand />
         <nav className="g13-site-nav" aria-label="Main navigation">
@@ -240,9 +263,8 @@ export default function LandingPage({
       </header>
 
       <main>
-        <section className="g13-hero" style={heroStyle} onPointerMove={moveSpotlight}>
+        <section className="g13-hero">
           <div className="g13-hero-image" aria-hidden="true" />
-          <div className="g13-hero-grain" aria-hidden="true" />
           <div className="g13-hero-vignette" aria-hidden="true" />
           <div className="g13-hero-copy">
             <div className="g13-hero-eyebrow"><span /> A PRIVATE LEARNING SPACE FOR GROUP 13</div>
@@ -287,6 +309,34 @@ export default function LandingPage({
           </p>
         </section>
 
+        <section className="g13-judge-scene" ref={judgeSceneRef} aria-labelledby="g13-judge-title">
+          <div className="g13-judge-copy">
+            <div className="g13-scene-index"><span>IN THE COURTROOM</span><span>01 / 03</span></div>
+            <span className="g13-kicker">THE MOMENT A REASON BECOMES A RULING</span>
+            <h2 id="g13-judge-title">Every argument<br /><em>must land.</em></h2>
+            <p>Read closely. Test the rule against the facts. Then make the case for what should happen next.</p>
+            <p className="g13-judge-instruction">Scroll into the scene. The gavel falls; the question becomes yours.</p>
+            <button type="button" className="g13-judge-replay" onClick={replayJudgeScene}>
+              <RotateCcw size={15} /> Replay the moment
+            </button>
+          </div>
+          <figure className="g13-judge-frame" data-impact={gavelImpact ? "true" : "false"}>
+            <video
+              ref={judgeVideoRef}
+              className="g13-judge-video"
+              src="/landing-judge-gavel.mp4"
+              poster="/landing-judge-gavel-poster.webp"
+              muted
+              playsInline
+              preload="metadata"
+              aria-label="Muted footage of a judge bringing a wooden gavel down onto its block"
+            />
+            <span className="g13-impact-ring" aria-hidden="true" />
+            <figcaption><span>THE DECISION IS IN THE DETAILS</span><span>Video: Katrin Bolovtsova / Pexels</span></figcaption>
+          </figure>
+          <span className="g13-judge-side-note" aria-hidden="true">READ · REASON · RESPOND</span>
+        </section>
+
         <section className="g13-experience" id="inside">
           <div className="g13-section-heading">
             <div><span className="g13-kicker">A WORKING STUDY SYSTEM</span><h2>Make each session count.</h2></div>
@@ -316,6 +366,64 @@ export default function LandingPage({
               <span className="g13-detail-index">{current.number} / 03</span>
             </article>
           </div>
+        </section>
+
+        <section className="g13-reading-room" aria-labelledby="g13-reading-title">
+          <div className="g13-reading-copy">
+            <span className="g13-kicker">A SOURCE IS WHERE THINKING STARTS</span>
+            <h2 id="g13-reading-title">Open the book.<br /><em>Find your way in.</em></h2>
+            <p>Tap the cover to open a sample casebook. In the hub, your own long readings become an ordered path of lessons, recall and exam practice.</p>
+            <button
+              type="button"
+              className="g13-book-toggle"
+              aria-expanded={bookOpen}
+              onClick={() => setBookOpen((open) => !open)}
+            >
+              {bookOpen ? "Close the sample book" : "Open the sample book"}
+              <ArrowRight size={15} />
+            </button>
+          </div>
+          <button
+            type="button"
+            className={`g13-book-control${bookOpen ? " is-open" : ""}`}
+            aria-label={bookOpen ? "Close the sample legal-method book" : "Open the sample legal-method book"}
+            aria-expanded={bookOpen}
+            onClick={() => setBookOpen((open) => !open)}
+          >
+            <span className="g13-book-object" aria-hidden="true">
+              <span className="g13-book-pages">
+                <span className="g13-book-page g13-book-page-left">
+                  <small>FIELD NOTE 01</small>
+                  <strong>Begin with<br />a question.</strong>
+                  <span className="g13-book-lines" />
+                  <span className="g13-book-lines short" />
+                </span>
+                <span className="g13-book-page g13-book-page-right">
+                  <small>READING METHOD</small>
+                  <strong>What is the point?</strong>
+                  <span className="g13-book-lines" />
+                  <span className="g13-book-lines" />
+                  <span className="g13-book-lines short" />
+                  <span className="g13-book-page-number">13</span>
+                </span>
+              </span>
+              <span className="g13-book-cover">
+                <span className="g13-book-front">
+                  <small>GROUP 13 · STUDY EDITION</small>
+                  <strong>LEGAL<br />METHOD</strong>
+                  <span className="g13-book-emblem">13</span>
+                  <span className="g13-book-front-foot">READ / REASON / RECALL</span>
+                </span>
+                <span className="g13-book-inside">
+                  <small>THE READING ROOM</small>
+                  <strong>Start with<br />the source.</strong>
+                  <span className="g13-book-lines" />
+                </span>
+              </span>
+              <span className="g13-book-spine" />
+            </span>
+            <span className="g13-book-control-label">{bookOpen ? "Click to close" : "Click to open"}</span>
+          </button>
         </section>
 
         <section className="g13-tools" id="features" aria-label="What is inside Group 13 Hub">

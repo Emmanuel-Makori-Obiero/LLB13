@@ -327,7 +327,7 @@ const FEATURES: Record<
   },
   study_plan: {
     json: true,
-    task: "Create a source-grounded guided law-study syllabus. Return ONLY valid JSON matching the shape requested by the student; no markdown fences, no introductory prose, and no trailing commentary.",
+    task: "Create a source-grounded guided law-study syllabus. Return ONLY valid JSON matching the shape requested by the student; no markdown fences, no introductory prose, and no trailing commentary outside the JSON object.",
   },
   kaizen_check: {
     json: true,
