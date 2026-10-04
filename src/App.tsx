@@ -1207,7 +1207,7 @@ function App() {
           )}
         </div>
       </main>
-      {musicQueue.length > 0 && <GlobalMusicPlayer queue={musicQueue} index={musicIndex} playing={musicPlaying} onPlaying={setMusicPlaying} onToggle={() => setMusicPlaying((current) => !current)} onStep={stepMusic} onSelect={(nextIndex) => { setMusicIndex(nextIndex); setMusicPlaying(true); }} onEnded={() => stepMusic(1)} />}
+      {musicQueue.length > 0 && <GlobalMusicPlayer queue={musicQueue} index={musicIndex} playing={musicPlaying} onPlaying={setMusicPlaying} onToggle={() => setMusicPlaying((current) => !current)} onStep={stepMusic} onSelect={(nextIndex) => { setMusicIndex(nextIndex); setMusicPlaying(true); }} onAddQueue={addMusicToQueue} onEnded={() => stepMusic(1)} />}
       {notice && (
         <div className="toast">
           <Check size={15} />
@@ -2483,6 +2483,7 @@ function GlobalMusicPlayer({
   onToggle,
   onStep,
   onSelect,
+  onAddQueue,
   onEnded,
 }: {
   queue: PlayerTrack[];
@@ -2492,6 +2493,7 @@ function GlobalMusicPlayer({
   onToggle: () => void;
   onStep: (direction: -1 | 1) => void;
   onSelect: (index: number) => void;
+  onAddQueue: (tracks: PlayerTrack[]) => void;
   onEnded: () => void;
 }) {
   const current = queue[index];
@@ -2499,6 +2501,10 @@ function GlobalMusicPlayer({
   const youtubeContainerRef = useRef<HTMLDivElement | null>(null);
   const youtubePlayerRef = useRef<any>(null);
   const [youtubeError, setYoutubeError] = useState("");
+  const [showQueueAdd, setShowQueueAdd] = useState(false);
+  const [queueTitle, setQueueTitle] = useState("");
+  const [queueUrl, setQueueUrl] = useState("");
+  const [queueAddError, setQueueAddError] = useState("");
   const [volume, setVolume] = useState(() => {
     const saved = Number(localStorage.getItem("g13-music-volume"));
     return Number.isFinite(saved) ? Math.max(0, Math.min(1, saved)) : 0.8;
@@ -2595,15 +2601,15 @@ function GlobalMusicPlayer({
   return (
     <div className={`global-music-player ${minimized ? "is-minimized" : ""}`} style={{ left: panel.left, top: panel.top, width: minimized ? "auto" : panel.width, minHeight: minimized ? 0 : panel.height }} role="region" aria-label="Global music player">
       <button type="button" className="music-drag-handle" aria-label="Move music player" title="Drag to move music player" onPointerDown={beginDrag} onClick={(event) => event.preventDefault()}><Grip size={15} /></button>
+      <button type="button" className="music-minimize-top-button" aria-label={minimized ? "Open music player" : "Minimize music player"} title={minimized ? "Open music player" : "Minimize music player"} onClick={() => setMinimized((value) => !value)}>{minimized ? <Maximize2 size={15} /> : <Minimize2 size={15} />}<span>{minimized ? "Open player" : "Minimize"}</span></button>
       <Music2 size={18} />
       {!minimized && <div className="global-music-meta"><strong>{current?.title}</strong><span>{current?.source} · {index + 1} of {queue.length}</span></div>}
       <button className="music-control" aria-label="Previous track" onClick={() => onStep(-1)}><SkipBack size={16} /></button>
       <button className="music-control music-play" aria-label={playing ? "Pause" : "Play"} onClick={onToggle}>{playing ? <Pause size={16} /> : <Play size={16} />}</button>
       <button className="music-control" aria-label="Next track" onClick={() => onStep(1)}><SkipForward size={16} /></button>
-      {!minimized && <details className="music-queue-details"><summary>Queue</summary><div>{queue.map((track, trackIndex) => <button type="button" key={track.id} className={trackIndex === index ? "active" : ""} onClick={() => onSelect(trackIndex)}>{track.title}</button>)}</div></details>}
+      {!minimized && <details className="music-queue-details"><summary>Queue ({queue.length})</summary><button type="button" className="music-queue-add-button" aria-label="Add song to queue" title="Add song to queue" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setShowQueueAdd((value) => !value); setQueueAddError(""); }}><Plus size={14} /> Add</button><div>{showQueueAdd && <form className="music-queue-add-form" onSubmit={(event) => { event.preventDefault(); const youtubeId = youtubeVideoId(queueUrl.trim()); if (!youtubeId || !queueTitle.trim()) { setQueueAddError("Enter a title and a valid YouTube URL."); return; } onAddQueue([{ id: `youtube-${youtubeId}-${Date.now()}`, title: queueTitle.trim(), url: queueUrl.trim(), source: "YouTube queue", kind: "youtube", youtubeId }]); setQueueTitle(""); setQueueUrl(""); setShowQueueAdd(false); }}><input aria-label="Song title" placeholder="Song title" value={queueTitle} onChange={(event) => setQueueTitle(event.target.value)} /><input aria-label="YouTube URL" placeholder="YouTube URL" value={queueUrl} onChange={(event) => setQueueUrl(event.target.value)} />{queueAddError && <small>{queueAddError}</small>}<button type="submit">Add song</button></form>}{queue.map((track, trackIndex) => <button type="button" key={track.id} className={trackIndex === index ? "active" : ""} onClick={() => onSelect(trackIndex)}>{track.title}</button>)}</div></details>}
       {!minimized && <label className="music-volume" title={`Volume ${Math.round(volume * 100)}%`}><span className="sr-only">Volume</span><button type="button" className="music-control" aria-label={volume === 0 ? "Unmute" : "Mute"} onClick={() => setVolume((value) => value === 0 ? 0.8 : 0)}>{volume === 0 ? <VolumeX size={15} /> : <Volume2 size={15} />}</button><input aria-label="Volume" type="range" min="0" max="1" step="0.01" value={volume} onChange={(event) => setVolume(Number(event.target.value))} /><span>{Math.round(volume * 100)}%</span></label>}
       <div className="music-media" aria-hidden={minimized}>{current?.kind === "audio" ? <audio ref={audioRef} controls onPlay={() => onPlaying(true)} onPause={() => onPlaying(false)} onEnded={onEnded} /> : <><div ref={youtubeContainerRef} className="global-youtube-player" aria-label="YouTube player" />{youtubeError && <a className="youtube-fallback-link" href={safeUrl(current.url) || undefined} target="_blank" rel="noreferrer">Open on YouTube</a>}</>}</div>
-      <button className="music-toggle-button" aria-label={minimized ? "Expand music player" : "Minimize music player"} title={minimized ? "Expand music player" : "Minimize music player"} onClick={() => setMinimized((value) => !value)}>{minimized ? <Maximize2 size={15} /> : <Minimize2 size={15} />}<span>{minimized ? "Open" : "Minimize"}</span></button>
       {!minimized && <button type="button" className="music-resize-handle" aria-label="Resize music player" onPointerDown={beginResize} onClick={(event) => event.preventDefault()}>↘</button>}
     </div>
   );
