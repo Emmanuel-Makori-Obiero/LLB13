@@ -48,6 +48,8 @@ import {
   UserCircle,
   Users,
   Video,
+  Volume2,
+  VolumeX,
   Music2,
   Youtube,
   X,
@@ -2496,6 +2498,10 @@ function GlobalMusicPlayer({
   const youtubeContainerRef = useRef<HTMLDivElement | null>(null);
   const youtubePlayerRef = useRef<any>(null);
   const [youtubeError, setYoutubeError] = useState("");
+  const [volume, setVolume] = useState(() => {
+    const saved = Number(localStorage.getItem("g13-music-volume"));
+    return Number.isFinite(saved) ? Math.max(0, Math.min(1, saved)) : 0.8;
+  });
   const [minimized, setMinimized] = useState(() => localStorage.getItem("g13-music-minimized") === "true");
   const [panel, setPanel] = useState(() => {
     try {
@@ -2510,6 +2516,11 @@ function GlobalMusicPlayer({
     localStorage.setItem("g13-music-panel", JSON.stringify(panel));
     localStorage.setItem("g13-music-minimized", String(minimized));
   }, [panel, minimized]);
+  useEffect(() => {
+    localStorage.setItem("g13-music-volume", String(volume));
+    if (audioRef.current) audioRef.current.volume = volume;
+    youtubePlayerRef.current?.setVolume?.(Math.round(volume * 100));
+  }, [volume]);
   useEffect(() => {
     const move = (event: PointerEvent) => {
       if (dragRef.current) setPanel((value) => ({ ...value, left: Math.max(8, Math.min(window.innerWidth - 120, dragRef.current!.left + event.clientX - dragRef.current!.x)), top: Math.max(8, Math.min(window.innerHeight - 54, dragRef.current!.top + event.clientY - dragRef.current!.y)) }));
@@ -2544,7 +2555,7 @@ function GlobalMusicPlayer({
         videoId: current.youtubeId,
         playerVars: { autoplay: playing ? 1 : 0, controls: 1, playsinline: 1, rel: 0, modestbranding: 1, origin: window.location.origin },
         events: {
-          onReady: (event: any) => { event.target.getIframe?.().setAttribute("allow", "autoplay; encrypted-media; picture-in-picture"); if (playing) event.target.playVideo(); },
+          onReady: (event: any) => { event.target.getIframe?.().setAttribute("allow", "autoplay; encrypted-media; picture-in-picture"); event.target.setVolume(Math.round(volume * 100)); if (playing) event.target.playVideo(); },
           onStateChange: (event: any) => {
             if (event.data === 0) onEnded();
             if (event.data === 1) onPlaying(true);
@@ -2581,6 +2592,7 @@ function GlobalMusicPlayer({
       <button className="music-control music-play" aria-label={playing ? "Pause" : "Play"} onClick={onToggle}>{playing ? <Pause size={16} /> : <Play size={16} />}</button>
       <button className="music-control" aria-label="Next track" onClick={() => onStep(1)}><SkipForward size={16} /></button>
       {!minimized && <details className="music-queue-details"><summary>Queue</summary><div>{queue.map((track, trackIndex) => <button type="button" key={track.id} className={trackIndex === index ? "active" : ""} onClick={() => onSelect(trackIndex)}>{track.title}</button>)}</div></details>}
+      {!minimized && <label className="music-volume" title={`Volume ${Math.round(volume * 100)}%`}><span className="sr-only">Volume</span><button type="button" className="music-control" aria-label={volume === 0 ? "Unmute" : "Mute"} onClick={() => setVolume((value) => value === 0 ? 0.8 : 0)}>{volume === 0 ? <VolumeX size={15} /> : <Volume2 size={15} />}</button><input aria-label="Volume" type="range" min="0" max="1" step="0.01" value={volume} onChange={(event) => setVolume(Number(event.target.value))} /><span>{Math.round(volume * 100)}%</span></label>}
       <div className="music-media" aria-hidden={minimized}>{current?.kind === "audio" ? <audio ref={audioRef} controls onPlay={() => onPlaying(true)} onPause={() => onPlaying(false)} onEnded={onEnded} /> : <><div ref={youtubeContainerRef} className="global-youtube-player" aria-label="YouTube player" />{youtubeError && <a className="youtube-fallback-link" href={safeUrl(current.url) || undefined} target="_blank" rel="noreferrer">Open on YouTube</a>}</>}</div>
       <button className="music-control" aria-label={minimized ? "Expand music player" : "Minimize music player"} onClick={() => setMinimized((value) => !value)}>{minimized ? <Maximize2 size={15} /> : <Minimize2 size={15} />}</button>
       {!minimized && <button className="music-resize-handle" aria-label="Resize music player" onPointerDown={beginResize}>↘</button>}

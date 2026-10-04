@@ -699,3 +699,4 @@ body,
 .global-music-player.is-minimized .music-media{display:none}
 
 .youtube-fallback-link{display:block;margin-top:4px;color:var(--paper);font-size:10px;text-decoration:underline}
+.music-volume{display:flex;align-items:center;gap:6px;color:rgba(255,255,255,.82);font-size:10px;white-space:nowrap}.music-volume input{width:78px;accent-color:var(--paper);cursor:pointer}.music-volume .music-control{flex:0 0 auto}
