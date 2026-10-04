@@ -1,10 +1,14 @@
--- SECURITY REVIEW REQUIRED BEFORE APPLYING.
+-- APPLIED AFTER EXPLICIT USER APPROVAL on 2026-10-04.
+-- Supabase ledger version: 20261004084308.
+-- This file remains an audit copy outside the active migration directory;
+-- do not replay it blindly or use it as a substitute for ledger reconciliation.
 -- The live policies on 2026-10-04 authorized representatives by comparing an
 -- editable auth.jwt() user_metadata.display_name to a meeting/timetable name.
 -- The app lets signed-in users edit that metadata. These replacement policies
 -- resolve representative access through the protected members.user_id link.
--- Live read-only audit: both current representative names have a members row
--- linked to a user_id (2/2). Do not run a blanket `supabase db push` until the
+-- Apply-time read-only preflight: all 3 distinct representative names found in
+-- discussions, timetable and units had protected members.user_id links (3/3).
+-- Do not run a blanket `supabase db push` until the
 -- live migration history and the legacy local migration filenames are reconciled.
 
 begin;
