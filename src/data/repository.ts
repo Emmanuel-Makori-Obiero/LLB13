@@ -127,22 +127,47 @@ function db() {
   return supabase;
 }
 
-// Removes a person's stored files (library uploads + profile images) before their account is deleted.
-async function removeUserFiles(userId: string) {
+// Removes a person's stored files before their account is deleted; storage objects do not cascade with database rows.
+async function removeUserFiles(userId: string, strict = false) {
   const client = db();
-  const { data: rows } = await client
+  const failIfStrict = (message: string) => {
+    if (strict) throw new Error(message);
+  };
+  const { data: rows, error: materialsError } = await client
     .from("materials")
     .select("storage_path")
     .eq("owner_id", userId);
+  if (materialsError) failIfStrict(`Could not prepare account file cleanup: ${materialsError.message}`);
   const paths = (rows ?? [])
     .map((row) => row.storage_path as string | null)
     .filter((path): path is string => Boolean(path));
-  if (paths.length) await client.storage.from("materials").remove(paths);
-  const { data: images } = await client.storage.from("profiles").list(userId);
+  if (paths.length) {
+    const { error } = await client.storage.from("materials").remove(paths);
+    if (error) failIfStrict(`Could not remove account materials: ${error.message}`);
+  }
+
+  const { data: mediaRows, error: mediaError } = await client
+    .from("media_assets")
+    .select("storage_path")
+    .eq("owner_id", userId);
+  if (mediaError) failIfStrict(`Could not prepare account media cleanup: ${mediaError.message}`);
+  const mediaPaths = (mediaRows ?? [])
+    .map((row) => row.storage_path as string | null)
+    .filter((path): path is string => Boolean(path));
+  if (mediaPaths.length) {
+    const { error } = await client.storage.from("media").remove(mediaPaths);
+    if (error) failIfStrict(`Could not remove account media: ${error.message}`);
+  }
+
+  const { data: images, error: profileError } = await client.storage.from("profiles").list(userId);
+  if (profileError) failIfStrict(`Could not prepare profile image cleanup: ${profileError.message}`);
   if (images?.length)
-    await client.storage
+    {
+      const { error } = await client.storage
       .from("profiles")
       .remove(images.map((image) => `${userId}/${image.name}`));
+      if (error) failIfStrict(`Could not remove profile images: ${error.message}`);
+    }
 }
 
 async function readRequired<T>(
@@ -512,7 +537,7 @@ const supabaseRepository: Group13Repository = {
     } = await client.auth.getUser();
     if (!user)
       throw new Error("Please sign in again before deleting your account.");
-    await removeUserFiles(user.id);
+    await removeUserFiles(user.id, true);
     const { error } = await client.rpc("delete_my_account");
     if (error) throw new Error(error.message);
     await client.auth.signOut();

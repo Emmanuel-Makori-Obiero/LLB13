@@ -121,7 +121,9 @@ export async function uploadMediaAsset(args: {
     .select("*")
     .single();
   if (error) {
-    await db.storage.from("media").remove([path]);
+    const cleanup = await db.storage.from("media").remove([path]);
+    if (cleanup.error)
+      throw new Error(`Could not save media record: ${error.message}. The uploaded file could not be removed automatically: ${cleanup.error.message}`);
     throw new Error(`Could not save media record: ${error.message}`);
   }
   return data as MediaAsset;
