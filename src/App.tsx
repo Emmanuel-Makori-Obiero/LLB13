@@ -95,6 +95,7 @@ import BookReader from "./BookReader";
 import LearningStudio from "./LearningStudio";
 import GuidedStudyPage from "./GuidedStudyPage";
 import AssignmentHelperPage from "./AssignmentHelperPage";
+import { addYouTubeItem, loadYouTubePlaylist, removeYouTubeItem, type YouTubePlaylist } from "./lib/youtubePlaylist";
 import GamesHub from "./GamesHub";
 import {
   createFilmProject,
@@ -2637,9 +2638,20 @@ function MediaPage({
   const [youtubeQuery, setYoutubeQuery] = useState("");
   const [youtubeResults, setYoutubeResults] = useState<PlayerTrack[]>([]);
   const [youtubeNote, setYoutubeNote] = useState("");
+  const [savedPlaylist, setSavedPlaylist] = useState<YouTubePlaylist | null>(null);
+  const [playlistTitle, setPlaylistTitle] = useState("");
+  const [playlistUrl, setPlaylistUrl] = useState("");
+  const [playlistNote, setPlaylistNote] = useState("");
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const change = (key: keyof typeof form, value: string) =>
     setForm((current) => ({ ...current, [key]: value }));
+  useEffect(() => { void loadYouTubePlaylist().then(setSavedPlaylist).catch((error) => setPlaylistNote(error instanceof Error ? error.message : "Could not load saved playlist.")); }, []);
+  const addPlaylistSong = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const id = youtubeVideoId(playlistUrl.trim());
+    if (!savedPlaylist || !playlistTitle.trim() || !id) { setPlaylistNote("Enter a song title and a valid YouTube video URL."); return; }
+    try { const item = await addYouTubeItem(savedPlaylist.id, playlistTitle, playlistUrl); setSavedPlaylist((current) => current ? { ...current, items: [...current.items, item] } : current); onAddQueue([{ id: `youtube-${id}`, title: item.title, url: item.url, source: "YouTube playlist", kind: "youtube", youtubeId: id }]); setPlaylistTitle(""); setPlaylistUrl(""); setPlaylistNote("Song added. It is now in your playlist and queue."); } catch (error) { setPlaylistNote(error instanceof Error ? error.message : "Could not add song."); }
+  };
 
   const addLocalTracks = (files: FileList | null) => {
     if (!files?.length) return;
@@ -2896,6 +2908,18 @@ function MediaPage({
           <label>Source<input required value={form.source} onChange={(event) => change("source", event.target.value)} /></label>
           <button className="primary-button" type="submit">Add resource</button>
         </form>
+      </div>
+
+      <div className="card card-pad youtube-playlist-card" style={{ marginTop: 18 }}>
+        <CardHeader label="My YouTube playlist" action={`${savedPlaylist?.items.length ?? 0} songs`} />
+        <p className="field-hint">Add songs one by one. Each song is saved privately and added to the player queue.</p>
+        <form className="data-form playlist-add-form" onSubmit={(event) => void addPlaylistSong(event)}>
+          <label>Song title<input required value={playlistTitle} onChange={(event) => setPlaylistTitle(event.target.value)} placeholder="e.g. Focus study music" /></label>
+          <label>YouTube video URL<input required type="url" value={playlistUrl} onChange={(event) => setPlaylistUrl(event.target.value)} placeholder="https://www.youtube.com/watch?v=…" /></label>
+          <button className="primary-button" type="submit">Add new song</button>
+        </form>
+        {playlistNote && <p className="field-hint">{playlistNote}</p>}
+        {savedPlaylist?.items.length ? <div className="playlist-list">{savedPlaylist.items.map((item, index) => <div className="playlist-row" key={item.id}><button className="playlist-play" onClick={() => { const id = youtubeVideoId(item.url); if (id) onPlayQueue([{ id: `youtube-${id}`, title: item.title, url: item.url, source: "YouTube playlist", kind: "youtube", youtubeId: id }], 0); }}>{index + 1}. {item.title}</button><button className="icon-button" aria-label={`Remove ${item.title}`} onClick={async () => { await removeYouTubeItem(item.id); setSavedPlaylist((current) => current ? { ...current, items: current.items.filter((song) => song.id !== item.id) } : current); }}>×</button></div>)}</div> : <div className="empty">Your playlist is empty. Add your first YouTube song above.</div>}
       </div>
 
       <div className="card card-pad" style={{ marginTop: 18 }}>

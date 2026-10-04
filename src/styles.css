@@ -997,3 +997,4 @@ h2 {
 .auth-submit:hover:not(:disabled) { border-color: #000000; background: #000000; color: #ffffff; }
 .auth-field input:focus { border-color: #163a34; box-shadow: 0 0 0 2px #163a34; }
 .auth-shell :focus-visible { outline: 2px solid #163a34; outline-offset: 2px; }
+.youtube-playlist-card .playlist-list{display:grid;gap:6px;margin-top:12px}.youtube-playlist-card .playlist-row{display:flex;align-items:center;gap:8px;border:1px solid var(--line);padding:7px 10px}.youtube-playlist-card .playlist-play{flex:1;border:0;background:transparent;color:var(--ink);text-align:left;padding:3px}.playlist-add-form{grid-template-columns:1fr 1.4fr auto;align-items:end}.playlist-add-form .primary-button{white-space:nowrap}@media(max-width:700px){.playlist-add-form{grid-template-columns:1fr}}
