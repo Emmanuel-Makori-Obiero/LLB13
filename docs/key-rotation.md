@@ -36,7 +36,7 @@ supabase secrets set \
 
 If the CLI does not know the project yet, run `supabase login` and `supabase link --project-ref chchqsnlcpfujweymwcg` first. You can set only the keys you actually have; missing numbered values are ignored.
 
-**Important:** additional keys do not bypass Google or Hugging Face account/project quotas. Gemini keys are most useful when they belong to separate quota projects. Hugging Face tokens improve failover, but usually do not multiply one account's quota and cannot fix a full ZeroGPU queue.
+**Important:** additional keys do not bypass Google or Hugging Face account/project quotas. Gemini keys are most useful when they belong to separate quota projects; keys created in the same Google Cloud project normally share the same model quota. The AI fallback skips sibling keys for a provider/model after a `429` and moves quickly to an independent provider, instead of spending the request deadline retrying keys that share the same exhausted quota. Hugging Face tokens improve failover, but usually do not multiply one account's quota and cannot fix a full ZeroGPU queue.
 
 ## Separate AI providers by work stage
 

@@ -187,17 +187,28 @@ export async function callChain(
     fast?: boolean;
     feature?: string;
   },
-): Promise<ChainResult> {
+  ): Promise<ChainResult> {
   const started = Date.now();
-  const deadline = opts.deadlineMs ?? 120_000;
-  const perCall = opts.perCallMs ?? 45_000;
+  // Keep a fallback request alive long enough to try another provider, but do
+  // not let one stalled model consume the whole edge-function deadline.
+  const deadline = opts.deadlineMs ?? Number(Deno.env.get("AI_DEADLINE_MS") ?? 110_000);
+  const perCall = opts.perCallMs ?? Number(Deno.env.get("AI_PER_CALL_MS") ?? 20_000);
   const attempts: Attempt[] = [];
   let retryAfterMs = 0;
+  // Several keys often belong to the same provider/model quota project. Once
+  // that pair returns 429, retrying every sibling key only burns the request
+  // budget and delays an actually independent fallback provider.
+  const quotaBlocked = new Set<string>();
 
   for (const ent of orderedChain(opts.feature)) {
     const keys = secretKeys(ent.keyEnv);
     for (const [keyIndex, key] of keys.entries()) {
       const eid = `${id(ent)}#${keyIndex + 1}`;
+      const providerModel = id(ent);
+      if (quotaBlocked.has(providerModel)) {
+        attempts.push({ id: eid, status: "quota_skipped" });
+        continue;
+      }
       if ((cooldownUntil.get(eid) ?? 0) > Date.now()) {
         attempts.push({ id: eid, status: "cooldown" });
         continue;
@@ -250,6 +261,7 @@ export async function callChain(
             }
             const retryAfter = Number(res.headers.get("retry-after")) || 0;
             retryAfterMs = Math.max(retryAfterMs, retryAfter * 1000);
+            if (res.status === 429) quotaBlocked.add(providerModel);
             const cool = res.status === 429 ? Math.max(retryAfter * 1000, 60_000) : res.status === 401 || res.status === 403 ? 15 * 60_000 : res.status === 404 || res.status === 400 ? 30 * 60_000 : 45_000;
             cooldownUntil.set(eid, Date.now() + cool);
             let detail: string | undefined;
