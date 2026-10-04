@@ -72,7 +72,7 @@ import { unitReps } from "./data/types";
 import MeetingRoom from "./MeetingRoom";
 import LoginPage, { ResetPasswordPage } from "./AuthPage";
 import LandingPage, { HelpButton } from "./LandingPage";
-import { downloadInfo, readerUrl, safeUrl, toEmbedUrl } from "./links";
+import { downloadInfo, readerUrl, safeUrl, toEmbedUrl, youtubeVideoId } from "./links";
 import AdminPage from "./AdminPage";
 import InstallButton from "./InstallButton";
 import { DeleteAccountCard } from "./AccountPage";
@@ -179,7 +179,14 @@ type UserProfile = {
   wallpaperUrl: string;
 };
 
-type PlayerTrack = { id: string; title: string; url: string; source: string };
+type PlayerTrack = { id: string; title: string; url: string; source: string; kind: "audio" | "youtube"; youtubeId?: string };
+
+declare global {
+  interface Window {
+    YT?: any;
+    onYouTubeIframeAPIReady?: () => void;
+  }
+}
 
 function App() {
   const [authLoading, setAuthLoading] = useState(true);
@@ -222,7 +229,6 @@ function App() {
   const [musicQueue, setMusicQueue] = useState<PlayerTrack[]>([]);
   const [musicIndex, setMusicIndex] = useState(0);
   const [musicPlaying, setMusicPlaying] = useState(false);
-  const musicAudioRef = useRef<HTMLAudioElement | null>(null);
   const isAdmin = adminState === "yes";
 
   const playMusicQueue = (tracks: PlayerTrack[], index = 0) => {
@@ -232,18 +238,20 @@ function App() {
     setMusicPlaying(true);
   };
 
+  const addMusicToQueue = (tracks: PlayerTrack[]) => {
+    if (!tracks.length) return;
+    setMusicQueue((current) => {
+      const existing = new Set(current.map((track) => track.id));
+      return [...current, ...tracks.filter((track) => !existing.has(track.id))];
+    });
+    if (!musicQueue.length) { setMusicIndex(0); setMusicPlaying(true); }
+  };
+
   const stepMusic = (direction: -1 | 1) => {
     if (!musicQueue.length) return;
     setMusicIndex((current) => (current + direction + musicQueue.length) % musicQueue.length);
     setMusicPlaying(true);
   };
-
-  useEffect(() => {
-    const audio = musicAudioRef.current;
-    if (!audio || !musicQueue[musicIndex]) return;
-    audio.load();
-    if (musicPlaying) void audio.play().catch(() => setMusicPlaying(false));
-  }, [musicIndex, musicQueue, musicPlaying]);
 
   useEffect(() => {
     if (!supabase) {
@@ -1095,6 +1103,7 @@ function App() {
             <MediaPage
               media={media}
               onPlayQueue={playMusicQueue}
+              onAddQueue={addMusicToQueue}
               onCreate={async (item) => {
                 const created = await repository.createMedia(item);
                 setMedia((current) => [...current, created]);
@@ -1198,16 +1207,7 @@ function App() {
           )}
         </div>
       </main>
-      {musicQueue.length > 0 && (
-        <div className="global-music-player" role="region" aria-label="Global music player">
-          <Music2 size={18} />
-          <div className="global-music-meta"><strong>{musicQueue[musicIndex]?.title}</strong><span>{musicQueue[musicIndex]?.source} · {musicIndex + 1} of {musicQueue.length}</span></div>
-          <button className="music-control" aria-label="Previous track" onClick={() => stepMusic(-1)}><SkipBack size={16} /></button>
-          <button className="music-control music-play" aria-label={musicPlaying ? "Pause" : "Play"} onClick={() => setMusicPlaying((current) => !current)}>{musicPlaying ? <Pause size={16} /> : <Play size={16} />}</button>
-          <button className="music-control" aria-label="Next track" onClick={() => stepMusic(1)}><SkipForward size={16} /></button>
-          <audio ref={musicAudioRef} src={musicQueue[musicIndex]?.url} onPlay={() => setMusicPlaying(true)} onPause={() => setMusicPlaying(false)} onEnded={() => stepMusic(1)} controls />
-        </div>
-      )}
+      {musicQueue.length > 0 && <GlobalMusicPlayer queue={musicQueue} index={musicIndex} playing={musicPlaying} onPlaying={setMusicPlaying} onToggle={() => setMusicPlaying((current) => !current)} onStep={stepMusic} onSelect={(nextIndex) => { setMusicIndex(nextIndex); setMusicPlaying(true); }} onEnded={() => stepMusic(1)} />}
       {notice && (
         <div className="toast">
           <Check size={15} />
@@ -2447,13 +2447,122 @@ function TodoPage({
   );
 }
 
+let youtubeApiPromise: Promise<any> | null = null;
+
+function loadYouTubeApi() {
+  if (window.YT?.Player) return Promise.resolve(window.YT);
+  if (youtubeApiPromise) return youtubeApiPromise;
+  youtubeApiPromise = new Promise((resolve) => {
+    const existing = document.getElementById("youtube-iframe-api");
+    const previous = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      previous?.();
+      resolve(window.YT);
+    };
+    if (!existing) {
+      const script = document.createElement("script");
+      script.id = "youtube-iframe-api";
+      script.src = "https://www.youtube.com/iframe_api";
+      script.async = true;
+      document.head.appendChild(script);
+    }
+  });
+  return youtubeApiPromise;
+}
+
+function GlobalMusicPlayer({
+  queue,
+  index,
+  playing,
+  onPlaying,
+  onToggle,
+  onStep,
+  onSelect,
+  onEnded,
+}: {
+  queue: PlayerTrack[];
+  index: number;
+  playing: boolean;
+  onPlaying: (playing: boolean) => void;
+  onToggle: () => void;
+  onStep: (direction: -1 | 1) => void;
+  onSelect: (index: number) => void;
+  onEnded: () => void;
+}) {
+  const current = queue[index];
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const youtubeContainerRef = useRef<HTMLDivElement | null>(null);
+  const youtubePlayerRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (!current || current.kind !== "audio") return;
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.src = current.url;
+    audio.load();
+    if (playing) void audio.play().catch(() => onPlaying(false));
+    return () => audio.pause();
+  }, [current?.id, current?.kind, current?.url]);
+
+  useEffect(() => {
+    if (!current || current.kind !== "youtube" || !current.youtubeId) return;
+    let active = true;
+    void loadYouTubeApi().then((YT) => {
+      if (!active || !youtubeContainerRef.current || !YT?.Player) return;
+      youtubePlayerRef.current?.destroy();
+      youtubePlayerRef.current = new YT.Player(youtubeContainerRef.current, {
+        videoId: current.youtubeId,
+        playerVars: { autoplay: playing ? 1 : 0, controls: 1, playsinline: 1, rel: 0, modestbranding: 1 },
+        events: {
+          onReady: (event: any) => { if (playing) event.target.playVideo(); },
+          onStateChange: (event: any) => {
+            if (event.data === 0) onEnded();
+            if (event.data === 1) onPlaying(true);
+            if (event.data === 2) onPlaying(false);
+          },
+        },
+      });
+    });
+    return () => {
+      active = false;
+      youtubePlayerRef.current?.destroy();
+      youtubePlayerRef.current = null;
+    };
+  }, [current?.id, current?.kind, current?.youtubeId]);
+
+  useEffect(() => {
+    if (!current) return;
+    if (current.kind === "audio") {
+      if (playing) void audioRef.current?.play().catch(() => onPlaying(false));
+      else audioRef.current?.pause();
+    } else if (youtubePlayerRef.current) {
+      if (playing) youtubePlayerRef.current.playVideo();
+      else youtubePlayerRef.current.pauseVideo();
+    }
+  }, [playing, current?.kind, current?.id]);
+
+  return (
+    <div className="global-music-player" role="region" aria-label="Global music player">
+      <Music2 size={18} />
+      <div className="global-music-meta"><strong>{current?.title}</strong><span>{current?.source} · {index + 1} of {queue.length}</span></div>
+      <button className="music-control" aria-label="Previous track" onClick={() => onStep(-1)}><SkipBack size={16} /></button>
+      <button className="music-control music-play" aria-label={playing ? "Pause" : "Play"} onClick={onToggle}>{playing ? <Pause size={16} /> : <Play size={16} />}</button>
+      <button className="music-control" aria-label="Next track" onClick={() => onStep(1)}><SkipForward size={16} /></button>
+      <details className="music-queue-details"><summary>Queue</summary><div>{queue.map((track, trackIndex) => <button type="button" key={track.id} className={trackIndex === index ? "active" : ""} onClick={() => onSelect(trackIndex)}>{track.title}</button>)}</div></details>
+      {current?.kind === "audio" ? <audio ref={audioRef} controls onPlay={() => onPlaying(true)} onPause={() => onPlaying(false)} onEnded={onEnded} /> : <div ref={youtubeContainerRef} className="global-youtube-player" aria-label="YouTube player" />}
+    </div>
+  );
+}
+
 function MediaPage({
   media,
   onPlayQueue,
+  onAddQueue,
   onCreate,
 }: {
   media: MediaResource[];
   onPlayQueue: (tracks: PlayerTrack[], index?: number) => void;
+  onAddQueue: (tracks: PlayerTrack[]) => void;
   onCreate: (media: Omit<MediaResource, "id">) => Promise<void>;
 }) {
   const [form, setForm] = useState<Omit<MediaResource, "id">>({
@@ -2480,7 +2589,8 @@ function MediaPage({
   const [checkingVideoId, setCheckingVideoId] = useState<string | null>(null);
   const [localTracks, setLocalTracks] = useState<PlayerTrack[]>([]);
   const [youtubeQuery, setYoutubeQuery] = useState("");
-  const [youtubeEmbedUrl, setYoutubeEmbedUrl] = useState("");
+  const [youtubeResults, setYoutubeResults] = useState<PlayerTrack[]>([]);
+  const [youtubeNote, setYoutubeNote] = useState("");
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const change = (key: keyof typeof form, value: string) =>
     setForm((current) => ({ ...current, [key]: value }));
@@ -2492,6 +2602,7 @@ function MediaPage({
       title: file.name.replace(/\.[^.]+$/, ""),
       url: URL.createObjectURL(file),
       source: "This device",
+      kind: "audio" as const,
     }));
     const next = [...localTracks, ...tracks.filter((track) => !localTracks.some((item) => item.id === track.id))];
     setLocalTracks(next);
@@ -2502,8 +2613,40 @@ function MediaPage({
     event.preventDefault();
     const query = youtubeQuery.trim();
     if (!query) return;
-    const direct = /^https?:\/\//i.test(query) ? toEmbedUrl(query) : `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(query)}`;
-    setYoutubeEmbedUrl(direct);
+    const directId = youtubeVideoId(query);
+    if (directId) {
+      const track = { id: `youtube-${directId}`, title: "YouTube track", url: `https://www.youtube.com/watch?v=${directId}`, source: "YouTube", kind: "youtube" as const, youtubeId: directId };
+      setYoutubeResults([track]);
+      onPlayQueue([track], 0);
+      setYoutubeNote("YouTube track added to the global queue.");
+      return;
+    }
+    const apiKey = import.meta.env.VITE_YOUTUBE_API_KEY?.trim();
+    if (!apiKey) {
+      setYoutubeNote("Paste a YouTube link to queue it now. Search results need a free YouTube Data API key in VITE_YOUTUBE_API_KEY.");
+      return;
+    }
+    void fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoCategoryId=10&maxResults=8&q=${encodeURIComponent(query)}&key=${encodeURIComponent(apiKey)}`)
+      .then(async (response) => {
+        if (!response.ok) throw new Error("YouTube search is unavailable right now.");
+        return response.json() as Promise<{ items?: Array<{ id?: { videoId?: string }; snippet?: { title?: string; channelTitle?: string } }> }>;
+      })
+      .then((data) => {
+        const tracks = (data.items ?? []).flatMap((item) => item.id?.videoId ? [{ id: `youtube-${item.id.videoId}`, title: item.snippet?.title ?? "YouTube track", url: `https://www.youtube.com/watch?v=${item.id.videoId}`, source: `YouTube · ${item.snippet?.channelTitle ?? ""}`, kind: "youtube" as const, youtubeId: item.id.videoId }] : []);
+        setYoutubeResults(tracks);
+        if (tracks.length) { onPlayQueue(tracks, 0); setYoutubeNote(`${tracks.length} YouTube tracks added to the global queue.`); }
+        else setYoutubeNote("No YouTube music results found.");
+      })
+      .catch((error) => setYoutubeNote(error instanceof Error ? error.message : "Could not search YouTube."));
+  };
+
+  const queueSavedMedia = (item: MediaResource) => {
+    const id = youtubeVideoId(item.url);
+    if (item.kind === "youtube" && id) {
+      onAddQueue([{ id: `youtube-${id}`, title: item.title, url: item.url, source: item.source, kind: "youtube", youtubeId: id }]);
+      return;
+    }
+    onAddQueue([{ id: `audio-${item.id}`, title: item.title, url: item.url, source: item.source, kind: "audio" }]);
   };
 
   useEffect(() => {
@@ -2674,8 +2817,9 @@ function MediaPage({
           </div>
           <form className="youtube-listener" onSubmit={searchYoutube}>
             <label>Search YouTube or paste a YouTube link<input value={youtubeQuery} onChange={(event) => setYoutubeQuery(event.target.value)} placeholder="e.g. study jazz or https://youtu.be/..." /></label>
-            <button className="secondary-button" type="submit"><Youtube size={15} /> Play in app</button>
-            {youtubeEmbedUrl && <div className="youtube-listener-frame"><iframe src={youtubeEmbedUrl} title="YouTube music search" allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen /></div>}
+            <button className="secondary-button" type="submit"><Youtube size={15} /> Add to global queue</button>
+            {youtubeNote && <p className="field-hint">{youtubeNote}</p>}
+            {!!youtubeResults.length && <div className="local-track-list">{youtubeResults.map((track, index) => <button className="local-track" type="button" key={track.id} onClick={() => onPlayQueue(youtubeResults, index)}><Youtube size={14} /><span>{track.title}</span><small>Queue</small></button>)}</div>}
           </form>
         </div>
       </div>
@@ -2739,7 +2883,7 @@ function MediaPage({
         {media.map((item) => (
           <article className="card media-card" key={item.id}>
             <div className="media-frame">{item.kind === "youtube" || item.kind === "court" ? <iframe src={toEmbedUrl(item.url)} title={item.title} loading="lazy" allowFullScreen /> : <div className="media-link-card"><Film size={24} /><strong>{item.title}</strong><a href={safeUrl(item.url) || undefined} target="_blank" rel="noreferrer">Open resource</a></div>}</div>
-            <div className="card-pad"><span className="chip">{item.kind}</span><h3>{item.title}</h3><p>{item.topic} · {item.source}</p>{safeUrl(item.url) && <a className="material-link" href={safeUrl(item.url)} target="_blank" rel="noreferrer">Open in new tab</a>}</div>
+            <div className="card-pad"><span className="chip">{item.kind}</span><h3>{item.title}</h3><p>{item.topic} · {item.source}</p><div className="media-actions">{(item.kind === "youtube" || item.kind === "music") && <button className="secondary-button" onClick={() => queueSavedMedia(item)}><Play size={13} /> Add to queue</button>}{safeUrl(item.url) && <a className="material-link" href={safeUrl(item.url)} target="_blank" rel="noreferrer">Open in new tab</a>}</div></div>
           </article>
         ))}
       </div>

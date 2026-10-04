@@ -94,3 +94,4 @@
 .mobile-drawer-foot { margin-top:24px; border-top:1px solid rgba(255,255,255,.14); padding-top:14px; }
 
 @media(max-width:760px){.music-listener-grid{grid-template-columns:1fr}.global-music-player{right:8px;bottom:calc(66px + env(safe-area-inset-bottom));left:8px;max-width:none;padding:8px}.global-music-player audio{display:none}.global-music-meta{min-width:0;flex:1}.music-control{flex:0 0 30px}}
+@media(max-width:760px){.music-queue-details>div{position:fixed;right:8px;bottom:calc(112px + env(safe-area-inset-bottom));left:8px;width:auto;max-height:42vh}.global-youtube-player{width:46px;height:30px}.global-youtube-player iframe{width:180px;height:100px;transform:translate(-70px,-3px)}}
