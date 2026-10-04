@@ -130,6 +130,7 @@ async function buildSourceDigest(sources: SourceChoice[], docIds: string[], onPr
   for (const docId of docIds) {
     const source = sources.find((item) => item.id === docId && item.kind === "document");
     const count = await documentChunkCount(docId);
+    if (!count) throw new Error(`${source?.title ?? "This document"} has no readable text. Re-upload it or choose a saved transcript before building a source-grounded syllabus.`);
     const parts = Math.max(1, Math.ceil(count / 10));
     const mode = source?.scope === "library" ? "library" : "materials";
     const notes: string[] = [];
@@ -191,8 +192,12 @@ export async function createGuidedCourse(subject: string, sources: SourceChoice[
   for (const source of sources) if (source.kind === "transcript") docIds.push((await transcriptAsDocument(source)).id); else if (source.kind === "document") docIds.push(source.id);
   const linkedMaterials = sources.filter((source) => source.kind === "material").map((source) => `${source.title}${source.citation ? ` (${source.citation})` : ""}`).join("; ");
   const readableSources = sources.filter((source) => source.kind !== "material");
+  const hasReadableSourceText = docIds.length > 0;
   const mode = readableSources.length === 0 ? "general" : readableSources.every((source) => source.kind === "document" && source.scope === "library") ? "library" : readableSources.some((source) => source.scope === "library") ? "auto" : "materials";
-  const prompt = `Create a complete guided law-study syllabus for: ${subject}. Use ONLY the source digest below. ${linkedMaterials ? `The following Library items are linked reference records; use their titles and metadata as context, but do not invent their contents: ${linkedMaterials}.` : ""} ${preferences}\nReturn ONLY valid JSON with no markdown fences in this exact shape: {"overview":"...","lessons":[{"title":"...","objective":"...","explanation":"...","example":"...","sourceFocus":"...","checkpoint":"quiz","quiz":[{"question":"...","options":["...","...","...","..."],"answerIndex":0,"explanation":"..."}]}]}. Create 5 to 8 ordered lessons covering the full digest, not just its opening. Add a short quiz to every lesson, and mark every third lesson as checkpoint exam. Explain before testing; use plain language, story/examples where helpful, and never invent authorities.\n\nSOURCE DIGEST:\n`;
+  const grounding = hasReadableSourceText
+    ? "Use ONLY the readable source digest below."
+    : "No readable source text was selected. Create a general-knowledge study outline for the requested subject and say in the overview that it is not grounded in the selected materials. Do not imply that linked titles or metadata were read as source content.";
+  const prompt = `Create a complete guided law-study syllabus for: ${subject}. ${grounding} ${linkedMaterials ? `The following Library items are linked reference records; their titles and metadata are context only, not source content: ${linkedMaterials}.` : ""} ${preferences}\nReturn ONLY valid JSON with no markdown fences in this exact shape: {"overview":"...","lessons":[{"title":"...","objective":"...","explanation":"...","example":"...","sourceFocus":"...","checkpoint":"quiz","quiz":[{"question":"...","options":["...","...","...","..."],"answerIndex":0,"explanation":"..."}]}]}. Create 5 to 8 ordered lessons covering the entire readable digest when one is provided. Add a short quiz to every lesson, and mark every third lesson as checkpoint exam. Explain before testing; use plain language, story/examples where helpful, and never invent authorities. Do not append quotation-warning labels or explanatory text outside the JSON.\n\nSOURCE DIGEST:\n`;
   onProgress?.("Starting a staged read so every source section is covered…");
   const digest = docIds.length ? await buildSourceDigest(sources, docIds, onProgress) : "No AI-readable document was selected.";
   onProgress?.("Building the final syllabus from the complete staged digest…");

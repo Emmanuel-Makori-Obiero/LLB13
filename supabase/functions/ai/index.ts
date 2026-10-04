@@ -102,7 +102,40 @@ function mergeSystem(msgs: Msg[]): Msg[] {
 function clean(text: string): string {
   return text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
 }
-
+function parseJsonObject(text: string): unknown | null {
+  const source = text
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    // Some models append this warning outside a completed JSON string value.
+    .replace(/"\s*\(unverified quotation\)(?=\s*[,}\]])/gi, '"')
+    .trim();
+  try {
+    return JSON.parse(source);
+  } catch {
+    // Recover a JSON object if a provider still adds a short preamble.
+  }
+  for (let start = 0; start < source.length; start += 1) {
+    if (source[start] !== "{") continue;
+    let depth = 0;
+    let quoted = false;
+    let escaped = false;
+    for (let i = start; i < source.length; i += 1) {
+      const char = source[i];
+      if (escaped) { escaped = false; continue; }
+      if (char === "\\" && quoted) { escaped = true; continue; }
+      if (char === '"') { quoted = !quoted; continue; }
+      if (quoted) continue;
+      if (char === "{") depth += 1;
+      if (char === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          try { return JSON.parse(source.slice(start, i + 1)); } catch { break; }
+        }
+      }
+    }
+  }
+  return null;
+}
 export interface Attempt {
   id: string;
   status: string;
@@ -143,51 +176,63 @@ export async function callChain(
         attempts.push({ id: eid, status: "deadline" });
         break;
       }
-      // Try high reasoning first; if rejected, retry once without it.
-      for (const withReasoning of ent.reasoning === "none" || opts.fast ? [false] : [true, false]) {
-        const body: Record<string, unknown> = {
-          model: ent.model,
-          messages: ent.noSystem ? mergeSystem(messages) : messages,
-          temperature: opts.temperature ?? 0.2,
-          max_tokens: ent.maxTokens ?? opts.maxTokens ?? 4096,
-        };
-        if (withReasoning) {
-          if (ent.reasoning === "openrouter") body.reasoning = { effort: "high" };
-          if (ent.reasoning === "effort") body.reasoning_effort = "high";
-        }
-        try {
-          const res = await fetch(`${ent.baseUrl}/chat/completions`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}`, ...(ent.provider === "openrouter" ? { "X-Title": "Group 13 Hub" } : {}) },
-            body: JSON.stringify(body),
-            signal: AbortSignal.timeout(Math.min(perCall, Math.max(5_000, deadline - (Date.now() - started)))),
-          });
-          if (res.ok) {
-            const data = await res.json();
-            const text = clean(data?.choices?.[0]?.message?.content ?? "");
-            if (text) {
-              attempts.push({ id: eid, status: "ok" });
-              return { text, provider: ent.provider, model: ent.model, attempts };
+      // Prefer provider-enforced JSON for structured features. If a compatible
+      // provider rejects response_format, retry that same provider without it.
+      for (const withJsonFormat of opts.json ? [true, false] : [false]) {
+        let retryWithoutJsonFormat = false;
+        for (const withReasoning of ent.reasoning === "none" || opts.fast ? [false] : [true, false]) {
+          const body: Record<string, unknown> = {
+            model: ent.model,
+            messages: ent.noSystem ? mergeSystem(messages) : messages,
+            temperature: opts.temperature ?? 0.2,
+            max_tokens: ent.maxTokens ?? opts.maxTokens ?? 4096,
+          };
+          if (withJsonFormat) body.response_format = { type: "json_object" };
+          if (withReasoning) {
+            if (ent.reasoning === "openrouter") body.reasoning = { effort: "high" };
+            if (ent.reasoning === "effort") body.reasoning_effort = "high";
+          }
+          try {
+            const res = await fetch(`${ent.baseUrl}/chat/completions`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}`, ...(ent.provider === "openrouter" ? { "X-Title": "Group 13 Hub" } : {}) },
+              body: JSON.stringify(body),
+              signal: AbortSignal.timeout(Math.min(perCall, Math.max(5_000, deadline - (Date.now() - started)))),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              const text = clean(data?.choices?.[0]?.message?.content ?? "");
+              if (text) {
+                attempts.push({ id: eid, status: "ok" });
+                return { text, provider: ent.provider, model: ent.model, attempts };
+              }
+              if (withReasoning) continue;
+              attempts.push({ id: eid, status: "empty" });
+              cooldownUntil.set(eid, Date.now() + 60_000);
+              break;
             }
-            if (withReasoning) continue;
-            attempts.push({ id: eid, status: "empty" });
-            cooldownUntil.set(eid, Date.now() + 60_000);
+            if (res.status === 400 && withReasoning) continue;
+            if (res.status === 400 && withJsonFormat) {
+              attempts.push({ id: eid, status: "json_mode_unsupported" });
+              retryWithoutJsonFormat = true;
+              break;
+            }
+            const retryAfter = Number(res.headers.get("retry-after")) || 0;
+            const cool = res.status === 429 ? Math.max(retryAfter * 1000, 60_000) : res.status === 401 || res.status === 403 ? 15 * 60_000 : res.status === 404 || res.status === 400 ? 30 * 60_000 : 45_000;
+            cooldownUntil.set(eid, Date.now() + cool);
+            let detail: string | undefined;
+            if (Deno.env.get("AI_DEBUG")) detail = (await res.text().catch(() => "")).slice(0, 240);
+            else await res.body?.cancel();
+            attempts.push({ id: eid, status: String(res.status), ...(detail ? { detail } : {}) });
+            break;
+          } catch (err) {
+            cooldownUntil.set(eid, Date.now() + 45_000);
+            attempts.push({ id: eid, status: err instanceof DOMException ? "timeout" : "network" });
             break;
           }
-          if (res.status === 400 && withReasoning) continue;
-          const retryAfter = Number(res.headers.get("retry-after")) || 0;
-          const cool = res.status === 429 ? Math.max(retryAfter * 1000, 60_000) : res.status === 401 || res.status === 403 ? 15 * 60_000 : res.status === 404 || res.status === 400 ? 30 * 60_000 : 45_000;
-          cooldownUntil.set(eid, Date.now() + cool);
-          let detail: string | undefined;
-          if (Deno.env.get("AI_DEBUG")) detail = (await res.text().catch(() => "")).slice(0, 240);
-          else await res.body?.cancel();
-          attempts.push({ id: eid, status: String(res.status), ...(detail ? { detail } : {}) });
-          break;
-        } catch (err) {
-          cooldownUntil.set(eid, Date.now() + 45_000);
-          attempts.push({ id: eid, status: err instanceof DOMException ? "timeout" : "network" });
-          break;
         }
+        if (retryWithoutJsonFormat) continue;
+        break;
       }
     }
   }
@@ -467,6 +512,9 @@ NON-NEGOTIABLE RULES
 
   const task = `\nTASK: ${FEATURES[feature]?.task ?? FEATURES.chat.task}`;
 
+  if (feature === "study_plan") {
+    return `${base}${task}\nGROUNDING: The student's request contains a SOURCE DIGEST. Use readable source text in that digest as your only source-based evidence; linked titles and metadata are not source content. If the digest says no AI-readable document was selected, do not claim the syllabus is based on source notes or invent source references; make clear in the overview that it is a general-knowledge outline and should be checked against the student's materials. Follow the requested JSON shape exactly: no preamble, markdown, or commentary outside the JSON object.`;
+  }
   if (feature === "notes") {
     return `${base}${task}\nGROUNDING (strict): Use ONLY the transcript text in <sources>. Add nothing from memory. Do not use citation markers such as [S1].`;
   }
@@ -769,9 +817,10 @@ Deno.serve(async (req) => {
 
     let data: unknown = null;
     if (FEATURES[feature].json) {
-      try {
-        data = JSON.parse(answer.replace(/^```(?:json)?|```$/gim, "").trim());
-      } catch {
+      data = parseJsonObject(answer);
+      if (data !== null) {
+        answer = JSON.stringify(data);
+      } else {
         warnings.push("Couldn't parse structured output. Try again.");
       }
     }
