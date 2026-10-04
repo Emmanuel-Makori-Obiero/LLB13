@@ -31,6 +31,21 @@ export type GuideProgress = (message: string) => void;
 
 function db() { if (!supabase) throw new Error("Supabase is not configured."); return supabase; }
 
+function parseWrittenCheckpoint(value: unknown): WrittenCheckpoint | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const item = value as Partial<WrittenCheckpoint>;
+  if (typeof item.answer !== "string" || typeof item.feedback !== "string") return null;
+  return {
+    answer: item.answer,
+    feedback: item.feedback,
+    score: Math.max(0, Math.min(100, Number(item.score) || 0)),
+    passed: Boolean(item.passed),
+    missing_points: Array.isArray(item.missing_points) ? item.missing_points.map(String) : [],
+    next_step: typeof item.next_step === "string" ? item.next_step : "Rewrite the answer once using the feedback.",
+    updated_at: typeof item.updated_at === "string" ? item.updated_at : "",
+  };
+}
+
 function extractJsonObject(text: string) {
   const clean = text.replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
   try { return JSON.parse(clean) as Partial<GuideSyllabus>; } catch { /* find JSON wrapped in prose */ }
@@ -233,7 +248,7 @@ export async function listGuidedCourses() {
 export async function getCourseProgress(courseId: string) {
   const { data, error } = await db().from("guided_course_progress").select("lesson_index,status,score,attempts,last_answer").eq("course_id", courseId).order("lesson_index").limit(100);
   if (error) throw new Error("Could not load learning progress.");
-  return (data ?? []) as CourseProgress[];
+  return (data ?? []).map((row) => ({ ...row, last_answer: parseWrittenCheckpoint(row.last_answer) })) as CourseProgress[];
 }
 
 export async function resumeLessonIndex(course: GuidedCourse) {
@@ -268,10 +283,10 @@ export async function evaluateWrittenCheckpoint(course: GuidedCourse, lessonInde
 export async function saveLessonProgress(course: GuidedCourse, lessonIndex: number, score: number, answers: number[]) {
   const user = (await db().auth.getUser()).data.user;
   if (!user) throw new Error("Sign in first.");
-  const current = await db().from("guided_course_progress").select("attempts").eq("course_id", course.id).eq("learner", user.id).eq("lesson_index", lessonIndex).maybeSingle();
+  const current = await db().from("guided_course_progress").select("attempts,last_answer").eq("course_id", course.id).eq("learner", user.id).eq("lesson_index", lessonIndex).maybeSingle();
   const attempts = Number(current.data?.attempts ?? 0) + 1;
   const status = score >= 70 ? "completed" : "repeat";
-  const { error } = await db().from("guided_course_progress").upsert({ course_id: course.id, learner: user.id, lesson_index: lessonIndex, status, score, attempts, last_answer: answers, completed_at: status === "completed" ? new Date().toISOString() : null, updated_at: new Date().toISOString() }, { onConflict: "course_id,learner,lesson_index" });
+  const { error } = await db().from("guided_course_progress").upsert({ course_id: course.id, learner: user.id, lesson_index: lessonIndex, status, score, attempts, last_answer: parseWrittenCheckpoint(current.data?.last_answer), completed_at: status === "completed" ? new Date().toISOString() : null, updated_at: new Date().toISOString() }, { onConflict: "course_id,learner,lesson_index" });
   if (error) throw new Error("Could not save this checkpoint.");
   const progress = Math.round(((await getCourseProgress(course.id)).filter((p) => p.status === "completed").length / Math.max(1, course.syllabus.lessons.length)) * 100);
   await db().from("guided_courses").update({ progress, updated_at: new Date().toISOString() }).eq("id", course.id).eq("owner", user.id);
