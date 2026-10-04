@@ -1,22 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
-import { Clock3, Gavel, Library, Play, RotateCcw, Swords, Trophy } from "lucide-react";
+import { Clock3, Gavel, Library, Play, RefreshCw, Swords, Trophy, Users } from "lucide-react";
 import type { Material } from "./data/types";
 import { askAI, type AIMode } from "./lib/ai";
 import { Markdown } from "./Markdown";
+import { getDebateRoom, listDebateMessages, listLeaderboard, matchDebateRoom, recordDebateResult, submitDebateTurn as submitRealtimeDebateTurn, subscribeToDebateRoom, subscribeToLeaderboard, type DebateMessage, type DebateRoom, type LeaderboardEntry } from "./lib/debate";
 
 type GameTab = "debate" | "choices" | "pvp";
 type DebateTurn = { label: string; text: string; role: "user" | "ai" };
 type ChoiceNode = { title: string; situation: string; choices: { label: string; consequence: string; next?: number }[] };
+type Difficulty = "beginner" | "intermediate" | "master";
 
-function formatTime(seconds: number) {
-  return Math.floor(seconds / 60).toString().padStart(2, "0") + ":" + (seconds % 60).toString().padStart(2, "0");
-}
+function formatTime(seconds: number) { return Math.floor(seconds / 60).toString().padStart(2, "0") + ":" + (seconds % 60).toString().padStart(2, "0"); }
+function secondsUntil(iso: string | null) { return iso ? Math.max(0, Math.floor((new Date(iso).getTime() - Date.now()) / 1000)) : 0; }
+function parseJsonAnswer(answer: string) { const start = answer.indexOf("{"); const end = answer.lastIndexOf("}"); return JSON.parse(start >= 0 && end > start ? answer.slice(start, end + 1) : answer.trim()); }
 
-export default function GamesHub({ materials }: { materials: Material[] }) {
+export default function GamesHub({ materials, userId, displayName = "Player" }: { materials: Material[]; userId: string | null; displayName?: string }) {
   const [tab, setTab] = useState<GameTab>("debate");
   const [sourceId, setSourceId] = useState(materials[0]?.id ?? "");
   const source = materials.find((item) => item.id === sourceId) ?? materials[0];
   const [minutes, setMinutes] = useState<10 | 20>(10);
+  const [difficulty, setDifficulty] = useState<Difficulty>("beginner");
   const [topic, setTopic] = useState("");
   const [debateStarted, setDebateStarted] = useState(false);
   const [remaining, setRemaining] = useState(0);
@@ -25,88 +28,77 @@ export default function GamesHub({ materials }: { materials: Material[] }) {
   const [transcript, setTranscript] = useState<DebateTurn[]>([]);
   const [debateAnswer, setDebateAnswer] = useState("");
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState("");
   const [choiceBusy, setChoiceBusy] = useState(false);
   const [choiceNode, setChoiceNode] = useState<ChoiceNode | null>(null);
   const [choicePath, setChoicePath] = useState<string[]>([]);
   const [choiceDebrief, setChoiceDebrief] = useState("");
+  const [notice, setNotice] = useState("");
+  const [room, setRoom] = useState<DebateRoom | null>(null);
+  const [pvpMessages, setPvpMessages] = useState<DebateMessage[]>([]);
+  const [pvpDuration, setPvpDuration] = useState<10 | 20>(10);
+  const [pvpBusy, setPvpBusy] = useState(false);
+  const [pvpNotice, setPvpNotice] = useState("");
+  const [pvpSubmission, setPvpSubmission] = useState("");
+  const [pvpRemaining, setPvpRemaining] = useState(0);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [leaderboardError, setLeaderboardError] = useState("");
 
   const sourceLabel = source ? source.title + " · " + (source.topic || source.type) : "No source selected";
+  const sourceOptions = useMemo(() => materials, [materials]);
   const aiMode: AIMode = "library";
-  useEffect(() => {
-    if (!debateStarted || remaining <= 0) return;
-    const timer = window.setInterval(() => setRemaining((value) => Math.max(0, value - 1)), 1000);
-    return () => window.clearInterval(timer);
-  }, [debateStarted, remaining]);
-  useEffect(() => {
-    if (debateStarted && remaining === 0) {
-      setDebateStarted(false);
-      setNotice("Time is up. Submit your final position or evaluate the debate.");
-    }
-  }, [debateStarted, remaining]);
 
-  const startDebate = () => {
-    if (!source) { setNotice("Choose a library source before starting."); return; }
-    setDebateStarted(true); setRemaining(minutes * 60); setTurn(0); setTranscript([]); setDebateAnswer(""); setNotice("");
-  };
+  useEffect(() => { if (!debateStarted || remaining <= 0) return; const timer = window.setInterval(() => setRemaining((value) => Math.max(0, value - 1)), 1000); return () => window.clearInterval(timer); }, [debateStarted, remaining]);
+  useEffect(() => { if (debateStarted && remaining === 0) { setDebateStarted(false); setNotice("Time is up. Submit your final position or retry the game with the feedback below."); } }, [debateStarted, remaining]);
+  useEffect(() => { if (!room) return; const refresh = async () => { try { setRoom(await getDebateRoom(room.id)); setPvpMessages(await listDebateMessages(room.id)); } catch (error) { setPvpNotice(error instanceof Error ? error.message : "Room refresh failed."); } }; void refresh(); return subscribeToDebateRoom(room.id, () => void refresh()); }, [room?.id]);
+  useEffect(() => { const refresh = async () => { try { setLeaderboard(await listLeaderboard()); setLeaderboardError(""); } catch (error) { setLeaderboardError(error instanceof Error ? error.message : "Leaderboard unavailable."); } }; void refresh(); return subscribeToLeaderboard(() => void refresh()); }, []);
+  useEffect(() => { if (!room?.deadline_at || room.status === "finished") return; const tick = () => setPvpRemaining(secondsUntil(room.deadline_at)); tick(); const timer = window.setInterval(tick, 1000); return () => window.clearInterval(timer); }, [room?.deadline_at, room?.status]);
+
+  const startDebate = () => { if (!source) { setNotice("Choose a library source before starting."); return; } setDebateStarted(true); setRemaining(minutes * 60); setTurn(0); setTranscript([]); setDebateAnswer(""); setNotice(""); };
   const submitDebateTurn = async () => {
     if (!source || !submission.trim() || busy) return;
-    setBusy(true); setNotice("");
-    const nextTurn = turn + 1;
-    const history = [...transcript, { label: "Your " + (nextTurn === 1 ? "opening" : nextTurn === 2 ? "rebuttal" : "closing"), text: submission.trim(), role: "user" as const }];
+    setBusy(true); setNotice(""); const nextTurn = turn + 1; const history = [...transcript, { label: "Your " + (nextTurn === 1 ? "opening" : nextTurn === 2 ? "rebuttal" : "closing"), text: submission.trim(), role: "user" as const }];
     const historyText = history.map((item) => item.label + ": " + item.text).join("\n\n");
-    const instruction = nextTurn >= 3 ? "Now give a concise rubric evaluation: legal accuracy, source use, reasoning, rebuttal, and clarity, each scored out of 5, with two concrete improvements." : "Reply as a demanding opposing counsel with one focused counterargument and one question for the next turn. Do not give a full model answer.";
+    const instruction = nextTurn >= 3 ? "Give a rubric evaluation with legal accuracy, source use, reasoning, rebuttal, and clarity scored out of 5. If this was a loss, explain exactly what went wrong and give a three-step retry plan." : "Reply as a demanding opposing counsel with one focused counterargument and one question for the next turn. Do not give a full model answer.";
     try {
-      const result = await askAI({
-        feature: nextTurn >= 3 ? "essay_feedback" : "moot_judge",
-        mode: aiMode,
-        messages: [{ role: "user", content: "You are the opposing counsel and later evaluator in a timed Kenyan law study debate. Use the selected source as the record, do not invent authorities, and clearly label any hypothetical. Source: " + sourceLabel + ". Motion: " + (topic.trim() || "Formulate a fair motion from the source") + ". Turn " + nextTurn + "/3. Debate transcript so far:\n" + historyText + "\n\n" + instruction }],
-      });
-      setTranscript([...history, { label: "AI opponent", text: result.answer, role: "ai" }]);
-      setSubmission(""); setTurn(nextTurn); setDebateAnswer(nextTurn >= 3 ? result.answer : "");
-      if (nextTurn >= 3) setDebateStarted(false);
-    } catch (error) { setNotice(error instanceof Error ? error.message : "The debate judge is unavailable."); }
-    finally { setBusy(false); }
+      const result = await askAI({ feature: nextTurn >= 3 ? "essay_feedback" : "moot_judge", mode: aiMode, messages: [{ role: "user", content: "You are the opposing counsel and evaluator in a Kenyan law study game. Difficulty: " + difficulty + ". Use only the selected source as the record, do not invent authorities, and label hypotheticals. Source: " + sourceLabel + ". Motion: " + (topic.trim() || "Formulate a fair motion from the source") + ". Turn " + nextTurn + "/3. Transcript:\n" + historyText + "\n\n" + instruction }] });
+      setTranscript([...history, { label: "AI opponent", text: result.answer, role: "ai" }]); setSubmission(""); setTurn(nextTurn); setDebateAnswer(nextTurn >= 3 ? result.answer : ""); if (nextTurn >= 3) setDebateStarted(false);
+    } catch (error) { setNotice(error instanceof Error ? error.message : "The debate judge is unavailable."); } finally { setBusy(false); }
   };
   const generateChoices = async () => {
-    if (!source || choiceBusy) return;
-    setChoiceBusy(true); setNotice(""); setChoiceDebrief(""); setChoicePath([]);
+    if (!source || choiceBusy) return; setChoiceBusy(true); setNotice(""); setChoiceDebrief(""); setChoicePath([]);
+    try { const result = await askAI({ feature: "quiz", mode: aiMode, messages: [{ role: "user", content: "Create one branching Kenyan-law decision game grounded in this source: " + sourceLabel + ". Return ONLY valid JSON with title, situation, and an array of at least three choices. Each choice needs label, consequence, and optional next number. Make the choices meaningfully different, label invented facts as hypothetical, and do not invent case citations." }] }); const raw = result.data && typeof result.data === "object" ? result.data : parseJsonAnswer(result.answer); const node = raw as ChoiceNode; if (!node.title || !node.situation || !Array.isArray(node.choices) || node.choices.length < 2) throw new Error("The generated game did not have enough choices. Try again."); setChoiceNode(node); } catch (error) { setNotice(error instanceof Error ? error.message : "Could not generate the Choices game."); } finally { setChoiceBusy(false); }
+  };
+  const choose = (choice: ChoiceNode["choices"][number]) => { setChoicePath((path) => [...path, choice.label]); if (choice.next !== undefined && choice.next !== null) setNotice(choice.consequence); else { setChoiceDebrief(choice.consequence); setNotice("Decision path complete. Review the consequence, then retry with a different choice."); } };
+
+  const joinPvp = async () => { if (!userId || !source || pvpBusy) return; setPvpBusy(true); setPvpNotice(""); try { const matched = await matchDebateRoom(source.id, sourceLabel, pvpDuration, displayName); setRoom(matched); setPvpMessages(await listDebateMessages(matched.id)); if (matched.status === "waiting") setPvpNotice("Room created. Keep this screen open; another player matching the same source and time will join automatically."); } catch (error) { setPvpNotice(error instanceof Error ? error.message : "Could not create or join a room."); } finally { setPvpBusy(false); } };
+  const myTurn = room && room.status === "active" && room.current_turn < 6 && ((room.current_turn % 2 === 0 && room.player_one_id === userId) || (room.current_turn % 2 === 1 && room.player_two_id === userId));
+  const submitPvp = async () => { if (!room || !myTurn || !pvpSubmission.trim() || pvpBusy) return; setPvpBusy(true); setPvpNotice(""); try { await submitRealtimeDebateTurn(room.id, pvpSubmission, displayName); setPvpSubmission(""); setRoom(await getDebateRoom(room.id)); setPvpMessages(await listDebateMessages(room.id)); } catch (error) { setPvpNotice(error instanceof Error ? error.message : "That turn could not be submitted."); } finally { setPvpBusy(false); } };
+  const evaluatePvp = async () => {
+    if (!room || room.status !== "evaluating" || room.evaluation || pvpBusy || pvpMessages.length < 6) return;
+    setPvpBusy(true); setPvpNotice("");
     try {
-      const result = await askAI({ feature: "quiz", mode: aiMode, messages: [{ role: "user", content: "Create one branching Kenyan-law decision game grounded in this source: " + sourceLabel + ". Return ONLY valid JSON with title, situation, and an array of at least three choices. Each choice needs label, consequence, and optional next number. Make the choices meaningfully different, label invented facts as hypothetical, and do not invent case citations." }] });
-      const cleanAnswer = result.answer.trim();
-      const raw = result.data && typeof result.data === "object" ? result.data : JSON.parse(cleanAnswer);
-      const node = raw as ChoiceNode;
-      if (!node.title || !node.situation || !Array.isArray(node.choices) || node.choices.length < 2) throw new Error("The generated game did not have enough choices. Try again.");
-      setChoiceNode(node);
-    } catch (error) { setNotice(error instanceof Error ? error.message : "Could not generate the Choices game."); }
-    finally { setChoiceBusy(false); }
+      const record = pvpMessages.map((item) => item.display_name + " (" + item.phase + "): " + item.content).join("\n\n");
+      const result = await askAI({ feature: "essay_feedback", mode: "library", messages: [{ role: "user", content: "Evaluate this completed two-person Kenyan law debate using only the selected source. Return ONLY JSON with keys playerOneScore, playerTwoScore (integers 0-100), winner (one, two, or draw), summary, playerOneFeedback, playerTwoFeedback, and retryAdvice. Scoring: legal accuracy 30, authority/source use 25, reasoning 20, rebuttal 15, clarity 10. Be specific about what went wrong for the lower score and how that player can retry. Source: " + room.source_title + ". Debate:\n" + record }] });
+      const raw = result.data && typeof result.data === "object" ? result.data as Record<string, unknown> : parseJsonAnswer(result.answer) as Record<string, unknown>;
+      const one = Math.max(0, Math.min(100, Number(raw.playerOneScore) || 0)); const two = Math.max(0, Math.min(100, Number(raw.playerTwoScore) || 0)); const winnerId = raw.winner === "one" ? room.player_one_id : raw.winner === "two" ? room.player_two_id : null; const evaluation = { ...raw, source: room.source_title, scoring: "Legal accuracy 30, authority/source use 25, reasoning 20, rebuttal 15, clarity 10." };
+      setRoom(await recordDebateResult(room.id, winnerId, one, two, evaluation));
+    } catch (error) { setPvpNotice(error instanceof Error ? error.message : "The shared evaluator could not finish. Try again."); } finally { setPvpBusy(false); }
   };
-  const choose = (choice: ChoiceNode["choices"][number]) => {
-    setChoicePath((path) => [...path, choice.label]);
-    if (choice.next !== undefined && choice.next !== null) setNotice(choice.consequence);
-    else { setChoiceDebrief(choice.consequence); setNotice("Decision path complete. Review the consequence, then generate another scenario."); }
-  };
-  const sourceOptions = useMemo(() => materials.length ? materials : [], [materials]);
+  useEffect(() => { void evaluatePvp(); }, [room?.status, room?.evaluation, pvpMessages.length]);
 
   return <>
-    <div className="page-heading"><div><div className="eyebrow">Practice with pressure</div><h1>Games Hub.</h1><p>Argue from the record, make a choice, and learn what your reasoning changes. Scores are study feedback, not legal advice.</p></div><Trophy size={32} /></div>
+    <div className="page-heading"><div><div className="eyebrow">Practice with pressure</div><h1>Games Hub.</h1><p>Choose a game, read the rules, play from the record, and retry with targeted feedback. Scores are study feedback, not legal advice.</p></div><Trophy size={32} /></div>
     <div className="games-directory" role="tablist" aria-label="Choose a legal game">
-      <button className={"game-domain-card " + (tab === "debate" ? "active" : "")} onClick={() => setTab("debate")}><span className="game-domain-icon"><Swords size={20} /></span><span><strong>AI Case Debate</strong><small>Argue against a grounded AI opponent, round by round.</small></span><em>01</em></button>
+      <button className={"game-domain-card " + (tab === "debate" ? "active" : "")} onClick={() => setTab("debate")}><span className="game-domain-icon"><Swords size={20} /></span><span><strong>AI Case Debate</strong><small>Play against the computer at Beginner, Intermediate, or Master level.</small></span><em>01</em></button>
       <button className={"game-domain-card " + (tab === "choices" ? "active" : "")} onClick={() => setTab("choices")}><span className="game-domain-icon"><Gavel size={20} /></span><span><strong>Choices</strong><small>Make consequential decisions in an AI-generated legal scenario.</small></span><em>02</em></button>
-      <button className={"game-domain-card " + (tab === "pvp" ? "active" : "")} onClick={() => setTab("pvp")}><span className="game-domain-icon"><Play size={20} /></span><span><strong>PVP Debate</strong><small>Enter a timed one-on-one match with another member.</small></span><em>03</em></button>
+      <button className={"game-domain-card " + (tab === "pvp" ? "active" : "")} onClick={() => setTab("pvp")}><span className="game-domain-icon"><Users size={20} /></span><span><strong>PVP Debate</strong><small>Match with one other member and share a live result.</small></span><em>03</em></button>
     </div>
     <div className="card card-pad game-source-bar"><div><div className="section-label">Grounding record</div><strong>{source ? sourceLabel : "Add a book, case, statute, or note in Library first"}</strong></div><div className="game-source-controls"><Library size={15} /><select value={sourceId} onChange={(event) => setSourceId(event.target.value)} disabled={!sourceOptions.length}><option value="">Choose source</option>{sourceOptions.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></div></div>
 
-    {tab === "debate" && <section className="game-room">
-      <div className="card card-pad game-card"><div className="game-kicker"><Clock3 size={14} /> {minutes} minute room · round {Math.min(turn + 1, 3)} of 3</div><h2>AI Case Debate</h2><p>Make an opening submission, answer the AI opponent, then close. The final evaluation uses the selected record and shows its source basis.</p><div className="game-controls"><label>Time<select value={minutes} onChange={(event) => setMinutes(Number(event.target.value) as 10 | 20)}><option value={10}>10 minutes</option><option value={20}>20 minutes</option></select></label><label className="game-topic">Motion or issue<input value={topic} onChange={(event) => setTopic(event.target.value)} placeholder="e.g. Was the search lawful under the Constitution?" /></label><button className="primary-button" onClick={startDebate} disabled={!source || debateStarted}>{debateStarted ? formatTime(remaining) + " remaining" : "Start debate"}</button></div></div>
-      {transcript.length > 0 && <div className="card card-pad debate-thread">{transcript.map((item, index) => <article className={"debate-turn " + item.role} key={item.label + "-" + index}><span>{item.label}</span><Markdown text={item.text} /></article>)}</div>}
-      {debateStarted && <div className="card card-pad game-card"><div className="section-label">Your submission</div><textarea rows={6} value={submission} onChange={(event) => setSubmission(event.target.value)} placeholder={turn === 0 ? "State your position and anchor it to the selected source…" : "Answer the opponent's question and sharpen your reasoning…"} /><button className="primary-button" onClick={() => void submitDebateTurn()} disabled={busy || !submission.trim()}>{busy ? "Judge is reading…" : turn >= 2 ? "Submit closing and evaluate" : "Submit turn"}</button></div>}
-      {debateAnswer && <div className="card card-pad game-evaluation"><div className="section-label">Evaluation</div><Markdown text={debateAnswer} /></div>}
-    </section>}
+    {tab === "debate" && <section className="game-room"><div className="card card-pad game-card"><div className="game-kicker"><Clock3 size={14} /> Computer game · 3 turns · {minutes} minutes</div><h2>AI Case Debate</h2><p><strong>How to play:</strong> choose a level and motion, press Start, then submit an opening, rebuttal, and closing. The computer challenges your reasoning. When you lose or finish, read the rubric and use Retry to improve the weakest category.</p><div className="game-rules"><span><strong>Scoring</strong> accuracy 30 · source use 25 · reasoning 20 · rebuttal 15 · clarity 10</span><span><strong>Levels</strong> Beginner gives more guidance · Intermediate presses counterarguments · Master uses tighter questions and less help</span></div><div className="game-controls"><label>Level<select value={difficulty} onChange={(event) => setDifficulty(event.target.value as Difficulty)}><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="master">Master</option></select></label><label>Time<select value={minutes} onChange={(event) => setMinutes(Number(event.target.value) as 10 | 20)}><option value={10}>10 minutes</option><option value={20}>20 minutes</option></select></label><label className="game-topic">Motion or issue<input value={topic} onChange={(event) => setTopic(event.target.value)} placeholder="e.g. Was the search lawful under the Constitution?" /></label><button className="primary-button" onClick={startDebate} disabled={!source || debateStarted}>{debateStarted ? formatTime(remaining) + " remaining" : "Start game"}</button></div></div>{transcript.length > 0 && <div className="card card-pad debate-thread">{transcript.map((item, index) => <article className={"debate-turn " + item.role} key={item.label + "-" + index}><span>{item.label}</span><Markdown text={item.text} /></article>)}</div>}{debateStarted && <div className="card card-pad game-card"><div className="section-label">Your submission</div><textarea rows={6} value={submission} onChange={(event) => setSubmission(event.target.value)} placeholder={turn === 0 ? "State your position and anchor it to the selected source…" : "Answer the opponent's question and sharpen your reasoning…"} /><button className="primary-button" onClick={() => void submitDebateTurn()} disabled={busy || !submission.trim()}>{busy ? "Judge is reading…" : turn >= 2 ? "Submit closing and evaluate" : "Submit turn"}</button></div>}{debateAnswer && <div className="card card-pad game-evaluation"><div className="section-label">Result and retry advice</div><Markdown text={debateAnswer} /><button className="secondary-button" onClick={startDebate}><RefreshCw size={14} /> Retry game</button></div>}{notice && <div className="connection-error game-notice">{notice}</div>}</section>}
 
-    {tab === "choices" && <section className="game-room"><div className="card card-pad game-card"><div className="game-kicker"><Gavel size={14} /> Branching scenario · source grounded</div><h2>Choices</h2><p>AI generates a hypothetical legal decision from the selected material. Each choice changes the path; the debrief separates the source rule from the invented facts.</p><button className="primary-button" onClick={() => void generateChoices()} disabled={!source || choiceBusy}>{choiceBusy ? "Generating from the record…" : choiceNode ? "Generate another scenario" : "Start Choices"}</button></div>{choiceNode && <div className="card card-pad choice-card"><div className="section-label">{choiceNode.title}</div><h2>{choiceNode.situation}</h2><div className="choice-list">{choiceNode.choices.map((choice, index) => <button key={choice.label + "-" + index} className="choice-option" onClick={() => choose(choice)}><strong>{choice.label}</strong><span>{choice.consequence}</span></button>)}</div>{choicePath.length > 0 && <p className="field-hint">Path: {choicePath.join(" → ")}</p>}{choiceDebrief && <div className="game-evaluation"><strong>Debrief</strong><p>{choiceDebrief}</p></div>}</div>}</section>}
+    {tab === "choices" && <section className="game-room"><div className="card card-pad game-card"><div className="game-kicker"><Gavel size={14} /> Branching scenario · source grounded</div><h2>Choices</h2><p><strong>How to play:</strong> read the facts, choose one action, then follow the consequence. Complete the path and retry to compare a different legal strategy.</p><button className="primary-button" onClick={() => void generateChoices()} disabled={!source || choiceBusy}>{choiceBusy ? "Generating from the record…" : choiceNode ? "Retry with another scenario" : "Start Choices"}</button></div>{choiceNode && <div className="card card-pad choice-card"><div className="section-label">{choiceNode.title}</div><h2>{choiceNode.situation}</h2><div className="choice-list">{choiceNode.choices.map((choice, index) => <button key={choice.label + "-" + index} className="choice-option" onClick={() => choose(choice)}><strong>{choice.label}</strong><span>{choice.consequence}</span></button>)}</div>{choicePath.length > 0 && <p className="field-hint">Path: {choicePath.join(" → ")}</p>}{choiceDebrief && <div className="game-evaluation"><strong>Debrief</strong><p>{choiceDebrief}</p></div>}</div>}{notice && <div className="connection-error game-notice">{notice}</div>}</section>}
 
-    {tab === "pvp" && <section className="game-room"><div className="card card-pad game-card"><div className="game-kicker"><Swords size={14} /> Two-person room · 10 or 20 minutes</div><h2>PVP Debate</h2><p>Invite another signed-in Group 13 member to argue from the same source. The realtime room and post-match evaluator are being wired into the next Games Hub release; this screen keeps the rules visible rather than pretending a local-only debate is multiplayer.</p><div className="callout"><p><strong>Match rules:</strong> one opening, one rebuttal, one closing each; timer chosen by the host; AI evaluation only after both players submit their recorded turns.</p></div><button className="secondary-button" onClick={() => setNotice("PVP rooms require the realtime debate migration. AI Case Debate and Choices are ready now.")}>Create PVP room</button></div></section>}
-    {notice && <div className="connection-error game-notice">{notice}</div>}
+    {tab === "pvp" && <section className="game-room"><div className="card card-pad game-card"><div className="game-kicker"><Users size={14} /> Realtime two-person room</div><h2>PVP Debate</h2><p><strong>How to play:</strong> choose the same source and timer as your opponent, join matchmaking, then take turns in order: opening, rebuttal, closing. The server enforces whose turn it is and ends the match when the shared timer expires.</p><div className="game-rules"><span><strong>Scoring</strong> accuracy 30 · source use 25 · reasoning 20 · rebuttal 15 · clarity 10</span><span><strong>After a loss</strong> the result names the weak category and gives retry advice; use the same room rules to play again.</span></div>{!room && <div className="game-controls"><label>Time<select value={pvpDuration} onChange={(event) => setPvpDuration(Number(event.target.value) as 10 | 20)}><option value={10}>10 minutes</option><option value={20}>20 minutes</option></select></label><button className="primary-button" onClick={() => void joinPvp()} disabled={!userId || !source || pvpBusy}>{pvpBusy ? "Finding a player…" : "Find opponent"}</button></div>}{room && <div className="pvp-status"><strong>{room.status === "waiting" ? "Waiting for another player" : room.status === "finished" ? "Match complete" : room.status === "evaluating" ? "Both players finished — evaluating" : "Match live"}</strong><span>{room.player_one_name} vs {room.player_two_name || "opponent…"} · {room.duration_minutes} minutes</span><span className="pvp-timer">{room.status === "active" ? formatTime(pvpRemaining) + " remaining" : room.status}</span></div>}</div>{room && <><div className="card card-pad debate-thread">{pvpMessages.map((item) => <article className={"debate-turn " + (item.user_id === userId ? "user" : "ai")} key={item.id}><span>{item.display_name} · {item.phase}</span><p>{item.content}</p></article>)}</div>{myTurn && <div className="card card-pad game-card"><div className="section-label">Your {room.current_turn < 2 ? "opening" : room.current_turn < 4 ? "rebuttal" : "closing"}</div><textarea rows={5} value={pvpSubmission} onChange={(event) => setPvpSubmission(event.target.value)} placeholder="Make your argument from the selected record…" /><button className="primary-button" onClick={() => void submitPvp()} disabled={pvpBusy || !pvpSubmission.trim()}>{pvpBusy ? "Submitting…" : "Submit turn"}</button></div>}{room.status === "finished" && room.evaluation && <div className="card card-pad game-evaluation"><div className="section-label">Shared AI evaluation</div><p><strong>Scores:</strong> {room.player_one_name} {room.player_one_score} · {room.player_two_name} {room.player_two_score}</p><Markdown text={String(room.evaluation.summary || "Match evaluated.")} /><p><strong>{room.evaluation.retryAdvice ? "Retry advice: " : ""}</strong>{String(room.evaluation.retryAdvice || "Review the category scores and retry.")}</p></div>}</>}{pvpNotice && <div className="connection-error game-notice">{pvpNotice}</div>}<div className="card card-pad leaderboard-card"><div className="game-kicker"><Trophy size={14} /> Live leaderboard</div><h2>Best debators</h2><p>Ratings update after a completed shared match. The list refreshes in realtime for everyone.</p>{leaderboardError ? <p className="field-hint">{leaderboardError}</p> : <div className="leaderboard-list">{leaderboard.slice(0, 10).map((entry, index) => <div className="leaderboard-row" key={entry.user_id}><strong>#{index + 1} {entry.display_name}</strong><span>{entry.rating} rating · {entry.wins}W {entry.losses}L · {entry.matches} matches</span></div>)}{!leaderboard.length && <p className="field-hint">Complete the first PVP match to create the leaderboard.</p>}</div>}</div></section>}
   </>;
 }
