@@ -1114,7 +1114,7 @@ function App() {
               }}
             />
           )}
-          {view === "arena" && <GamesHub materials={materials} />}
+          {view === "arena" && <GamesHub materials={materials} userId={userId} displayName={profile.displayName || userEmail?.split("@")[0] || "Player"} />}
           {view === "members" && <SectionedMembersPage members={members} />}
           {view === "assistant" && (
             <>
@@ -2572,7 +2572,8 @@ function GlobalMusicPlayer({
       <button className="music-control" aria-label="Previous track" onClick={() => onStep(-1)}><SkipBack size={16} /></button>
       <button className="music-control music-play" aria-label={playing ? "Pause" : "Play"} onClick={onToggle}>{playing ? <Pause size={16} /> : <Play size={16} />}</button>
       <button className="music-control" aria-label="Next track" onClick={() => onStep(1)}><SkipForward size={16} /></button>
-      {!minimized && <><details className="music-queue-details"><summary>Queue</summary><div>{queue.map((track, trackIndex) => <button type="button" key={track.id} className={trackIndex === index ? "active" : ""} onClick={() => onSelect(trackIndex)}>{track.title}</button>)}</div></details>{current?.kind === "audio" ? <audio ref={audioRef} controls onPlay={() => onPlaying(true)} onPause={() => onPlaying(false)} onEnded={onEnded} /> : <div ref={youtubeContainerRef} className="global-youtube-player" aria-label="YouTube player" />}</>}
+      {!minimized && <details className="music-queue-details"><summary>Queue</summary><div>{queue.map((track, trackIndex) => <button type="button" key={track.id} className={trackIndex === index ? "active" : ""} onClick={() => onSelect(trackIndex)}>{track.title}</button>)}</div></details>}
+      <div className="music-media" aria-hidden={minimized}>{current?.kind === "audio" ? <audio ref={audioRef} controls onPlay={() => onPlaying(true)} onPause={() => onPlaying(false)} onEnded={onEnded} /> : <div ref={youtubeContainerRef} className="global-youtube-player" aria-label="YouTube player" />}</div>
       <button className="music-control" aria-label={minimized ? "Expand music player" : "Minimize music player"} onClick={() => setMinimized((value) => !value)}>{minimized ? <Maximize2 size={15} /> : <Minimize2 size={15} />}</button>
       {!minimized && <button className="music-resize-handle" aria-label="Resize music player" onPointerDown={beginResize}>↘</button>}
     </div>
