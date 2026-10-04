@@ -2623,7 +2623,8 @@ function MediaPage({
     }
     const apiKey = import.meta.env.VITE_YOUTUBE_API_KEY?.trim();
     if (!apiKey) {
-      setYoutubeNote("Paste a YouTube link to queue it now. Search results need a free YouTube Data API key in VITE_YOUTUBE_API_KEY.");
+      window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`, "_blank", "noopener,noreferrer");
+      setYoutubeNote("Search opened on YouTube. Choose a video, copy its URL, then paste it here to add it to the global queue.");
       return;
     }
     void fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoCategoryId=10&maxResults=8&q=${encodeURIComponent(query)}&key=${encodeURIComponent(apiKey)}`)
@@ -2638,6 +2639,13 @@ function MediaPage({
         else setYoutubeNote("No YouTube music results found.");
       })
       .catch((error) => setYoutubeNote(error instanceof Error ? error.message : "Could not search YouTube."));
+  };
+
+  const openYoutubeSearch = () => {
+    const query = youtubeQuery.trim();
+    if (!query) return;
+    window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`, "_blank", "noopener,noreferrer");
+    setYoutubeNote("Choose a video in the YouTube tab, copy its URL, then paste it here and add it to the queue.");
   };
 
   const queueSavedMedia = (item: MediaResource) => {
@@ -2818,6 +2826,7 @@ function MediaPage({
           <form className="youtube-listener" onSubmit={searchYoutube}>
             <label>Search YouTube or paste a YouTube link<input value={youtubeQuery} onChange={(event) => setYoutubeQuery(event.target.value)} placeholder="e.g. study jazz or https://youtu.be/..." /></label>
             <button className="secondary-button" type="submit"><Youtube size={15} /> Add to global queue</button>
+            <button className="material-link" type="button" onClick={openYoutubeSearch}>Search officially on YouTube</button>
             {youtubeNote && <p className="field-hint">{youtubeNote}</p>}
             {!!youtubeResults.length && <div className="local-track-list">{youtubeResults.map((track, index) => <button className="local-track" type="button" key={track.id} onClick={() => onPlayQueue(youtubeResults, index)}><Youtube size={14} /><span>{track.title}</span><small>Queue</small></button>)}</div>}
           </form>
