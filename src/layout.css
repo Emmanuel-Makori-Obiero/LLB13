@@ -706,3 +706,5 @@ body,
 .music-toggle-button:hover,.music-toggle-button:focus-visible{background:var(--clay);border-color:#fff;color:#fff;outline:2px solid #fff;outline-offset:2px}
 .global-music-player.is-minimized .music-toggle-button{min-width:72px;background:var(--clay);color:#fff;border-color:#fff}
 @media(max-width:760px){.music-toggle-button{min-width:78px;height:34px;padding:0 8px;font-size:10px}.global-music-player.is-minimized .music-toggle-button{min-width:70px}.global-music-player{z-index:60}}
+
+.global-music-player{isolation:isolate}.music-drag-handle,.music-resize-handle{touch-action:none;user-select:none;-webkit-user-select:none}.music-drag-handle{cursor:grab}.music-drag-handle:active{cursor:grabbing}

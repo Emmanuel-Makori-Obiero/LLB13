@@ -2510,8 +2510,8 @@ function GlobalMusicPlayer({
       return { left: Number(saved?.left) || Math.max(12, window.innerWidth - 560), top: Number(saved?.top) || Math.max(12, window.innerHeight - 110), width: Number(saved?.width) || 520, height: Number(saved?.height) || 74 };
     } catch { return { left: 24, top: Math.max(12, window.innerHeight - 110), width: 520, height: 74 }; }
   });
-  const dragRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
-  const resizeRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
+  const dragRef = useRef<{ pointerId: number; x: number; y: number; left: number; top: number; moved: boolean } | null>(null);
+  const resizeRef = useRef<{ pointerId: number; x: number; y: number; width: number; height: number } | null>(null);
 
   useEffect(() => {
     localStorage.setItem("g13-music-panel", JSON.stringify(panel));
@@ -2524,16 +2524,24 @@ function GlobalMusicPlayer({
   }, [volume]);
   useEffect(() => {
     const move = (event: PointerEvent) => {
-      if (dragRef.current) setPanel((value) => ({ ...value, left: Math.max(8, Math.min(window.innerWidth - 120, dragRef.current!.left + event.clientX - dragRef.current!.x)), top: Math.max(8, Math.min(window.innerHeight - 54, dragRef.current!.top + event.clientY - dragRef.current!.y)) }));
-      if (resizeRef.current) setPanel((value) => ({ ...value, width: Math.max(300, Math.min(window.innerWidth - value.left - 8, resizeRef.current!.width + event.clientX - resizeRef.current!.x)), height: Math.max(58, Math.min(window.innerHeight - value.top - 8, resizeRef.current!.height + event.clientY - resizeRef.current!.y)) }));
+      if (dragRef.current && event.pointerId === dragRef.current.pointerId) {
+        if (!event.buttons) { dragRef.current = null; return; }
+        const drag = dragRef.current;
+        drag.moved = drag.moved || Math.abs(event.clientX - drag.x) > 3 || Math.abs(event.clientY - drag.y) > 3;
+        setPanel((value) => ({ ...value, left: Math.max(8, Math.min(window.innerWidth - Math.min(value.width, window.innerWidth - 16) - 8, drag.left + event.clientX - drag.x)), top: Math.max(8, Math.min(window.innerHeight - Math.min(value.height, window.innerHeight - 16) - 8, drag.top + event.clientY - drag.y)) }));
+      }
+      if (resizeRef.current && event.pointerId === resizeRef.current.pointerId) {
+        const resize = resizeRef.current;
+        setPanel((value) => ({ ...value, width: Math.max(300, Math.min(window.innerWidth - value.left - 8, resize.width + event.clientX - resize.x)), height: Math.max(58, Math.min(window.innerHeight - value.top - 8, resize.height + event.clientY - resize.y)) }));
+      }
     };
     const stop = () => { dragRef.current = null; resizeRef.current = null; };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", stop);
     return () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", stop); };
   }, []);
-  const beginDrag = (event: React.PointerEvent) => { event.preventDefault(); dragRef.current = { x: event.clientX, y: event.clientY, left: panel.left, top: panel.top }; };
-  const beginResize = (event: React.PointerEvent) => { event.preventDefault(); event.stopPropagation(); resizeRef.current = { x: event.clientX, y: event.clientY, width: panel.width, height: panel.height }; };
+  const beginDrag = (event: React.PointerEvent<HTMLButtonElement>) => { event.preventDefault(); event.stopPropagation(); event.currentTarget.setPointerCapture?.(event.pointerId); dragRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, left: panel.left, top: panel.top, moved: false }; };
+  const beginResize = (event: React.PointerEvent<HTMLButtonElement>) => { event.preventDefault(); event.stopPropagation(); event.currentTarget.setPointerCapture?.(event.pointerId); resizeRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, width: panel.width, height: panel.height }; };
 
   useEffect(() => {
     if (!current || current.kind !== "audio") return;
@@ -2586,7 +2594,7 @@ function GlobalMusicPlayer({
 
   return (
     <div className={`global-music-player ${minimized ? "is-minimized" : ""}`} style={{ left: panel.left, top: panel.top, width: minimized ? "auto" : panel.width, minHeight: minimized ? 0 : panel.height }} role="region" aria-label="Global music player">
-      <button className="music-drag-handle" aria-label="Move music player" onPointerDown={beginDrag}><Grip size={15} /></button>
+      <button type="button" className="music-drag-handle" aria-label="Move music player" title="Drag to move music player" onPointerDown={beginDrag} onClick={(event) => event.preventDefault()}><Grip size={15} /></button>
       <Music2 size={18} />
       {!minimized && <div className="global-music-meta"><strong>{current?.title}</strong><span>{current?.source} · {index + 1} of {queue.length}</span></div>}
       <button className="music-control" aria-label="Previous track" onClick={() => onStep(-1)}><SkipBack size={16} /></button>
@@ -2596,7 +2604,7 @@ function GlobalMusicPlayer({
       {!minimized && <label className="music-volume" title={`Volume ${Math.round(volume * 100)}%`}><span className="sr-only">Volume</span><button type="button" className="music-control" aria-label={volume === 0 ? "Unmute" : "Mute"} onClick={() => setVolume((value) => value === 0 ? 0.8 : 0)}>{volume === 0 ? <VolumeX size={15} /> : <Volume2 size={15} />}</button><input aria-label="Volume" type="range" min="0" max="1" step="0.01" value={volume} onChange={(event) => setVolume(Number(event.target.value))} /><span>{Math.round(volume * 100)}%</span></label>}
       <div className="music-media" aria-hidden={minimized}>{current?.kind === "audio" ? <audio ref={audioRef} controls onPlay={() => onPlaying(true)} onPause={() => onPlaying(false)} onEnded={onEnded} /> : <><div ref={youtubeContainerRef} className="global-youtube-player" aria-label="YouTube player" />{youtubeError && <a className="youtube-fallback-link" href={safeUrl(current.url) || undefined} target="_blank" rel="noreferrer">Open on YouTube</a>}</>}</div>
       <button className="music-toggle-button" aria-label={minimized ? "Expand music player" : "Minimize music player"} title={minimized ? "Expand music player" : "Minimize music player"} onClick={() => setMinimized((value) => !value)}>{minimized ? <Maximize2 size={15} /> : <Minimize2 size={15} />}<span>{minimized ? "Open" : "Minimize"}</span></button>
-      {!minimized && <button className="music-resize-handle" aria-label="Resize music player" onPointerDown={beginResize}>↘</button>}
+      {!minimized && <button type="button" className="music-resize-handle" aria-label="Resize music player" onPointerDown={beginResize} onClick={(event) => event.preventDefault()}>↘</button>}
     </div>
   );
 }
