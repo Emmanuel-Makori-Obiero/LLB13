@@ -437,7 +437,7 @@ export const featureCatalog: FeatureEntry[] = [
     availability: "new",
     access: "Available to everyone without signing in at /features.",
     capabilities: [
-      "Explains all 34 member-facing feature areas, including the scanner and this directory.",
+      "Explains all 35 member-facing feature areas, including the scanner, Kenya Law case finder and this directory.",
       "Searches the guide and filters entries by study area or availability.",
     ],
     howToUse: "Choose All features from the landing page or open /features. Search for a task, select a category or availability filter, and expand a feature to see its purpose and how to use it.",
@@ -455,5 +455,19 @@ export const featureCatalog: FeatureEntry[] = [
     ],
     howToUse: "Open Scan & notes, take a photo or select page images, choose English or Kiswahili, and run the scan. Review the text, give it a title, and save; reopen the note to edit, share, download, or print it.",
     benefit: "Turns paper handouts and photographed readings into searchable, editable notes while keeping the original images private to your account.",
+  },
+  {
+    id: "kenya_law_case_finder",
+    title: "Kenya Law case finder",
+    category: "Library, reading & notes",
+    availability: "new",
+    access: "Available to everyone without signing in at /cases. Searches and judgment pages open on the official Kenya Law site.",
+    capabilities: [
+      "Search published Kenyan judgments by case name, citation, or legal issue.",
+      "Browse current decisions by court and open the Constitution of Kenya from its official source.",
+      "Save full judgment text as an AI-readable document so study outputs can cite the text rather than guess at a case authority.",
+    ],
+    howToUse: "Open Case law from the landing page or workspace. Search by case name, citation, or topic, then open the result on Kenya Law. For AI analysis, save the full judgment text or PDF as an AI-readable Library document and select it; a reference link alone does not supply source text.",
+    benefit: "Gives students a direct path to primary Kenyan judgments and the Constitution, with citations tied to the authorities used in their study.",
   },
 ];

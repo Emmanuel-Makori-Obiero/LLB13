@@ -28,16 +28,15 @@ export default function AssignmentHelperPage({ assignments }: { assignments: Ass
   const [busy, setBusy] = useState(false);
 
   const librarySources = useMemo(() => sources.filter((source) => source.kind === "document" || source.kind === "material"), [sources]);
-  const selectedSources = librarySources.filter((source) => selected.includes(source.id));
-  const selectedDocumentSources = selectedSources.filter((source) => source.kind === "document");
-  const selectedIds = selectedDocumentSources.map((source) => source.id);
-  const groundingMode = selectedDocumentSources.length > 0 && selectedDocumentSources.every((source) => source.scope === "library") ? "library" : selectedDocumentSources.some((source) => source.scope === "library") ? "auto" : "materials";
+  const selectedSources = librarySources.filter((source) => source.kind === "document" && selected.includes(source.id));
+  const selectedIds = selectedSources.map((source) => source.id);
+  const groundingMode = selectedSources.length > 0 && selectedSources.every((source) => source.scope === "library") ? "library" : selectedSources.some((source) => source.scope === "library") ? "auto" : "materials";
 
   const loadSources = async () => {
     try {
       const available = await listGuideSources();
       setSources(available);
-      setNotice(available.length ? "Select the books or saved documents that should ground the helper." : "Upload or save a book/document in the Library first.");
+      setNotice(available.length ? "Choose AI-readable saved documents to ground the helper. Linked Library references are shown for context but do not supply source text." : "Add an AI-readable document in the Library, then refresh sources.");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Could not load your saved sources.");
     }
@@ -50,16 +49,16 @@ export default function AssignmentHelperPage({ assignments }: { assignments: Ass
     const context = [
       `Assignment title: ${title || "Untitled assignment"}`,
       `Assignment brief/question:\n${brief.trim()}`,
-      selectedSources.length ? `Linked Library items:\n${selectedSources.map((source) => `- ${source.title}${source.citation ? ` (${source.citation})` : ""}${source.url ? ` — ${source.url}` : ""}`).join("\n")}` : "",
+      selectedSources.length ? `Selected AI-readable source documents:\n${selectedSources.map((source) => `- ${source.title}${source.citation ? ` (${source.citation})` : ""}`).join("\n")}` : "",
       draft.trim() ? `Student draft or working notes:\n${draft.trim()}` : "No draft supplied yet.",
       tool.feature === "rw_outline" ? "Include a practical section-by-section outline, thesis options, counterargument, and approximate word counts." : "",
       tool.feature === "irac" ? "Do not write the final answer. Produce a study-ready IRAC plan tied to the facts." : "",
       tool.feature === "rw_critique" ? "Give specific improvements and preserve the student's own voice; do not fabricate authorities." : "",
-      "Use only the selected sources for source-specific claims. Mark anything requiring verification with (verify).",
+      "Use only retrieved AI-readable source text for source-specific legal claims. Never invent authorities or citations.",
     ].filter(Boolean).join("\n\n");
     try {
       const response = await askAI({ feature: tool.feature, mode: selectedIds.length ? groundingMode : "general", docIds: selectedIds, messages: [{ role: "user", content: context }] });
-      setResult(response); setNotice("Done. Check every authority against the original book, case, statute, or lecturer material before submitting.");
+      setResult(response); setNotice(response.grounded ? "Done. Case citations are tied to retrieved source text; use Kenya Law Case Finder for authorities not included there." : selectedSources.length ? "Done. No readable text was returned from the selected documents, so this is a general overview. Re-upload the source or use Kenya Law Case Finder." : "Done. This is a general overview; no source text was selected. Library reference links do not supply text to the helper.");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "The assignment helper could not complete this request.");
     } finally { setBusy(false); }
@@ -67,7 +66,7 @@ export default function AssignmentHelperPage({ assignments }: { assignments: Ass
 
   return <section className="assignment-helper-page">
     <div className="page-heading">
-      <div><div className="eyebrow">Plan, understand, improve</div><h1 className="heading">AI Assignment Helper.</h1><p className="subheading">Paste the assignment brief, choose your source books, and work through the question step by step. It helps you think and improve—it does not submit work for you.</p></div>
+      <div><div className="eyebrow">Plan, understand, improve</div><h1 className="heading">AI Assignment Helper.</h1><p className="subheading">Paste the assignment brief, select AI-readable source documents, and work through the question step by step. It helps you think and improve; it does not submit work for you.</p></div>
       <div className="assignment-helper-icon"><FileText size={30} /></div>
     </div>
     {notice && <div className="guide-notice">{notice}</div>}
@@ -80,11 +79,12 @@ export default function AssignmentHelperPage({ assignments }: { assignments: Ass
         <label>Draft or working notes <span className="field-hint">Optional for question analysis; useful for review.</span><textarea value={draft} onChange={(event) => setDraft(event.target.value)} rows={8} placeholder="Paste your introduction, outline, argument, or draft here." /></label>
         <div className="section-label">2. Choose a tool</div>
         <div className="assignment-tools">{tools.map((item) => <button type="button" key={item.feature} className={`assignment-tool ${tool.feature === item.feature ? "active" : ""}`} onClick={() => setTool(item)}><Lightbulb size={15} /><span><strong>{item.label}</strong><small>{item.description}</small></span></button>)}</div>
-        <div className="section-label">3. Link Library books and materials</div>
-        <div className="assignment-sources">{librarySources.length ? librarySources.map((source) => <label className="assignment-source" key={`${source.kind}:${source.id}`}><input type="checkbox" checked={selected.includes(source.id)} onChange={() => setSelected((current) => current.includes(source.id) ? current.filter((id) => id !== source.id) : [...current, source.id])} /><BookOpen size={14} /><span>{source.title}<small>{source.kind === "material" ? "Library material · linked reference" : source.scope === "library" ? "Library book · AI-readable" : "My saved document"}{source.citation ? ` · ${source.citation}` : ""}</small></span></label>) : <p className="empty">No Library materials found. Add books or documents in Library, then refresh.</p>}</div>
+        <div className="section-label">3. Choose source text</div>
+        <p className="field-hint">Only saved documents marked AI-readable supply text to the helper. Library reference links remain visible below but are not treated as evidence.</p>
+        <div className="assignment-sources">{librarySources.length ? librarySources.map((source) => <label className="assignment-source" key={`${source.kind}:${source.id}`}><input type="checkbox" checked={source.kind === "document" && selected.includes(source.id)} disabled={source.kind !== "document"} onChange={() => setSelected((current) => current.includes(source.id) ? current.filter((id) => id !== source.id) : [...current, source.id])} /><BookOpen size={14} /><span>{source.title}<small>{source.kind === "material" ? "Reference link only · full text not supplied" : source.scope === "library" ? "Library document · text supplied to AI" : "My saved document · text supplied to AI"}{source.citation ? ` · ${source.citation}` : ""}</small></span></label>) : <p className="empty">No AI-readable documents or linked references found. Add source text in Library, then refresh.</p>}</div>
         <div className="assignment-actions"><button className="secondary-button" onClick={() => void loadSources()}><RefreshCw size={13} /> Refresh sources</button><button className="primary-button" onClick={() => void run()} disabled={busy || !brief.trim()}><Sparkles size={14} /> {busy ? "Working…" : tool.label}</button></div>
       </div>
-      <div className="card card-pad assignment-helper-result"><div className="assignment-result-head"><div className="section-label">Your tutor's response</div>{result && <div className="export-actions"><button className="secondary-button small-action" onClick={() => downloadWord(title || "Assignment helper", result.answer, "assignment-helper.doc", { eyebrow: "Group 13 · Assignment helper", subtitle: title || "Study notes", sources: selectedSources.map((source) => source.title) })}><Download size={13} /> Word</button><button className="secondary-button small-action" onClick={() => downloadPdf(title || "Assignment helper", result.answer, "assignment-helper.pdf", { eyebrow: "Group 13 · Assignment helper", subtitle: title || "Study notes", sources: selectedSources.map((source) => source.title) })}><Download size={13} /> PDF</button></div>}</div>{result ? <><div className="assignment-result-meta"><CheckCircle2 size={15} /> {result.grounded ? "Grounded in selected sources" : "General guidance — verify authorities"}{assignmentId ? ` · Linked to ${assignments.find((assignment) => assignment.id === assignmentId)?.title ?? "assignment"}` : ""}</div><Markdown text={result.answer} />{result.warnings.length > 0 && <div className="assignment-warnings"><strong>Verify before submitting</strong>{result.warnings.map((warning) => <p key={warning}>{warning}</p>)}</div>}</> : <div className="assignment-empty"><Sparkles size={28} /><h2>Start with the question</h2><p>Choose an assignment or paste the question, then select the books and materials that should guide your work.</p></div>}</div>
+      <div className="card card-pad assignment-helper-result"><div className="assignment-result-head"><div className="section-label">Your tutor's response</div>{result && <div className="export-actions"><button className="secondary-button small-action" onClick={() => downloadWord(title || "Assignment helper", result.answer, "assignment-helper.doc", { eyebrow: "Group 13 · Assignment helper", subtitle: title || "Study notes", sources: selectedSources.map((source) => source.title) })}><Download size={13} /> Word</button><button className="secondary-button small-action" onClick={() => downloadPdf(title || "Assignment helper", result.answer, "assignment-helper.pdf", { eyebrow: "Group 13 · Assignment helper", subtitle: title || "Study notes", sources: selectedSources.map((source) => source.title) })}><Download size={13} /> PDF</button></div>}</div>{result ? <><div className="assignment-result-meta"><CheckCircle2 size={15} /> {result.grounded ? "Grounded in selected sources" : "General legal overview"}{assignmentId ? ` · Linked to ${assignments.find((assignment) => assignment.id === assignmentId)?.title ?? "assignment"}` : ""}</div><Markdown text={result.answer} />{result.warnings.length > 0 && <div className="assignment-warnings"><strong>Source note</strong>{result.warnings.map((warning) => <p key={warning}>{warning}</p>)}</div>}</> : <div className="assignment-empty"><Sparkles size={28} /><h2>Start with the question</h2><p>Choose an assignment or paste the question, then select AI-readable source text to ground your work.</p></div>}</div>
     </div>
   </section>;
 }

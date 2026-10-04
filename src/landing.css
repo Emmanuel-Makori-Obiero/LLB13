@@ -557,3 +557,88 @@
 @media (max-width: 640px) {
   .g13-hero-guide-link { margin-top: 11px; }
 }
+
+
+/* Editorial refinement: let the photography, type and one forest-green cover carry the page. */
+.g13-site-header { border-bottom: 0; }
+.g13-login-button { border-color: transparent; background: transparent; }
+.g13-login-button:hover { border-color: transparent; background: transparent; color: #ffffff; }
+.g13-help-trigger { border-color: transparent; }
+.g13-help-trigger:hover { border-color: transparent; background: transparent; color: #ffffff; }
+.g13-help-trigger:hover svg { color: #ffffff; }
+.g13-help-floating .g13-help-trigger { border: 0; background: rgb(0 0 0 / 58%); }
+.g13-help-floating .g13-help-trigger:hover { background: rgb(0 0 0 / 76%); }
+.g13-hero-index { padding: 10px 8px; border: 0; background: transparent; box-shadow: none; }
+.g13-hero-caption { padding: 0; background: transparent; text-shadow: 0 1px 12px rgb(0 0 0 / 52%); }
+.g13-scene-index { border-bottom: 0; }
+.g13-judge-copy h2 { font-size: clamp(38px, 4.6vw, 58px); line-height: 1.04; letter-spacing: -.04em; }
+.g13-judge-copy h2 strong { color: #a8beb1; }
+.g13-judge-frame { border: 0; box-shadow: none; }
+.g13-judge-frame::before { display: none; }
+.g13-impact-ring { display: none; }
+.g13-judge-frame[data-impact="true"]::after { background: transparent; }
+.g13-experience-grid, .g13-chapter-list { border: 0; }
+.g13-chapter-list button { border: 0; }
+.g13-chapter-list button.active { border-color: transparent; background: transparent; color: #163a34; }
+.g13-chapter-list button.active span, .g13-chapter-list button.active svg { color: #163a34; }
+.g13-chapter-icon { width: auto; height: auto; border: 0; background: transparent; color: #163a34; }
+.g13-tool-card, .g13-tool-audio { border: 0; background: transparent; box-shadow: none; }
+.g13-tool-card:hover { border-color: transparent; }
+.g13-tool-card > svg, .g13-tool-number { color: #a8beb1; }
+.g13-book-toggle { border-bottom: 0; }
+.g13-book-object { filter: drop-shadow(10px 18px 16px rgb(0 0 0 / 24%)); }
+.g13-book-pages { border: 0; box-shadow: 0 2px 5px rgb(0 0 0 / 12%); }
+.g13-book-page-left { border-right-color: rgb(22 58 52 / 18%); }
+.g13-book-lines { background: repeating-linear-gradient(to bottom, transparent 0, transparent 8px, rgb(22 58 52 / 20%) 8px, rgb(22 58 52 / 20%) 8.7px, transparent 8.7px, transparent 12px); }
+.g13-book-front { border: 0; background: linear-gradient(145deg, #244b44 0%, #163a34 62%, #102a25 100%); color: #ffffff; box-shadow: inset 5px 0 rgb(255 255 255 / 7%), inset -2px 0 rgb(0 0 0 / 18%); }
+.g13-book-front > small, .g13-book-front-foot, .g13-book-emblem { color: #f4f7f4; }
+.g13-book-emblem { width: auto; height: auto; padding: 0; border: 0; border-radius: 0; }
+.g13-book-spine { background: linear-gradient(90deg, #0d2823, #183e37); }
+.g13-final-mark { border-color: rgb(255 255 255 / 34%); }
+.g13-footer { border-top-color: rgb(255 255 255 / 20%); }
+.g13-help-dialog { border: 0; box-shadow: 0 24px 70px rgb(0 0 0 / 18%); }
+.g13-help-close { border-color: rgb(0 0 0 / 18%); }
+@media (max-width: 800px) {
+  .g13-judge-copy h2 { font-size: clamp(36px, 9.6vw, 46px); }
+}
+
+
+/* Keep controls editorial and quiet; keyboard focus remains visible. */
+.g13-judge-copy h2 { font-size: clamp(36px, 4.2vw, 52px); }
+.g13-help-trigger, .g13-help-floating .g13-help-trigger { border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.g13-help-trigger:hover, .g13-help-floating .g13-help-trigger:hover { border: 0; background: transparent; color: inherit; }
+.g13-help-trigger:hover svg { color: currentColor; }
+.g13-judge-replay { border: 0; background: transparent; box-shadow: none; }
+.g13-judge-replay:hover { border: 0; background: transparent; color: #a8beb1; }
+@media (max-width: 800px) {
+  .g13-judge-copy h2 { font-size: clamp(32px, 8.5vw, 42px); }
+}
+
+
+/* Unified editorial scale, direct public links, and high-contrast keyboard focus. */
+.g13-hero h1 { font-size: clamp(45px, 6.2vw, 82px); }
+.g13-manifesto-copy { font-size: clamp(30px, 3.9vw, 52px); }
+.g13-section-heading h2 { font-size: clamp(35px, 4.5vw, 55px); }
+.g13-tools-intro h2 { font-size: clamp(34px, 4.15vw, 52px); }
+.g13-reading-copy h2 { font-size: clamp(38px, 4.7vw, 58px); }
+.g13-final-cta h2 { font-size: clamp(40px, 5.4vw, 66px); }
+.g13-hero-public-links { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 11px 20px; margin-top: 15px; }
+.g13-hero-public-links .g13-hero-guide-link { margin-top: 0; }
+.g13-experience :focus-visible,
+.g13-reading-room :focus-visible,
+.g13-install-band :focus-visible,
+.g13-help-dialog :focus-visible { outline-color: #163a34; }
+.g13-hero :focus-visible,
+.g13-judge-scene :focus-visible,
+.g13-tools :focus-visible,
+.g13-final-cta :focus-visible,
+.g13-footer :focus-visible,
+.g13-help-floating .g13-help-trigger:focus-visible { outline-color: #a8beb1; }
+.g13-help-floating .g13-help-trigger { border: 0; background: #163a34; color: #ffffff; }
+.g13-help-floating .g13-help-trigger:hover { border: 0; background: #000000; color: #ffffff; }
+@media (max-width: 640px) {
+  .g13-hero h1 { font-size: clamp(42px, 11.5vw, 60px); }
+  .g13-section-heading h2 { font-size: clamp(32px, 8.5vw, 38px); }
+  .g13-final-cta h2 { font-size: clamp(34px, 8.8vw, 48px); }
+  .g13-hero-public-links { flex-direction: column; gap: 9px; }
+}
