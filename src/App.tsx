@@ -117,12 +117,12 @@ const nav = [
   { id: "library", label: "Library", icon: Library },
   { id: "scanner", label: "Scan & notes", icon: ScanLine },
   { id: "guide", label: "Guided study", icon: GraduationCap },
+  { id: "music", label: "Music & media", icon: Music2 },
   { id: "assignment-helper", label: "AI assignment helper", icon: Sparkles },
   { id: "units", label: "Units", icon: BookOpen },
   { id: "discussions", label: "Discussions", icon: MessageSquare },
   { id: "members", label: "Members", icon: Users },
   { id: "transcribe", label: "Transcribe", icon: Mic },
-  { id: "media", label: "Media", icon: Film },
   { id: "assistant", label: "Study assistant", icon: Sparkles },
   { id: "research", label: "Research writer", icon: PenLine },
   { id: "arena", label: "Legal Arena", icon: Gavel },
@@ -132,6 +132,7 @@ const nav = [
 ];
 const validViews = new Set([
   ...nav.map((item) => item.id),
+  "media",
   "settings",
   "meeting",
   "unit",
@@ -1099,7 +1100,7 @@ function App() {
               }
             />
           )}
-          {view === "media" && (
+          {(view === "music" || view === "media") && (
             <MediaPage
               media={media}
               onPlayQueue={playMusicQueue}
@@ -1287,7 +1288,7 @@ const pageLabel = (view: string) =>
           ? "Reading"
           : view === "unit"
             ? "Unit"
-            : (nav.find((n) => n.id === view)?.label ?? "Settings");
+            : (nav.find((n) => n.id === view)?.label ?? (view === "media" ? "Music & media" : "Settings"));
 function Brand({ compact = false }: { compact?: boolean }) {
   return (
     <div className="brand">
@@ -2864,8 +2865,8 @@ function MediaPage({
       </div>
 
       <div className="card card-pad" style={{ marginTop: 18 }}>
-        <CardHeader label="Image Studio" action="Hugging Face first · optional Gemini fallback" />
-        <p className="field-hint">Describe an illustration, study diagram, or film reference image. The deployed function must have its image provider secret and private media storage configured. Hugging Face is tried first. Gemini image API is a separate, billable fallback and stays disabled unless an administrator explicitly opts in with GEMINI_IMAGE_ENABLED=true.</p>
+        <CardHeader label="Image Studio" action="Hugging Face · optional Gemini fallback" />
+        <p className="field-hint">Describe an illustration, study diagram, or film reference image. The deployed function needs an HF token with Inference Providers permission. Gemini is a separate, billable fallback and stays disabled unless an administrator explicitly opts in with GEMINI_IMAGE_ENABLED=true.</p>
         <form className="data-form" onSubmit={(event) => void buildImage(event)}>
           <label>Image prompt<textarea required minLength={8} rows={4} value={imagePrompt} onChange={(event) => setImagePrompt(event.target.value)} placeholder="A clean editorial illustration of a Kenyan courtroom, warm paper texture, no text" /></label>
           <button className="primary-button" type="submit" disabled={imageBusy}>{imageBusy ? <><ImageIcon size={16} /> Generating…</> : <><Sparkles size={16} /> Generate image</>}</button>
