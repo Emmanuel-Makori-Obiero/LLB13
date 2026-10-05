@@ -102,15 +102,12 @@ async function generateElevenLabsAudio(
   if (!turns.length) throw new Error("The script contains no speakable text.");
   const chunks = chunkSpeechTurns(turns);
   const outputs: Uint8Array[] = [];
-  const chunkTexts = chunks.map((chunk) => chunk.map((turn) => turn.text).join(" "));
   for (let index = 0; index < chunks.length; index += 1) {
     const chunk = chunks[index];
     const body = {
       model_id: model,
       language_code: language,
       apply_text_normalization: "auto",
-      ...(index > 0 ? { previous_text: chunkTexts[index - 1].slice(-100) } : {}),
-      ...(index + 1 < chunks.length ? { future_text: chunkTexts[index + 1].slice(0, 100) } : {}),
       inputs: chunk.map((turn) => ({
         text: turn.text,
         voice_id: turn.speaker === "TUTOR" ? tutorVoiceId : hostVoiceId,
@@ -237,6 +234,63 @@ async function generateGeminiAudio(text: string, keys: string[], model: string):
   throw new Error(failures.slice(-3).join("; ") || "Gemini TTS did not return audio.");
 }
 
+async function generateOpenAIAudio(
+  text: string,
+  keys: string[],
+  model: string,
+  hostVoice: string,
+  tutorVoice: string,
+): Promise<AudioResult> {
+  const turns = speechTurns(text);
+  if (!turns.length) throw new Error("The podcast script contains no speakable text.");
+  const chunks = turns.flatMap((turn) => chunkSpeechTurns([turn], 3500).flat());
+  const outputs: Uint8Array[] = [];
+  const failures: string[] = [];
+
+  for (const chunk of chunks) {
+    let generated: Response | null = null;
+    const turnFailures: string[] = [];
+    for (const key of keys) {
+      try {
+        generated = await fetch("https://api.openai.com/v1/audio/speech", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", Accept: "audio/mpeg" },
+          body: JSON.stringify({
+            model,
+            input: chunk.text,
+            voice: chunk.speaker === "TUTOR" ? tutorVoice : hostVoice,
+            response_format: "mp3",
+            instructions: chunk.speaker === "TUTOR"
+              ? "Speak as a thoughtful, clear Kenyan law tutor: natural, warm, precise, and conversational."
+              : "Speak as a warm, clear podcast host using natural Kenyan English, with an engaging conversational pace.",
+          }),
+          signal: AbortSignal.timeout(120_000),
+        });
+        if (generated.ok) break;
+        turnFailures.push(`OpenAI TTS ${generated.status}: ${(await generated.text()).slice(0, 500)}`);
+      } catch (error) {
+        turnFailures.push(error instanceof Error ? error.message : String(error));
+      }
+    }
+    if (!generated?.ok) {
+      failures.push(turnFailures.slice(-2).join("; ") || "OpenAI TTS did not return audio.");
+      throw new Error(failures.slice(-3).join("; "));
+    }
+    const contentType = generated.headers.get("content-type") || "audio/mpeg";
+    const bytes = new Uint8Array(await generated.arrayBuffer());
+    if (!contentType.toLowerCase().includes("audio") || bytes.length < 100) {
+      throw new Error("OpenAI TTS returned an empty or non-audio response.");
+    }
+    outputs.push(stripMp3Metadata(bytes));
+  }
+
+  const total = outputs.reduce((sum, bytes) => sum + bytes.length, 0);
+  const combined = new Uint8Array(total);
+  let offset = 0;
+  for (const part of outputs) { combined.set(part, offset); offset += part.length; }
+  return { bytes: combined, mimeType: "audio/mpeg", provider: "openai-tts", model, voices: new Set(turns.map((turn) => turn.speaker)).size };
+}
+
 async function generateHuggingFaceAudio(text: string, tokens: string[], model: string, endpoint: string): Promise<AudioResult> {
   let generated: Response | null = null;
   let lastDetail = "";
@@ -281,7 +335,9 @@ Deno.serve(async (req) => {
   const hfTokens = secretKeys("HF_TOKEN");
   const geminiKeys = secretKeys("GEMINI_API_KEY");
   const elevenLabsKeys = secretKeys("ELEVENLABS_API_KEY");
-  const geminiEnabled = Deno.env.get("GEMINI_TTS_ENABLED")?.toLowerCase() === "true";
+  const openAIKeys = secretKeys("OPENAI_API_KEY");
+  const geminiEnabled = Deno.env.get("GEMINI_TTS_ENABLED")?.toLowerCase() !== "false";
+  const openAIEnabled = Deno.env.get("OPENAI_TTS_ENABLED")?.toLowerCase() !== "false";
   const hfFallbackEnabled = Deno.env.get("HF_TTS_FALLBACK_ENABLED")?.toLowerCase() === "true";
   if (!url || !anon || !service) return json({ error: "Audio generation is missing Supabase server configuration." }, 503);
   const authHeader = req.headers.get("Authorization") || "";
@@ -297,13 +353,16 @@ Deno.serve(async (req) => {
   if (text.length > 12000) return json({ error: "This script is too long for one audio request. Shorten the episode or generate it in parts." }, 400);
   const turns = speechTurns(text);
   const plainText = turns.map((turn) => turn.text).join("\n");
-  if (!elevenLabsKeys.length && !(language === "en" && geminiEnabled && geminiKeys.length) && !(language === "en" && hfFallbackEnabled && hfTokens.length)) {
-    return json({ error: language === "sw" ? "Kiswahili voice audio needs ELEVENLABS_API_KEY_1 in Supabase Edge Function secrets. No robotic English-only fallback is used." : "Fluent audio is not configured. Add ELEVENLABS_API_KEY_1 in Supabase Edge Function secrets, then deploy generate-audio." }, 503);
+  if (!elevenLabsKeys.length && !(geminiEnabled && geminiKeys.length) && !(language === "en" && openAIEnabled && openAIKeys.length) && !(language === "en" && hfFallbackEnabled && hfTokens.length)) {
+    return json({ error: language === "sw" ? "Kiswahili audio needs ELEVENLABS_API_KEY_1 or GEMINI_API_KEY_1 in Supabase Edge Function secrets." : "No speech provider is configured. Add an ElevenLabs or Gemini API key; OpenAI TTS is also available when OPENAI_API_KEY_1 is configured." }, 503);
   }
   const hfModel = Deno.env.get("HF_TTS_MODEL") || "facebook/mms-tts-eng";
   const hfEndpoint = Deno.env.get("HF_TTS_URL") || `https://router.huggingface.co/hf-inference/models/${hfModel}`;
   const geminiModel = Deno.env.get("GEMINI_TTS_MODEL") || "gemini-3.8-flash-tts";
   const elevenLabsModel = Deno.env.get("ELEVENLABS_DIALOGUE_MODEL") || "eleven_v3";
+  const openAIModel = Deno.env.get("OPENAI_TTS_MODEL") || "gpt-4o-mini-tts";
+  const openAIHostVoice = Deno.env.get("OPENAI_TTS_HOST_VOICE") || "coral";
+  const openAITutorVoice = Deno.env.get("OPENAI_TTS_TUTOR_VOICE") || "onyx";
   const hostVoiceId = Deno.env.get("ELEVENLABS_HOST_VOICE_ID") || "Xb7hH8MSUJpSbSDYk0k2";
   const tutorVoiceId = Deno.env.get("ELEVENLABS_TUTOR_VOICE_ID") || "onwK4e9ZLuTAKqWW03F9";
   const failures: string[] = [];
@@ -313,8 +372,12 @@ Deno.serve(async (req) => {
     try { audio = await generateElevenLabsAudio(text, elevenLabsKeys, language, elevenLabsModel, hostVoiceId, tutorVoiceId); }
     catch (error) { failures.push(error instanceof Error ? error.message : String(error)); }
   }
-  if (!audio && language === "en" && geminiEnabled && geminiKeys.length) {
+  if (!audio && geminiEnabled && geminiKeys.length) {
     try { audio = await generateGeminiAudio(text, geminiKeys, geminiModel); }
+    catch (error) { failures.push(error instanceof Error ? error.message : String(error)); }
+  }
+  if (!audio && language === "en" && openAIEnabled && openAIKeys.length) {
+    try { audio = await generateOpenAIAudio(text, openAIKeys, openAIModel, openAIHostVoice, openAITutorVoice); }
     catch (error) { failures.push(error instanceof Error ? error.message : String(error)); }
   }
   if (!audio && language === "en" && hfFallbackEnabled && hfTokens.length) {
@@ -322,7 +385,8 @@ Deno.serve(async (req) => {
     catch (error) { failures.push(error instanceof Error ? error.message : String(error)); }
   }
   if (!audio) {
-    return json({ error: "No configured fluent audio provider completed this request.", detail: failures.join("; ") || "Check the ElevenLabs key, model and voice IDs in Supabase secrets." }, elevenLabsKeys.length ? 502 : 503);
+    const configuredProvider = elevenLabsKeys.length || (geminiEnabled && geminiKeys.length) || (openAIEnabled && openAIKeys.length) || (hfFallbackEnabled && hfTokens.length);
+    return json({ error: "No configured speech provider completed this request.", detail: failures.join("; ") || "Check the configured provider keys, model IDs, and voice IDs in Supabase Edge Function secrets." }, configuredProvider ? 502 : 503);
   }
 
   const extension = audio.mimeType === "audio/ogg" ? "ogg" : audio.mimeType === "audio/mpeg" ? "mp3" : "wav";

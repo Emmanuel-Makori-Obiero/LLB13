@@ -91,4 +91,4 @@ The script prints:
 Complete ...
 ```
 
-This test produces a two-speaker **script**. The Learning Studio's `Listen` button uses browser speech synthesis; it is not yet a separately rendered MP3 with two distinct voices. That requires a TTS worker, which can be added after this source-grounded script path is confirmed.
+This smoke test produces a two-speaker **script** only. In the Learning Studio, choose **Generate podcast audio** after the script is ready; the server renders and privately stores audio through the configured provider chain, then shows an in-page player and a download action. The player is not part of this standalone script-generation test.
