@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 // Supports: headings, bold/italic/code, lists (nested), tables, block quotes, rules, [S1] citations.
 
 const INLINE =
-  /(\*\*.+?\*\*(?!\*)|\*[^*\s][^*]*?\*(?!\*)|`[^`]+`|\[S\d+\])/g;
+  /(\*\*.+?\*\*(?!\*)|\*[^*\s][^*]*?\*(?!\*)|`[^`]+`|\[S\d+\]|\[[^\]]+\]\(https?:\/\/[^)]+\))/g;
 
 function inline(text: string, base: string): ReactNode[] {
   const out: ReactNode[] = [];
@@ -28,6 +28,11 @@ function inline(text: string, base: string): ReactNode[] {
           {t.slice(1, -1)}
         </sup>,
       );
+    else if (t.startsWith("[")) {
+      const link = /^\[([^\]]+)\]\((https?:\/\/[^)]+)\)$/.exec(t);
+      if (link) out.push(<a key={key} href={link[2]} target="_blank" rel="noreferrer">{link[1]} ↗</a>);
+      else out.push(plain(t));
+    }
     else out.push(<em key={key}>{inline(t.slice(1, -1), key)}</em>);
     last = at + t.length;
   }
