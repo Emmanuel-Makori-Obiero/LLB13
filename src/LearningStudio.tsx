@@ -17,6 +17,15 @@ type Doc = { id: string; title: string; scope: string };
 type Mode = "podcast" | "video";
 const isBookSource = (_doc: Doc) => true;
 
+function audioProviderLabel(provider: string | null) {
+  if (!provider) return "configured speech provider";
+  if (provider.includes("elevenlabs")) return "ElevenLabs";
+  if (provider.includes("gemini")) return "Google Gemini TTS";
+  if (provider.includes("openai")) return "OpenAI TTS";
+  if (provider.includes("huggingface")) return "Hugging Face TTS";
+  return provider.replace(/[-_]/g, " ");
+}
+
 const perspectives = [
   "Act as a careful Kenyan law lecturer. Identify the governing rule, authorities, reasoning, and any uncertainty in the selected source.",
   "Act as a plain-language tutor. Explain the selected topic with a concrete everyday example, likely confusion, and a quick recall question.",
@@ -43,6 +52,7 @@ export default function LearningStudio() {
   const [audioBusy, setAudioBusy] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [audioMimeType, setAudioMimeType] = useState("audio/mpeg");
+  const [audioProvider, setAudioProvider] = useState<string | null>(null);
   const [audioNote, setAudioNote] = useState("");
   const audioRequestId = useRef(0);
 
@@ -98,24 +108,46 @@ export default function LearningStudio() {
       setUploadingSource(false);
     }
   };
-  const downloadAudio = async () => {
+  const generatePodcastAudio = async () => {
     if (!script || audioBusy || rendering) return;
     const requestId = ++audioRequestId.current;
     const scriptSnapshot = script;
     const languageSnapshot = scriptLanguage || spokenLanguage;
     setAudioBusy(true);
     setAudioUrl(null);
+    setAudioProvider(null);
     setAudioNote("Creating fluent voice audio…");
     try {
       const result = await generateAudio({ text: scriptSnapshot, title: topic || "Podcast episode", language: languageSnapshot });
       if (requestId !== audioRequestId.current) return;
       setAudioUrl(result.signed_url);
       setAudioMimeType(result.mime_type || "audio/mpeg");
-      setAudioNote("Natural voice audio saved privately. Use the player or download link below.");
+      setAudioProvider(result.asset?.provider || null);
+      setAudioNote("Audio is ready. Use the player below to listen, or download the audio file.");
     } catch (e) {
       if (requestId === audioRequestId.current) setAudioNote(e instanceof Error ? e.message : "Could not create audio.");
     } finally {
       if (requestId === audioRequestId.current) setAudioBusy(false);
+    }
+  };
+  const downloadGeneratedAudio = async () => {
+    if (!audioUrl) return;
+    const extension = audioMimeType === "audio/mpeg" ? "mp3" : audioMimeType === "audio/ogg" ? "ogg" : "wav";
+    const filename = `${(topic || "podcast").replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.${extension}`;
+    try {
+      const response = await fetch(audioUrl);
+      if (!response.ok) throw new Error(`Download failed (${response.status}).`);
+      const blob = await response.blob();
+      if (!blob.size) throw new Error("The audio file was empty.");
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = filename;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000);
+    } catch (e) {
+      const detail = e instanceof Error ? ` (${e.message})` : "";
+      setAudioNote(`Direct download did not work${detail}. Use the audio player's menu to save the file.`);
     }
   };
   const renderMp4 = async () => {
@@ -134,6 +166,7 @@ export default function LearningStudio() {
           });
       setAudioUrl(narration.signed_url);
       setAudioMimeType(narration.mime_type || "audio/mpeg");
+      if ("asset" in narration) setAudioProvider(narration.asset?.provider || null);
       setAudioNote("The MP4 export is using the same natural voice narration shown in the audio player.");
       const narrationDuration = await new Promise<number>((resolve) => {
         const probe = document.createElement("audio");
@@ -297,6 +330,7 @@ export default function LearningStudio() {
     try {
       const findings: string[] = [];
       setAudioUrl(null);
+      setAudioProvider(null);
       setAudioNote("");
       const languageInstruction = spokenLanguage === "sw"
         ? "Write in fluent, natural Kiswahili used in Kenya. Preserve case names, statute titles, citations and official legal terms in their original form."
@@ -457,9 +491,9 @@ export default function LearningStudio() {
                   <button className="secondary-button" onClick={download}>
                     Download script
                   </button>
-                  <button className="secondary-button" onClick={() => void downloadAudio()} disabled={audioBusy || rendering}>
+                  <button className="secondary-button" onClick={() => void generatePodcastAudio()} disabled={audioBusy || rendering}>
                     {audioBusy ? <Loader2 size={13} className="studio-spin" /> : <Headphones size={13} />}
-                    {audioBusy ? "Creating fluent audio…" : audioUrl ? "Regenerate voice audio" : "Generate fluent audio"}
+                    {audioBusy ? "Creating audio…" : audioUrl ? "Regenerate audio" : mode === "podcast" ? "Generate podcast audio" : "Generate narration audio"}
                   </button>
                   {mode === "video" && (
                     <button
@@ -474,10 +508,10 @@ export default function LearningStudio() {
                     </button>
                   )}
                 </div>
-                <p className="field-hint">Voice generation sends this script to ElevenLabs, uses your account quota, and saves private audio in Supabase. Avoid confidential client material.</p>
-                {audioNote && <p className="field-hint">{audioNote}</p>}
-                {audioUrl && <div className="studio-audio-download"><audio controls src={audioUrl} /><a className="secondary-button" href={audioUrl} download={`${(topic || "podcast").replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.${audioMimeType === "audio/mpeg" ? "mp3" : audioMimeType === "audio/ogg" ? "ogg" : "wav"}`}>Download audio</a></div>}
               </div>
+                <p className="field-hint">Build learning episode creates the script; generate audio to make a playable file. The server tries ElevenLabs, then Google Gemini TTS, then English-only OpenAI TTS when configured. An optional English-only Hugging Face fallback can also be enabled. Provider use may consume quota or incur charges, so avoid confidential material.</p>
+                {audioNote && <p className="field-hint">{audioNote}</p>}
+                {audioUrl && <div className="studio-audio-download"><audio controls preload="metadata" src={audioUrl} aria-label="Generated podcast audio player" onError={() => setAudioNote("The player could not load this audio. Regenerate it to create a fresh playback link.")} /><button className="secondary-button" onClick={() => void downloadGeneratedAudio()}><Download size={13} /> Download audio</button><span className="field-hint">Voice: {audioProviderLabel(audioProvider)}</span></div>}
               {mode === "video" && (
                 <>
                   <p className="field-hint studio-export-note">
