@@ -16,6 +16,7 @@ type Props = {
   lessons: Lesson[];
   units: Unit[];
   members: Member[];
+  isAdmin: boolean;
   canDelete: (lesson: Lesson) => boolean;
   canEdit?: (lesson: Lesson) => boolean;
   setNotice: (n: string) => void;
@@ -44,6 +45,7 @@ export default function TimetablePage({
   lessons,
   units,
   members,
+  isAdmin,
   canDelete,
   canEdit,
   setNotice,
@@ -196,7 +198,7 @@ export default function TimetablePage({
             className="secondary-button"
             onClick={() => setShowPast((v) => !v)}
           >
-            {showPast ? "Hide past" : "Show past"}
+            {showPast ? "Hide past lessons" : "Show past lessons"}
           </button>
           <button className="primary-button" onClick={() => { setEditing(null); setOpen(true); }}>
             <Plus size={14} /> {schedule === "personal" ? "Add personal event" : "Add group lesson"}
@@ -231,10 +233,12 @@ export default function TimetablePage({
           ) : (
             <p className="field-hint">No structured rows could be detected from this file. The original source is available below.</p>
           )}
-          <details>
-            <summary>View original uploaded source</summary>
-            <pre className="shared-upload-text">{latestUpload.extracted_text || "The file was saved, but no readable text was extracted. The structured rows are shown in the timetable below."}</pre>
-          </details>
+          {isAdmin && latestUpload.extracted_text ? (
+            <details>
+              <summary>View original uploaded source (admin only)</summary>
+              <pre className="shared-upload-text">{latestUpload.extracted_text}</pre>
+            </details>
+          ) : null}
         </div>
       )}
       {days.length === 0 && (

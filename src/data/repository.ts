@@ -337,22 +337,46 @@ const supabaseRepository: Group13Repository = {
   },
   getLatestTimetableUpload: async () => {
     const { data, error } = await db()
-      .from("timetable_uploads")
-      .select("id,filename,mime_type,extracted_text,structured_rows,created_by,created_at")
+      .from("shared_timetable_uploads")
+      .select("id,filename,mime_type,structured_rows,created_by,created_at")
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
     if (error) throw new Error(`Could not load shared timetable upload: ${error.message}`);
-    return (data as SharedTimetableUpload | null) ?? null;
+    if (!data) return null;
+    const { data: admin } = await db().rpc("is_super_admin");
+    if (admin) {
+      const { data: raw } = await db()
+        .from("timetable_uploads")
+        .select("extracted_text")
+        .eq("id", data.id)
+        .maybeSingle();
+      return { ...data, extracted_text: raw?.extracted_text ?? "" } as SharedTimetableUpload;
+    }
+    return data as SharedTimetableUpload;
   },
   createTimetableUpload: async (upload) => {
-    const { data, error } = await db()
+    const client = db();
+    const { data: raw, error: rawError } = await client
       .from("timetable_uploads")
       .insert(upload)
       .select("id,filename,mime_type,extracted_text,structured_rows,created_by,created_at")
       .single();
-    if (error) throw new Error(`Could not share timetable upload: ${error.message}`);
-    return data as SharedTimetableUpload;
+    if (rawError) throw new Error(`Could not share timetable upload: ${rawError.message}`);
+    const { data, error } = await client
+      .from("shared_timetable_uploads")
+      .insert({
+        id: raw.id,
+        filename: raw.filename,
+        mime_type: raw.mime_type,
+        structured_rows: raw.structured_rows,
+        created_by: raw.created_by,
+        created_at: raw.created_at,
+      })
+      .select("id,filename,mime_type,structured_rows,created_by,created_at")
+      .single();
+    if (error) throw new Error(`Could not publish structured timetable upload: ${error.message}`);
+    return { ...data, extracted_text: raw.extracted_text } as SharedTimetableUpload;
   },
   adminCreateUnit: async (unit) => {
     if (!supabase) throw new Error("Not connected.");

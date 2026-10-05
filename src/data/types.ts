@@ -113,7 +113,7 @@ export type SharedTimetableUpload = {
   id: string;
   filename: string;
   mime_type?: string | null;
-  extracted_text: string;
+  extracted_text?: string;
   structured_rows: Omit<Lesson, "id" | "created_by">[];
   created_by?: string | null;
   created_at: string;

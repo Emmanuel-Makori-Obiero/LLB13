@@ -1019,6 +1019,7 @@ function App() {
               lessons={lessons}
               units={units}
               members={members}
+              isAdmin={isAdmin}
               canDelete={(lesson) =>
                 isAdmin || (!!userId && lesson.created_by === userId)
               }
