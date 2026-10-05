@@ -710,7 +710,13 @@ function App() {
           initialNotice={authCallbackNotice}
           onSignedIn={(email) => {
             setUserEmail(email);
-            setPage(view === "scanner" ? "scanner" : "dashboard");
+            const returnPath = window.sessionStorage.getItem("group13-post-auth-path");
+            if (returnPath) {
+              window.sessionStorage.removeItem("group13-post-auth-path");
+              window.history.pushState({}, "", returnPath);
+              setPathKey(window.location.pathname);
+              setView(viewFromPath());
+            } else setPage(view === "scanner" ? "scanner" : "dashboard");
           }}
           onBackToHome={() => setPage("dashboard")}
         />
@@ -718,8 +724,16 @@ function App() {
     return (
       <LandingPage
         configured={isSupabaseConfigured}
-        onSignIn={() => setPage("login")}
-        onSignUp={() => setPage("signup")}
+        onSignIn={() => {
+          if (window.location.pathname === "/arena" && window.location.search)
+            window.sessionStorage.setItem("group13-post-auth-path", `${window.location.pathname}${window.location.search}`);
+          setPage("login");
+        }}
+        onSignUp={() => {
+          if (window.location.pathname === "/arena" && window.location.search)
+            window.sessionStorage.setItem("group13-post-auth-path", `${window.location.pathname}${window.location.search}`);
+          setPage("signup");
+        }}
       />
     );
   }
@@ -1134,7 +1148,7 @@ function App() {
               }}
             />
           )}
-          {view === "arena" && <GamesHub materials={materials} userId={userId} displayName={profile.displayName || userEmail?.split("@")[0] || "Player"} />}
+          {view === "arena" && <GamesHub materials={materials} userId={userId} displayName={profile.displayName || userEmail?.split("@")[0] || "Player"} isAdmin={isAdmin} inviteCode={new URLSearchParams(window.location.search).get("join")} />}
           {view === "members" && <SectionedMembersPage members={members} />}
           {view === "dictionary" && <LegalDictionaryPage />}
           {view === "assistant" && (
