@@ -3,6 +3,18 @@ import { supabase } from "../data/repository";
 export type YouTubeItem = { id: string; playlist_id: string; title: string; url: string; position: number };
 export type YouTubePlaylist = { id: string; user_id: string; title: string; items: YouTubeItem[] };
 
+export function youtubePlaylistExportText(playlist: Pick<YouTubePlaylist, "title" | "items">) {
+  const songs = playlist.items.map((item, index) => `${index + 1}. ${item.title}\n${item.url}`);
+  return `${playlist.title}\n\n${songs.join("\n\n")}\n`;
+}
+
+export function youtubePlaylistExportJson(playlist: Pick<YouTubePlaylist, "title" | "items">) {
+  return JSON.stringify({
+    title: playlist.title,
+    items: playlist.items.map(({ title, url, position }) => ({ title, url, position })),
+  }, null, 2);
+}
+
 function db() { if (!supabase) throw new Error("Supabase is not configured."); return supabase; }
 
 export async function loadYouTubePlaylist(): Promise<YouTubePlaylist> {

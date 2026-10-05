@@ -23,6 +23,7 @@ import {
   updateScannedNote,
   type ScannedNote,
 } from "./lib/scannerNotes";
+import { optimizeScanImage } from "./lib/scanImage";
 import "./scanner.css";
 
 const MAX_PAGES = 10;
@@ -132,7 +133,7 @@ export default function ScannerNotesPage({ userId }: { userId: string | null }) 
     setNotice("");
   };
 
-  const addFiles = (incoming: FileList | File[]) => {
+  const addFiles = async (incoming: FileList | File[]) => {
     const batch = Array.from(incoming);
     if (!batch.length) return;
     const invalidType = batch.find((file) => !file.type.startsWith("image/"));
@@ -154,10 +155,20 @@ export default function ScannerNotesPage({ userId }: { userId: string | null }) 
       setError("The total scan is over 60 MB. Remove a page or choose smaller images.");
       return;
     }
-    setFiles(next);
+    setNotice("Optimizing pages for low-memory OCR…");
+    const optimized: File[] = [];
+    try {
+      for (const file of next) optimized.push(await optimizeScanImage(file));
+    } catch (cause) {
+      setNotice("");
+      setError(cause instanceof Error ? cause.message : "Could not prepare these images.");
+      return;
+    }
+    setFiles(optimized);
     setDraftText("");
     setProgress(0);
     setError("");
+    setNotice("Pages are optimized and ready for OCR.");
     setActiveNote(null);
     setIsEditingSaved(false);
     if (!draftTitle.trim()) setDraftTitle(`Scan notes · ${fileDate()}`);
@@ -366,7 +377,7 @@ export default function ScannerNotesPage({ userId }: { userId: string | null }) 
         <a className="scan-guide-link" href="/features">Explore all features <span aria-hidden="true">↗</span></a>
       </header>
 
-      <div className="scan-privacy-note"><span className="scan-privacy-mark"><Check size={14} /></span><span><strong>Your pages stay yours.</strong> OCR runs in this browser. When you save, note text goes to your account and page images go to private storage.</span></div>
+      <div className="scan-privacy-note"><span className="scan-privacy-mark"><Check size={14} /></span><span><strong>Your pages stay yours.</strong> Images are resized in this browser before OCR and upload to keep the scanner reliable on low-memory phones and laptops.</span></div>
 
       <div className="scan-layout">
         <section className="scan-workspace" aria-label="Create a scan note">
@@ -407,7 +418,7 @@ export default function ScannerNotesPage({ userId }: { userId: string | null }) 
                   <div className="scan-upload-row">
                     <button type="button" className="scan-primary-button" onClick={() => fileInput.current?.click()} disabled={isProcessing || files.length >= MAX_PAGES}><Upload size={16} /> Choose or photograph pages</button>
                     <input ref={fileInput} className="scan-file-input" type="file" accept="image/*" capture="environment" multiple onChange={(event) => { if (event.target.files) addFiles(event.target.files); event.currentTarget.value = ""; }} />
-                    <span>JPEG, PNG or WebP images · up to 10 pages per note</span>
+                    <span>JPEG, PNG or WebP images · resized locally for safer processing · up to 10 pages per note</span>
                   </div>
 
                   {files.length > 0 && <div className="scan-page-queue" aria-label="Pages selected for scanning">{files.map((file, index) => <figure key={`${file.name}-${index}`} className="scan-page-thumb"><img src={previews[index]} alt={`Selected page ${index + 1}`} /><figcaption><span>PAGE {index + 1}</span><span>{file.name}</span></figcaption><button type="button" onClick={() => removePage(index)} aria-label={`Remove page ${index + 1}`}><Trash2 size={13} /></button></figure>)}</div>}
@@ -416,7 +427,7 @@ export default function ScannerNotesPage({ userId }: { userId: string | null }) 
                     <button type="button" className="scan-primary-button" onClick={() => void runOcr()} disabled={isProcessing || !files.length}><ScanLine size={16} /> {isProcessing ? "Reading pages…" : "Extract text"}</button>
                     {files.length > 0 && <button type="button" className="scan-text-button" onClick={() => { setFiles([]); setDraftText(""); setProgress(0); setError(""); }} disabled={isProcessing}>Clear pages</button>}
                   </div>
-                  {isProcessing && <div className="scan-progress" role="status"><div className="scan-progress-label"><span>{progressLabel}</span><strong>{progress}%</strong></div><progress max="100" value={progress}>{progress}%</progress><small>The first run may download language data to this browser. Later pages reuse the same OCR worker.</small></div>}
+                  {isProcessing && <div className="scan-progress" role="status"><div className="scan-progress-label"><span>{progressLabel}</span><strong>{progress}%</strong></div><progress max="100" value={progress}>{progress}%</progress><small>Pages are processed one at a time from resized copies to reduce memory use. The first run may download language data.</small></div>}
                 </>
               )}
 

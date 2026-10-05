@@ -95,7 +95,7 @@ import BookReader from "./BookReader";
 import LearningStudio from "./LearningStudio";
 import GuidedStudyPage from "./GuidedStudyPage";
 import AssignmentHelperPage from "./AssignmentHelperPage";
-import { addYouTubeItem, loadYouTubePlaylist, removeYouTubeItem, type YouTubePlaylist } from "./lib/youtubePlaylist";
+import { addYouTubeItem, loadYouTubePlaylist, removeYouTubeItem, youtubePlaylistExportJson, youtubePlaylistExportText, type YouTubePlaylist } from "./lib/youtubePlaylist";
 import GamesHub from "./GamesHub";
 import {
   createFilmProject,
@@ -2672,6 +2672,37 @@ function MediaPage({
     if (!savedPlaylist || !playlistTitle.trim() || !id) { setPlaylistNote("Enter a song title and a valid YouTube video URL."); return; }
     try { const item = await addYouTubeItem(savedPlaylist.id, playlistTitle, playlistUrl); setSavedPlaylist((current) => current ? { ...current, items: [...current.items, item] } : current); onAddQueue([{ id: `youtube-${id}`, title: item.title, url: item.url, source: "YouTube playlist", kind: "youtube", youtubeId: id }]); setPlaylistTitle(""); setPlaylistUrl(""); setPlaylistNote("Song added. It is now in your playlist and queue."); } catch (error) { setPlaylistNote(error instanceof Error ? error.message : "Could not add song."); }
   };
+  const downloadPlaylist = (format: "txt" | "json") => {
+    if (!savedPlaylist?.items.length) return;
+    const body = format === "json" ? youtubePlaylistExportJson(savedPlaylist) : youtubePlaylistExportText(savedPlaylist);
+    const blob = new Blob([body], { type: format === "json" ? "application/json" : "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${savedPlaylist.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "playlist"}.${format}`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setPlaylistNote(`Playlist downloaded as ${format.toUpperCase()}.`);
+  };
+  const sharePlaylist = async () => {
+    if (!savedPlaylist?.items.length) return;
+    const text = youtubePlaylistExportText(savedPlaylist);
+    try {
+      if (navigator.share) await navigator.share({ title: savedPlaylist.title, text });
+      else {
+        await navigator.clipboard.writeText(text);
+        setPlaylistNote("Playlist copied to your clipboard.");
+      }
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") return;
+      try {
+        await navigator.clipboard.writeText(text);
+        setPlaylistNote("Playlist copied to your clipboard.");
+      } catch {
+        setPlaylistNote("Sharing is unavailable here. Download the TXT or JSON export instead.");
+      }
+    }
+  };
 
   const addLocalTracks = (files: FileList | null) => {
     if (!files?.length) return;
@@ -2952,7 +2983,7 @@ function MediaPage({
       <div className="card card-pad youtube-playlist-card" style={{ marginTop: 18 }}>
         <CardHeader label="My YouTube playlist" action={`${savedPlaylist?.items.length ?? 0} songs`} />
         <p className="field-hint">Add songs one by one. Each song is saved privately and added to the player queue.</p>
-        {!!savedPlaylist?.items.length && <button className="primary-button" type="button" onClick={() => onPlayQueue(playlistTracks(savedPlaylist.items), 0)}><Play size={13} /> Play all songs</button>}
+        {!!savedPlaylist?.items.length && <div className="media-actions"><button className="primary-button" type="button" onClick={() => onPlayQueue(playlistTracks(savedPlaylist.items), 0)}><Play size={13} /> Play all songs</button><button className="secondary-button" type="button" onClick={() => void sharePlaylist()}>Share playlist</button><button className="secondary-button" type="button" onClick={() => downloadPlaylist("txt")}><Download size={13} /> Download TXT</button><button className="secondary-button" type="button" onClick={() => downloadPlaylist("json")}><Download size={13} /> Download JSON</button></div>}
         <form className="data-form playlist-add-form" onSubmit={(event) => void addPlaylistSong(event)}>
           <label>Song title<input required value={playlistTitle} onChange={(event) => setPlaylistTitle(event.target.value)} placeholder="e.g. Focus study music" /></label>
           <label>YouTube video URL<input required type="url" value={playlistUrl} onChange={(event) => setPlaylistUrl(event.target.value)} placeholder="https://www.youtube.com/watch?v=…" /></label>
