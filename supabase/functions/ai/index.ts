@@ -387,6 +387,11 @@ const FEATURES: Record<
     docWide: true,
     task: `Turn this part of a lecture transcript into complete, natural student study notes. Keep the lecturer's order. Do NOT leave out any substantive point: every rule, definition, test, element, case, statute and section, example, date, name, number, exception and instruction must appear. Remove only filler, repetition, jokes and chit-chat. Do not open with "Here are the notes", do not use generic AI filler, and do not repeat "key takeaway" or "in summary" after every section. Use "## " headings for major topics, "### " headings for Rule, Authority, Example, Exam focus or Takeaway, short paragraphs and purposeful bullets. Use bold only for genuinely important terms, not whole sentences. When the source contains 2 or more comparable cases, tests, elements or concepts, include a compact Markdown table with clear column headings; never invent a comparison. Use a blockquote for an exam warning or lecturer emphasis. If a passage is garbled, write [unclear] instead of guessing. If this part has cases or statutes, end with a short "Authorities mentioned" list.`,
   },
+  extract_assignments: {
+    json: true,
+    docWide: true,
+    task: 'Find coursework and explicit student tasks in the supplied lecture transcript. Return ONLY valid JSON in this exact shape: {"assignments":[{"title":"","brief":"","due":"","source_excerpt":"","confidence":0}]}. Include essay questions, assignments, presentations, group work, readings explicitly set by the lecturer, research tasks, submissions, deadlines and clear follow-up tasks. A task may be phrased as advice such as "read chapter 4" or "prepare a case brief"; include it when the lecturer clearly directs students to do it. Preserve the lecturer\'s wording and dates. Keep due empty when no deadline is stated. Include a short verbatim source_excerpt so the student can verify the item. Confidence must be between 0 and 1. Do not include ordinary lecture activities, rhetorical questions, examples, past tasks already completed, or vague suggestions. Do not invent or infer a task, title, deadline, owner or course requirement. If none are clearly stated, return {"assignments":[]}.',
+  },
   quality_check: {
     json: true,
     docWide: true,
