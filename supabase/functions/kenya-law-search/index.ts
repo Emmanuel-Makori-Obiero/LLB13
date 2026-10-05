@@ -156,18 +156,30 @@ Deno.serve(async (request) => {
   const requestedUrl = body.url ? officialCaseUrl(String(body.url)) : null;
   if (body.url && !requestedUrl) return json({ error: "Only official Kenya Law judgment links can be opened." }, 400);
   if (requestedUrl) {
-    const judgment = await fetch(requestedUrl, {
-      headers: {
-        Accept: "text/html,application/xhtml+xml",
-        "User-Agent": "Mozilla/5.0 (compatible; Group13CaseFinder/1.0; +https://kenyalaw.org/)",
-      },
-    });
-    if (!judgment.ok) return json({ error: "The official judgment could not be loaded right now." }, 502);
-    const html = await judgment.text();
-    const text = extractJudgmentText(html);
-    if (text.length < 100) return json({ error: "The official judgment did not contain readable text." }, 422);
-    const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-    return json({ document: { title: titleMatch ? decodeHtml(titleMatch[1]) : "Kenya Law judgment", url: requestedUrl, text } });
+    const candidates = [requestedUrl, `${requestedUrl.replace(/\/$/, "")}/source`];
+    let bestText = "";
+    let bestHtml = "";
+    for (const candidate of candidates) {
+      try {
+        const judgment = await fetch(candidate, {
+          headers: {
+            Accept: "text/html,application/xhtml+xml",
+            "User-Agent": "Mozilla/5.0 (compatible; Group13CaseFinder/1.0; +https://kenyalaw.org/)",
+          },
+          signal: AbortSignal.timeout(12000),
+        });
+        if (!judgment.ok) continue;
+        const html = await judgment.text();
+        const text = extractJudgmentText(html);
+        if (text.length > bestText.length) { bestText = text; bestHtml = html; }
+        if (text.length > 900) break;
+      } catch {
+        /* Try the source representation next. */
+      }
+    }
+    if (bestText.length < 100) return json({ error: "The official judgment did not contain readable text." }, 422);
+    const titleMatch = bestHtml.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    return json({ document: { title: titleMatch ? decodeHtml(titleMatch[1]) : "Kenya Law judgment", url: requestedUrl, text: bestText } });
   }
 
   const query = String(body.query ?? "").trim().replace(/\s+/g, " ");
