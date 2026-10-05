@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ArrowUpRight, BookOpen, Search } from "lucide-react";
+import { ArrowUpRight, BookOpen, Loader2, Search } from "lucide-react";
+import { searchKenyaLaw, type KenyaLawCaseResult } from "./lib/kenyaLaw";
 import "./kenya-law.css";
 
 const courts = [
@@ -15,15 +16,24 @@ const courts = [
 
 export default function KenyaLawCasesPage() {
   const [query, setQuery] = useState("");
+  const [results, setResults] = useState<KenyaLawCaseResult[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
 
-  const searchOfficialCases = (event: React.FormEvent<HTMLFormElement>) => {
+  const searchOfficialCases = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const term = query.trim();
     if (!term) return;
-    const url = new URL("https://kenyalaw.org/search/");
-    url.searchParams.set("q", term);
-    url.searchParams.set("nature", "Judgment");
-    window.open(url.toString(), "_blank", "noopener,noreferrer");
+    setBusy(true);
+    setError("");
+    setResults([]);
+    try {
+      setResults(await searchKenyaLaw(term));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The case search is unavailable right now.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -45,13 +55,16 @@ export default function KenyaLawCasesPage() {
           <p className="kl-eyebrow">OFFICIAL KENYAN CASE LAW</p>
           <h1 id="kl-title">Read the cases.<br /><strong>Go to the source.</strong></h1>
           <p className="kl-lede">Search published judgments by case name, legal issue, or citation. Results open on Kenya Law, the National Council for Law Reporting’s official legal-information site.</p>
-          <form className="kl-search" onSubmit={searchOfficialCases} role="search">
+          <form className="kl-search" onSubmit={(event) => void searchOfficialCases(event)} role="search">
             <Search size={19} aria-hidden="true" />
             <label className="kl-sr-only" htmlFor="kl-case-query">Search Kenyan judgments</label>
             <input id="kl-case-query" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Case name, citation, or legal issue" required />
-            <button type="submit">Search judgments <ArrowUpRight size={16} /></button>
+            <button type="submit" disabled={busy}>{busy ? <><Loader2 className="kl-spin" size={16} /> Searching</> : <>Find cases <Search size={16} /></>}</button>
           </form>
-          <a className="kl-advanced" href="https://kenyalaw.org/search/?show-advanced-tab=1&nature=Judgment" target="_blank" rel="noopener noreferrer">Open Kenya Law advanced search <ArrowUpRight size={14} /></a>
+          <p className="kl-search-note">The free worker searches public official Kenya Law links and returns the result here. It does not require a Google login.</p>
+          {error && <p className="kl-error" role="alert">{error}</p>}
+          {results.length > 0 && <section className="kl-results" aria-live="polite" aria-labelledby="kl-results-title"><div className="kl-results-head"><div><p className="kl-eyebrow">RESEARCH OUTPUT</p><h2 id="kl-results-title">Relevant judgments.</h2></div><span>{results.length} result{results.length === 1 ? "" : "s"}</span></div><div className="kl-result-list">{results.map((result) => <a key={result.url} href={result.url} target="_blank" rel="noopener noreferrer"><span><strong>{result.title}</strong>{result.citation && <small>{result.citation}</small>}</span><ArrowUpRight size={17} aria-hidden="true" /></a>)}</div></section>}
+          {results.length === 0 && !busy && !error && query.trim().length >= 3 && <p className="kl-no-results">No official Kenya Law judgment links were found for that query. Try a case name, citation, statute, or legal issue.</p>}
         </section>
 
         <section className="kl-courts" aria-labelledby="kl-courts-title">

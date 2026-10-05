@@ -36,8 +36,27 @@
 .kl-search input::placeholder { color: #747b76; }
 .kl-search:focus-within { border-bottom: 2px solid var(--kl-forest); }
 .kl-search button { display: inline-flex; align-items: center; justify-content: center; gap: 9px; min-height: 46px; padding: 0 17px; border: 0; background: var(--kl-forest); color: #fff; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.kl-search button:disabled { opacity: .65; cursor: wait; }
 .kl-search button:hover { background: #0d2a25; }
 .kl-search button:focus-visible, .kl-advanced:focus-visible, .kl-court-list a:focus-visible, .kl-constitution a:focus-visible { outline: 2px solid var(--kl-forest); outline-offset: 4px; }
+.kl-spin { animation: kl-spin .8s linear infinite; }
+@keyframes kl-spin { to { transform: rotate(360deg); } }
+.kl-search-note, .kl-error, .kl-no-results { max-width: 740px; margin: 15px 0 0; font-size: 12px; line-height: 1.6; }
+.kl-search-note { color: #555d58; }
+.kl-error { color: #9a1d1d; }
+.kl-no-results { color: #555d58; }
+.kl-results { margin-top: 46px; padding-top: 27px; border-top: 1px solid #dfe3e0; }
+.kl-results-head { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 18px; }
+.kl-results-head .kl-eyebrow { margin-bottom: 9px; }
+.kl-results-head h2 { margin: 0; font: 500 clamp(30px, 4vw, 46px)/1.08 "Source Serif 4", Georgia, serif; letter-spacing: -.035em; }
+.kl-results-head > span { color: #555d58; font-size: 12px; }
+.kl-result-list { display: grid; border-top: 1px solid #dfe3e0; }
+.kl-result-list a { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 17px 0; border-bottom: 1px solid #dfe3e0; color: #101311; text-decoration: none; }
+.kl-result-list a:hover { color: var(--kl-forest); }
+.kl-result-list a span { display: grid; gap: 7px; }
+.kl-result-list a strong { font-size: 14px; font-weight: 600; line-height: 1.5; }
+.kl-result-list a small { color: var(--kl-forest); font-size: 10px; font-weight: 700; letter-spacing: .05em; }
+.kl-result-list a svg { flex: 0 0 auto; color: var(--kl-forest); }
 .kl-advanced { display: inline-flex; align-items: center; gap: 7px; margin-top: 15px; color: var(--kl-forest); font-size: 12px; font-weight: 700; text-decoration: none; }
 .kl-advanced:hover { text-decoration: underline; text-underline-offset: 4px; }
 .kl-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }

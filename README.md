@@ -25,6 +25,16 @@ Open the app and choose **Create account** (or visit `/signup`). If email confir
 
 The separate AI/media Edge Functions and server-side provider secrets must also be deployed for podcast audio, image, and video generation. See [Media generation and app installation](docs/media-and-install-setup.md) for ElevenLabs narration, optional Gemini API safeguards, provider secrets, and PWA install instructions.
 
+### Free Kenya Law case search
+
+Deploy `supabase/functions/kenya-law-search` with the Supabase CLI:
+
+```bash
+supabase functions deploy kenya-law-search
+```
+
+The signed-in Lawyer Agent and Case Law page then search public official Kenya Law judgment links and show the output inline. This free path does not require a Google login or a persistent browser. A private authenticated browser session for a Google account requires a separately hosted secure runtime and should never use credentials embedded in the frontend.
+
 The public cinematic landing page is `/`; prominent sign-in and sign-up screens are available at `/login` and `/signup`. The in-app Help button points users to the major study features.
 
 When both values are present, `src/data/repository.ts` uses Supabase as the only source of truth. Configuration or query errors are shown in the UI; the client no longer falls back to bundled demo data.
