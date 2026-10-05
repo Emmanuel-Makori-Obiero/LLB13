@@ -1,0 +1,11 @@
+{
+  "name": "llb13-kenya-law-browser-indexer",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "search": "node index.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.52.0"
+  }
+}
