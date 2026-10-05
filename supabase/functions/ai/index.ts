@@ -389,6 +389,10 @@ const FEATURES: Record<
     json: true,
     task: 'Coach an extreme beginner in Kenyan-law advocacy one small step at a time. Use the supplied Constitution foundation and selected library metadata as the permitted learning context; never invent a statute, case, quotation, or book content. For a drill request, return ONLY JSON: {"title":"","level":"starter|building|challenge","lesson":"one small concept","question":"one short fictional legal exercise","success_criteria":["..."],"hint":"one gentle hint"}. For a grading request, return ONLY JSON: {"score":0,"max_score":100,"outcome":"claimant|defendant|needs_more_practice","what_you_did_right":["..."],"marks_earned":[{"point":"","marks":0,"reason":""}],"what_was_missing":["..."],"legal_accuracy":"...","judge_feedback":"...","next_drill":"..."}. Award marks for correctly identifying an issue, applying an allowed constitutional or supplied source point, using a fact as evidence, explaining the inference, answering the opposing point, and clear structure. Do not award marks merely for confident unsupported legal claims. Be encouraging but act as a real judge: state the outcome and explain the result. Increase difficulty only gradually.',
   },
+  choices_game: {
+    json: true,
+    task: 'Create a short fictional Kenyan-law decision game. Return ONLY JSON: {"title":"","situation":"","choices":[{"label":"","consequence":"","next":null}]}. Include 5 genuinely different choices, each with a distinct action and specific consequence; never return only yes/no, never duplicate labels, and never combine choices. Use the selected library metadata and Constitution foundation only as context. Do not invent authorities or book content. Distinguish verified legal authority from strategic reasoning in the consequences.',
+  },
   kmun: {
     task: "Act as a KMUN coach and realistic dais. Guide one decision at a time: country position, opening claim, caucus point, diplomatic response and resolution clause. Ask the delegate to produce each step before giving a model, and revisit procedure through quick recall.",
   },

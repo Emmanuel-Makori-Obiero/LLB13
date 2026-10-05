@@ -455,11 +455,19 @@ export default function GamesHub({
     setChoiceDebrief("");
     setChoicePath([]);
     try {
-      const result = await askAI({ feature: "quiz", mode: "general", messages: [{ role: "user", content: `Create one short branching Kenyan-law decision game about ${sourceLabel}. Return ONLY JSON with title, situation, and choices (at least three). Each choice has label, consequence, and optional next. Use fictional facts, do not invent legal authorities, and distinguish authority from strategic reasoning.` }] });
-      const raw = result.data && typeof result.data === "object" ? result.data : parseJsonAnswer(result.answer);
-      const node = raw as ChoiceNode;
-      if (!node.title || !node.situation || !Array.isArray(node.choices) || node.choices.length < 2) throw new Error("The generated Choices game did not have enough options.");
-      setChoiceNode(node);
+      let lastError = "The generated Choices game did not have enough options.";
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const result = await askAI({ feature: "choices_game", mode: "general", messages: [{ role: "user", content: `Create one short branching Kenyan-law decision game about ${sourceLabel}. You MUST provide at least 4 genuinely different options (prefer 5), each with a distinct label and a specific consequence; do not combine options or return a yes/no pair. Each choice may have an optional next. Use fictional facts, do not invent legal authorities, and distinguish verified authority from strategic reasoning.${attempt ? " The previous draft had too few options; regenerate with at least 4 distinct choices." : ""}` }] });
+        const raw = result.data && typeof result.data === "object" ? result.data : parseJsonAnswer(result.answer);
+        const candidate = raw as ChoiceNode;
+        const choices = Array.isArray(candidate.choices) ? candidate.choices.filter((choice, index, all) => choice?.label?.trim() && all.findIndex((item) => item.label.trim().toLowerCase() === choice.label.trim().toLowerCase()) === index) : [];
+        if (candidate.title && candidate.situation && choices.length >= 4) {
+          setChoiceNode({ ...candidate, choices });
+          return;
+        }
+        lastError = `The generated Choices game had ${choices.length} distinct option${choices.length === 1 ? "" : "s"}; at least 4 are required.`;
+      }
+      throw new Error(lastError);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Could not generate the Choices game.");
     } finally {
