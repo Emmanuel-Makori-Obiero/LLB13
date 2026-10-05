@@ -51,7 +51,9 @@ async function main() {
   const byUrl = new Map((cache.results ?? []).map((item) => [item.url, item]));
   const contextOptions = { userAgent: USER_AGENT, viewport: { width: 1280, height: 900 } };
   if (options.profile) contextOptions.storageState = undefined;
-  const browser = await chromium.launchPersistentContext(options.profile || undefined, { ...contextOptions, headless: !options.headed });
+  const browser = options.profile
+    ? await chromium.launchPersistentContext(options.profile, { ...contextOptions, headless: !options.headed })
+    : await chromium.launch({ headless: !options.headed });
   const page = await browser.newPage();
   page.setDefaultTimeout(25000);
   try {
