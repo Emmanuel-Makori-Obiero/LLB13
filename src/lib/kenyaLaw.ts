@@ -26,6 +26,7 @@ export function suggestCaseQueries(query: string): string[] {
     defamtion: "defamation", succesion: "succession", judical: "judicial review",
   };
   const direct = replacements[normalized];
+  const clean = query.trim();
   const suggestions = direct ? [direct] : [];
   if (!direct && normalized.length >= 4) {
     const distance = (a: string, b: string) => {
@@ -42,7 +43,10 @@ export function suggestCaseQueries(query: string): string[] {
     };
     for (const term of COMMON_LEGAL_TERMS) if (distance(normalized, term) <= Math.max(2, Math.floor(term.length / 4))) suggestions.push(term);
   }
-  return [...new Set(suggestions)].slice(0, 4);
+  if (clean.length >= 3) {
+    suggestions.push(`${clean} case`, `${clean} judgment`, `${clean} Kenya Law`);
+  }
+  return [...new Set(suggestions)].slice(0, 5);
 }
 
 export async function searchKenyaLaw(query: string): Promise<KenyaLawCaseResult[]> {

@@ -69,20 +69,16 @@ function extractJudgmentText(html: string) {
 }
 
 async function discoverResults(query: string): Promise<{ results: CaseResult[]; providers: string[] }> {
-  const sources = [
-    {
-      name: "Google",
-      url: `https://www.google.com/search?gbv=1&num=10&q=${encodeURIComponent(`site:new.kenyalaw.org/akn/ke/judgment ${query}`)}`,
-    },
-    {
-      name: "Bing",
-      url: `https://www.bing.com/search?count=10&q=${encodeURIComponent(`site:new.kenyalaw.org/akn/ke/judgment ${query}`)}`,
-    },
-    {
-      name: "Kenya Law",
-      url: `https://new.kenyalaw.org/search/?q=${encodeURIComponent(query)}`,
-    },
+  const queryVariants = [
+    `site:new.kenyalaw.org/akn/ke/judgment ${query}`,
+    `site:kenyalaw.org ${query} judgment`,
+    `${query} Kenya Law judgment`,
   ];
+  const sources = queryVariants.flatMap((variant, index) => [
+    { name: index === 0 ? "Google" : "Google related", url: `https://www.google.com/search?gbv=1&num=10&q=${encodeURIComponent(variant)}` },
+    { name: index === 0 ? "Bing" : "Bing related", url: `https://www.bing.com/search?count=10&q=${encodeURIComponent(variant)}` },
+  ]);
+  sources.push({ name: "Kenya Law", url: `https://new.kenyalaw.org/search/?q=${encodeURIComponent(query)}` });
   const providers: string[] = [];
   for (const source of sources) {
     try {
