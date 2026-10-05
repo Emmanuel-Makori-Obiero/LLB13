@@ -11,6 +11,7 @@ import type {
   Todo,
   Unit,
   TimetableProposal,
+  SharedTimetableUpload,
 } from "./types";
 
 export type Group13Repository = {
@@ -86,6 +87,8 @@ export type Group13Repository = {
   rollbackTimetableProposal: (id: string) => Promise<number>;
   rejectTimetableProposal: (id: string) => Promise<void>;
   deleteTimetableProposal: (id: string) => Promise<void>;
+  getLatestTimetableUpload: () => Promise<SharedTimetableUpload | null>;
+  createTimetableUpload: (upload: Pick<SharedTimetableUpload, "filename" | "mime_type" | "extracted_text" | "structured_rows">) => Promise<SharedTimetableUpload>;
   adminCreateUnit: (
     unit: Pick<Unit, "name" | "code" | "lead">,
   ) => Promise<Unit>;
@@ -331,6 +334,25 @@ const supabaseRepository: Group13Repository = {
       .eq("id", id);
     if (error)
       throw new Error(`Could not delete timetable proposal: ${error.message}`);
+  },
+  getLatestTimetableUpload: async () => {
+    const { data, error } = await db()
+      .from("timetable_uploads")
+      .select("id,filename,mime_type,extracted_text,structured_rows,created_by,created_at")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw new Error(`Could not load shared timetable upload: ${error.message}`);
+    return (data as SharedTimetableUpload | null) ?? null;
+  },
+  createTimetableUpload: async (upload) => {
+    const { data, error } = await db()
+      .from("timetable_uploads")
+      .insert(upload)
+      .select("id,filename,mime_type,extracted_text,structured_rows,created_by,created_at")
+      .single();
+    if (error) throw new Error(`Could not share timetable upload: ${error.message}`);
+    return data as SharedTimetableUpload;
   },
   adminCreateUnit: async (unit) => {
     if (!supabase) throw new Error("Not connected.");

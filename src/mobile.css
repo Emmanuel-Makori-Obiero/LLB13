@@ -15,6 +15,11 @@
 .home-line span { margin-left:auto; font-size:12px; opacity:.65; }
 .home-sub { margin-top:14px; }
 .link-button { margin-top:10px; background:none; border:0; padding:0; color:var(--forest); font-weight:600; cursor:pointer; }
+.shared-upload-card { margin-bottom:14px; border-color:#b8d2bd; background:#f6fbf5; }
+.shared-upload-title { margin-top:7px; font-weight:700; color:var(--forest); overflow-wrap:anywhere; }
+.shared-upload-card details { margin-top:10px; }
+.shared-upload-card summary { cursor:pointer; font-size:12px; font-weight:600; }
+.shared-upload-text { max-height:260px; overflow:auto; white-space:pre-wrap; word-break:break-word; margin:10px 0 0; padding:10px; background:#fff; border:1px solid var(--line); font:11px/1.5 inherit; color:var(--ink); }
 .quick-row { display:none; }
 .tabbar, .mobile-title, .mobile-avatar, .drawer-profile { display:none; }
 .install-chip { display:none; }

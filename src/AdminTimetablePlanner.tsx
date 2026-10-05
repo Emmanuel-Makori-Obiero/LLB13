@@ -238,10 +238,16 @@ export default function AdminTimetablePlanner({
       const parsed = lowerName.endsWith(".csv")
         ? parseCsv(text)
         : parseDocumentRows(text);
+      await repository.createTimetableUpload({
+        filename: file.name,
+        mime_type: file.type || null,
+        extracted_text: text,
+        structured_rows: parsed,
+      });
       setClassTimetable(parsed);
       setClassSourceText(text);
       setSourceFilename(file.name);
-      setUploadStatus({ kind: "success", text: `${file.name} uploaded and read successfully · ${parsed.length} structured row${parsed.length === 1 ? "" : "s"} found.` });
+      setUploadStatus({ kind: "success", text: `${file.name} uploaded and shared with everyone · ${parsed.length} structured row${parsed.length === 1 ? "" : "s"} found.` });
       setNotice(
         `Official class timetable loaded: ${parsed.length} structured rows${parsed.length ? "" : " (the AI will read the extracted document text directly)"}. Now describe how to turn it into the Group 13 timetable.`,
       );

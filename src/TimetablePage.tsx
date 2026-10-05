@@ -9,7 +9,7 @@ import {
   User,
 } from "lucide-react";
 import { repository, supabase } from "./data/repository";
-import type { Lesson, Member, Unit } from "./data/types";
+import type { Lesson, Member, SharedTimetableUpload, Unit } from "./data/types";
 import { lessonReps, unitReps } from "./data/types";
 
 type Props = {
@@ -46,6 +46,7 @@ export default function TimetablePage({
   const [editing, setEditing] = useState<Lesson | null>(null);
   const [viewerName, setViewerName] = useState("");
   const [personalLessons, setPersonalLessons] = useState<Lesson[]>([]);
+  const [latestUpload, setLatestUpload] = useState<SharedTimetableUpload | null>(null);
   const [schedule, setSchedule] = useState<"personal" | "group">("personal");
   const [showPast, setShowPast] = useState(false);
   const [f, setF] = useState({
@@ -91,6 +92,9 @@ export default function TimetablePage({
   useEffect(() => {
     void repository.getPersonalTimetable().then(setPersonalLessons).catch((error) => setNotice(error instanceof Error ? error.message : "Could not load your personal timetable."));
   }, [setNotice]);
+  useEffect(() => {
+    void repository.getLatestTimetableUpload().then(setLatestUpload).catch(() => setLatestUpload(null));
+  }, []);
   const editAllowed = (lesson: Lesson) => {
     if (canEdit) return canEdit(lesson);
     if (canDelete(lesson)) return true;
@@ -191,6 +195,19 @@ export default function TimetablePage({
           </button>
         </div>
       </div>
+      {schedule === "group" && latestUpload && (
+        <div className="card card-pad shared-upload-card">
+          <div className="section-label">Shared admin upload</div>
+          <div className="shared-upload-title">{latestUpload.filename}</div>
+          <p className="field-hint">
+            Uploaded {new Date(latestUpload.created_at).toLocaleString("en-GB")} · {latestUpload.structured_rows.length} structured rows · visible to everyone signed in.
+          </p>
+          <details>
+            <summary>View uploaded timetable source</summary>
+            <pre className="shared-upload-text">{latestUpload.extracted_text || "The file was saved, but no readable text was extracted. The structured rows are shown in the timetable below."}</pre>
+          </details>
+        </div>
+      )}
       {days.length === 0 && (
         <div className="card card-pad empty-state">
           <CalendarDays size={22} />

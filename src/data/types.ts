@@ -109,6 +109,16 @@ export type TimetableProposal = {
   approved_at?: string | null;
 };
 
+export type SharedTimetableUpload = {
+  id: string;
+  filename: string;
+  mime_type?: string | null;
+  extracted_text: string;
+  structured_rows: Omit<Lesson, "id" | "created_by">[];
+  created_by?: string | null;
+  created_at: string;
+};
+
 // Representatives of a unit. Falls back to the old single `lead` value for units saved before multi-rep support.
 export const unitReps = (
   unit?: Pick<Unit, "lead" | "representatives"> | null,
