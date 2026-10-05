@@ -154,6 +154,20 @@ const displayDate = (value: string) =>
     year: "numeric",
   });
 
+function timetableIssues(lessons: DraftLesson[]): string[] {
+  const issues: string[] = [];
+  const dates = new Set<string>();
+  lessons.forEach((lesson) => {
+    const date = new Date(`${lesson.lesson_date}T00:00:00`);
+    const day = date.getDay();
+    if (day === 0 || day === 6) issues.push(`${displayDate(lesson.lesson_date)} is a weekend date`);
+    if (/communication\s+skills\s+for\s+lawyers/i.test(`${lesson.unit} ${lesson.topic}`)) issues.push("Communication Skills for Lawyers is not allowed");
+    if (dates.has(lesson.lesson_date)) issues.push(`${displayDate(lesson.lesson_date)} has more than one lesson`);
+    dates.add(lesson.lesson_date);
+  });
+  return [...new Set(issues)];
+}
+
 export default function AdminTimetablePlanner({
   lessons,
   units,
@@ -314,7 +328,7 @@ export default function AdminTimetablePlanner({
         messages: [
           {
             role: "user",
-            content: `Today is ${today}. Available units: ${JSON.stringify(units.map((unit) => unit.name))}\n\nOFFICIAL CLASS TIMETABLE (source; extracted from PDF, Word or CSV):\n${classSourceText}\n\nBEST-EFFORT STRUCTURED ROWS:\n${JSON.stringify(classTimetable)}\n\nCURRENT GROUP 13 TIMETABLE (context only):\n${JSON.stringify(lessons)}\n\nADMIN INSTRUCTION FOR THE GROUP TIMETABLE:\n${instruction.trim()}`,
+            content: `Today is ${today}. Available units: ${JSON.stringify(units.map((unit) => unit.name))}\n\nCALENDAR FACTS: In September 2026, 8 Sep is Tuesday, 9 Sep Wednesday, 10 Sep Thursday, 11 Sep Friday, 12 Sep Saturday, 13 Sep Sunday, and the following Monday-Friday are 14-18 Sep. Never label 12-13 Sep as Monday-Tuesday. Never schedule Saturday or Sunday. Use at most one lesson per date.\n\nOFFICIAL CLASS TIMETABLE (source; extracted from PDF, Word or CSV):\n${classSourceText}\n\nBEST-EFFORT STRUCTURED ROWS:\n${JSON.stringify(classTimetable)}\n\nCURRENT GROUP 13 TIMETABLE (context only):\n${JSON.stringify(lessons)}\n\nADMIN INSTRUCTION FOR THE GROUP TIMETABLE:\n${instruction.trim()}\n\nReturn all eligible crucial units that fit the requested weekday windows, not only the first few units. Exclude Communication Skills for Lawyers when requested or prohibited by the instruction. If the administrator says Tuesday-Friday this week and Monday-Friday next week, schedule the next week on 14-18 September, not the weekend 12-13 September.`,
           },
         ],
       });
@@ -333,6 +347,10 @@ export default function AdminTimetablePlanner({
           response.answer ||
             "The AI did not return a usable timetable. Try a more specific instruction.",
         );
+      const issues = timetableIssues(proposed);
+      if (issues.length) {
+        throw new Error(`The AI returned an invalid timetable: ${issues.join("; ")}. Edit the request and try again.`);
+      }
       if (uploadId) {
         await repository.updateTimetableUpload(uploadId, proposed);
         setClassTimetable(proposed);
@@ -406,7 +424,7 @@ export default function AdminTimetablePlanner({
         mode: "general",
         messages: [{
           role: "user",
-          content: `Today is ${new Date().toISOString().slice(0, 10)}. Revise this existing timetable proposal, preserving every lesson unless the administrator explicitly asks to change or remove it.\n\nEXISTING PROPOSAL:\n${JSON.stringify(proposal.proposed_lessons)}\n\nOFFICIAL SOURCE EXTRACT:\n${classSourceText || "Use the existing proposal as the source."}\n\nADMINISTRATOR EDIT REQUEST:\n${editInstruction.trim()}`,
+          content: `Today is ${new Date().toISOString().slice(0, 10)}. Revise this existing timetable proposal, preserving every lesson unless the administrator explicitly asks to change or remove it. Calendar facts: 8 Sep 2026 is Tuesday, 9 Sep Wednesday, 10 Sep Thursday, 11 Sep Friday, 12 Sep Saturday, 13 Sep Sunday, and the following Monday-Friday are 14-18 Sep. Never schedule Saturday or Sunday and use at most one lesson per date.\n\nEXISTING PROPOSAL:\n${JSON.stringify(proposal.proposed_lessons)}\n\nOFFICIAL SOURCE EXTRACT:\n${classSourceText || "Use the existing proposal as the source."}\n\nADMINISTRATOR EDIT REQUEST:\n${editInstruction.trim()}`,
         }],
       });
       const data = (response.data ?? {}) as { title?: string; rationale?: string; lessons?: unknown };
@@ -415,6 +433,8 @@ export default function AdminTimetablePlanner({
         ...proposal.proposed_lessons.map((lesson) => lesson.unit),
       ]);
       if (!revised.length) throw new Error(response.answer || "The AI did not return a usable edited timetable.");
+      const issues = timetableIssues(revised);
+      if (issues.length) throw new Error(`The edited timetable is invalid: ${issues.join("; ")}. Try a more specific weekday request.`);
       const created = await repository.createTimetableProposal({
         title: data.title?.trim() || `${proposal.title} — edited`,
         instruction: editInstruction.trim(),
