@@ -280,10 +280,14 @@ export default function AdminTimetablePlanner({
         `Official class timetable loaded: ${parsed.length} structured rows${parsed.length ? "" : " (the AI will read the extracted document text directly)"}. Now describe how to turn it into the Group 13 timetable.`,
       );
     } catch (error) {
-      setUploadStatus({ kind: "error", text: error instanceof Error ? `Could not read ${file.name}: ${error.message}` : `Could not read ${file.name}.` });
+      const message = error instanceof Error ? error.message : "Unknown extraction error.";
+      const friendly = /dynamically imported module|failed to fetch/i.test(message)
+        ? "The PDF reader needs a fresh app load. Refresh the page once and upload the file again."
+        : message;
+      setUploadStatus({ kind: "error", text: `Could not read ${file.name}: ${friendly}` });
       setNotice(
         error instanceof Error
-          ? error.message
+          ? friendly
           : "Could not read that timetable file.",
       );
     } finally {

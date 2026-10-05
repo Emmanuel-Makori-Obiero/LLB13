@@ -1,6 +1,9 @@
 // Client side of the AI layer.
 import { supabase as client } from "../data/repository";
 import { useCallback, useState } from "react";
+import * as pdfjs from "pdfjs-dist";
+import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import mammoth from "mammoth";
 
 function db() {
   if (!client) throw new Error("Supabase is not configured.");
@@ -182,10 +185,7 @@ function chunkText(text: string, size = 1200, overlap = 200): string[] {
 export async function extractText(file: File): Promise<string> {
   const name = file.name.toLowerCase();
   if (name.endsWith(".pdf")) {
-    const pdfjs = await import("pdfjs-dist");
-    const worker = (await import("pdfjs-dist/build/pdf.worker.min.mjs?url"))
-      .default;
-    pdfjs.GlobalWorkerOptions.workerSrc = worker;
+    pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
     const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() })
       .promise;
     let out = "";
@@ -198,7 +198,6 @@ export async function extractText(file: File): Promise<string> {
     return out;
   }
   if (name.endsWith(".docx")) {
-    const mammoth = await import("mammoth");
     return (
       await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() })
     ).value;
