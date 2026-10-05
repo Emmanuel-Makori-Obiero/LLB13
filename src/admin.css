@@ -107,6 +107,11 @@
   height: 1px;
   opacity: 0;
 }
+.timetable-import-apply {
+  width: 100%;
+  margin-top: 10px;
+  justify-content: center;
+}
 .field-label {
   display: grid;
   gap: 7px;

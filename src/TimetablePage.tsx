@@ -175,9 +175,9 @@ export default function TimetablePage({
       <div className="page-head">
         <div>
           <h1 className="heading">Timetable.</h1>
-          <p className="subheading">Keep your own study plan separate from the shared Group 13 class timetable.</p>
+          <p className="subheading">Choose <strong>My timetable</strong> for private study events, or <strong>Group timetable</strong> for the shared class schedule.</p>
         </div>
-        <div className="page-actions">
+        <div className="page-actions timetable-tabs" aria-label="Timetable view">
           <button className={schedule === "personal" ? "primary-button" : "secondary-button"} onClick={() => setSchedule("personal")}>My timetable</button>
           <button className={schedule === "group" ? "primary-button" : "secondary-button"} onClick={() => setSchedule("group")}>Group timetable</button>
           <button
@@ -186,8 +186,8 @@ export default function TimetablePage({
           >
             {showPast ? "Hide past" : "Show past"}
           </button>
-          <button className="primary-button" onClick={() => setOpen(true)}>
-            <Plus size={14} /> Add lesson
+          <button className="primary-button" onClick={() => { setEditing(null); setOpen(true); }}>
+            <Plus size={14} /> {schedule === "personal" ? "Add personal event" : "Add group lesson"}
           </button>
         </div>
       </div>
@@ -269,25 +269,30 @@ export default function TimetablePage({
             <div className="detail-title">
               <h2>{editing ? "Edit event" : schedule === "personal" ? "Add personal event" : "Add group lesson"}</h2>
             </div>
-            {units.length === 0 ? (
+            {schedule === "group" && units.length === 0 ? (
               <p className="field-hint">
                 There are no units yet. The admin needs to add units first.
               </p>
             ) : (
               <div className="tt-form">
                 <label>
-                  Unit
-                  <select
-                    value={f.unit}
-                    onChange={(e) => chooseUnit(e.target.value)}
-                  >
-                    <option value="">Choose unit</option>
-                    {units.map((u) => (
-                      <option key={u.id} value={u.name}>
-                        {u.name}
-                      </option>
-                    ))}
-                  </select>
+                  {schedule === "personal" ? "Subject or study label" : "Unit"}
+                  {schedule === "personal" ? (
+                    <input
+                      value={f.unit}
+                      onChange={(e) => setF((current) => ({ ...current, unit: e.target.value }))}
+                      placeholder="e.g. Constitutional Law revision"
+                    />
+                  ) : (
+                    <select value={f.unit} onChange={(e) => chooseUnit(e.target.value)}>
+                      <option value="">Choose unit</option>
+                      {units.map((u) => (
+                        <option key={u.id} value={u.name}>
+                          {u.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </label>
                 <label>
                   Topic

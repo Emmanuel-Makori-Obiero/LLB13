@@ -46,6 +46,9 @@
   .content { min-width:0; overflow:hidden; }
   .page-heading { gap:12px; }
   .page-heading h1 { font-size:32px; }
+  .timetable-tabs { display:grid; grid-template-columns:1fr 1fr; gap:8px; width:100%; }
+  .timetable-tabs button { min-height:42px; justify-content:center; }
+  .timetable-tabs button:last-child { grid-column:1 / -1; }
   .grid-main, .page-grid, .grid-two, .unit-list { grid-template-columns:1fr; }
   .card-pad { padding:17px; }
   .toolbar, .detail-title, .unit-workspace-banner { align-items:stretch; flex-direction:column; }

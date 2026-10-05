@@ -164,6 +164,7 @@ export default function AdminTimetablePlanner({
     null,
   );
   const [classSourceText, setClassSourceText] = useState("");
+  const [sourceFilename, setSourceFilename] = useState("");
   const [proposals, setProposals] = useState<TimetableProposal[]>([]);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -208,7 +209,7 @@ export default function AdminTimetablePlanner({
     const created = await repository.createTimetableProposal({
       title,
       instruction: instruction.trim(),
-      source_filename: null,
+      source_filename: sourceFilename || null,
       proposed_lessons: valid,
       rationale,
     });
@@ -233,6 +234,7 @@ export default function AdminTimetablePlanner({
         : parseDocumentRows(text);
       setClassTimetable(parsed);
       setClassSourceText(text);
+      setSourceFilename(file.name);
       setNotice(
         `Official class timetable loaded: ${parsed.length} structured rows${parsed.length ? "" : " (the AI will read the extracted document text directly)"}. Now describe how to turn it into the Group 13 timetable.`,
       );
@@ -242,6 +244,33 @@ export default function AdminTimetablePlanner({
           ? error.message
           : "Could not read that timetable file.",
       );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const applyUploadedRows = async () => {
+    if (!classTimetable?.length) {
+      setNotice("This file did not contain rows with a recognised unit, topic and date. Use the planner below for PDF or Word files with an unusual layout.");
+      return;
+    }
+    if (!window.confirm(`Apply the ${classTimetable.length} rows from “${sourceFilename || "the uploaded file"}” and replace the current Group 13 timetable?`)) return;
+    setBusy(true);
+    try {
+      const created = await repository.createTimetableProposal({
+        title: sourceFilename ? `Imported class timetable — ${sourceFilename}` : "Imported class timetable",
+        instruction: "Apply the uploaded class timetable exactly as structured.",
+        source_filename: sourceFilename || null,
+        proposed_lessons: classTimetable,
+        rationale: "Imported directly from the uploaded class timetable file.",
+      });
+      const count = await repository.approveTimetableProposal(created.id);
+      const fresh = await repository.getTimetable();
+      onApplied(fresh);
+      setProposals((current) => [{ ...created, status: "approved", approved_at: new Date().toISOString() }, ...current]);
+      setNotice(`Uploaded timetable applied: ${count} lessons are now visible in the Group timetable.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not apply the uploaded timetable.");
     } finally {
       setBusy(false);
     }
@@ -435,6 +464,11 @@ export default function AdminTimetablePlanner({
             This only loads the official class timetable into the planner. It
             does not alter the current Group 13 timetable.
           </p>
+          {classTimetable?.length ? (
+            <button className="secondary-button timetable-import-apply" onClick={() => void applyUploadedRows()} disabled={busy}>
+              Apply these {classTimetable.length} uploaded rows now
+            </button>
+          ) : null}
         </div>
         <div>
           <label className="field-label">
