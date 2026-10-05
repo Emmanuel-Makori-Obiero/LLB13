@@ -31,6 +31,14 @@ const dayLabel = (d: string) =>
     day: "numeric",
     month: "long",
   });
+const uploadRows = (upload: SharedTimetableUpload) =>
+  (Array.isArray(upload.structured_rows) ? upload.structured_rows : [])
+    .filter((row) => row?.lesson_date && row?.topic)
+    .sort((a, b) =>
+      `${a.lesson_date}${a.start_time ?? ""}`.localeCompare(
+        `${b.lesson_date}${b.start_time ?? ""}`,
+      ),
+    );
 
 export default function TimetablePage({
   lessons,
@@ -202,8 +210,29 @@ export default function TimetablePage({
           <p className="field-hint">
             Uploaded {new Date(latestUpload.created_at).toLocaleString("en-GB")} · {latestUpload.structured_rows.length} structured rows · visible to everyone signed in.
           </p>
+          {uploadRows(latestUpload).length > 0 ? (
+            <div className="shared-upload-preview">
+              <div className="shared-upload-preview-heading">Uploaded timetable structure</div>
+              <div className="shared-upload-grid" role="table" aria-label="Uploaded timetable preview">
+                <div className="shared-upload-grid-head" role="row">
+                  <span>Date</span><span>Time</span><span>Unit / topic</span><span>Venue</span><span>Representative</span>
+                </div>
+                {uploadRows(latestUpload).map((row, index) => (
+                  <div className="shared-upload-grid-row" role="row" key={`${row.lesson_date}-${row.topic}-${index}`}>
+                    <span>{dayLabel(row.lesson_date)}</span>
+                    <span>{hm(row.start_time) || "—"}{row.end_time ? `–${hm(row.end_time)}` : ""}</span>
+                    <span><strong>{row.unit || "General"}</strong><small>{row.topic}</small></span>
+                    <span>{row.venue || "—"}</span>
+                    <span>{lessonReps(row).join(", ") || "—"}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="field-hint">No structured rows could be detected from this file. The original source is available below.</p>
+          )}
           <details>
-            <summary>View uploaded timetable source</summary>
+            <summary>View original uploaded source</summary>
             <pre className="shared-upload-text">{latestUpload.extracted_text || "The file was saved, but no readable text was extracted. The structured rows are shown in the timetable below."}</pre>
           </details>
         </div>
