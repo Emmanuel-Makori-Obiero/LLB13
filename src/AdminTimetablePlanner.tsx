@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, FileUp, Lightbulb, RefreshCw, X } from "lucide-react";
 import { askAI, extractText } from "./lib/ai";
 import { repository } from "./data/repository";
+import { lessonReps, unitReps } from "./data/types";
 import type { Lesson, TimetableProposal, Unit } from "./data/types";
 
 type Props = {
@@ -147,6 +148,13 @@ function cleanLessons(input: unknown, units: Unit[] | string[]): DraftLesson[] {
     );
 }
 
+function useAssignedRepresentatives(lessons: DraftLesson[], units: Unit[]): DraftLesson[] {
+  return lessons.map((lesson) => {
+    const assigned = unitReps(units.find((unit) => unit.name === lesson.unit));
+    return { ...lesson, representatives: assigned, representative: assigned[0] ?? "" };
+  });
+}
+
 const displayDate = (value: string) =>
   new Date(`${value}T00:00:00`).toLocaleDateString("en-GB", {
     day: "numeric",
@@ -157,9 +165,11 @@ const displayDate = (value: string) =>
 function timetableIssues(lessons: DraftLesson[]): string[] {
   const issues: string[] = [];
   const dates = new Set<string>();
+  const currentDate = new Date().toISOString().slice(0, 10);
   lessons.forEach((lesson) => {
     const date = new Date(`${lesson.lesson_date}T00:00:00`);
     const day = date.getDay();
+    if (lesson.lesson_date < currentDate) issues.push(`${displayDate(lesson.lesson_date)} is before today (${displayDate(currentDate)})`);
     if (day === 0 || day === 6) issues.push(`${displayDate(lesson.lesson_date)} is a weekend date`);
     if (/communication\s+skills\s+for\s+lawyers/i.test(`${lesson.unit} ${lesson.topic}`)) issues.push("Communication Skills for Lawyers is not allowed");
     if (dates.has(lesson.lesson_date)) issues.push(`${displayDate(lesson.lesson_date)} has more than one lesson`);
@@ -328,7 +338,7 @@ export default function AdminTimetablePlanner({
         messages: [
           {
             role: "user",
-            content: `Today is ${today}. Available units: ${JSON.stringify(units.map((unit) => unit.name))}\n\nCALENDAR FACTS: In September 2026, 8 Sep is Tuesday, 9 Sep Wednesday, 10 Sep Thursday, 11 Sep Friday, 12 Sep Saturday, 13 Sep Sunday, and the following Monday-Friday are 14-18 Sep. Never label 12-13 Sep as Monday-Tuesday. Never schedule Saturday or Sunday. Use at most one lesson per date.\n\nOFFICIAL CLASS TIMETABLE (source; extracted from PDF, Word or CSV):\n${classSourceText}\n\nBEST-EFFORT STRUCTURED ROWS:\n${JSON.stringify(classTimetable)}\n\nCURRENT GROUP 13 TIMETABLE (context only):\n${JSON.stringify(lessons)}\n\nADMIN INSTRUCTION FOR THE GROUP TIMETABLE:\n${instruction.trim()}\n\nReturn all eligible crucial units that fit the requested weekday windows, not only the first few units. Exclude Communication Skills for Lawyers when requested or prohibited by the instruction. If the administrator says Tuesday-Friday this week and Monday-Friday next week, schedule the next week on 14-18 September, not the weekend 12-13 September.`,
+            content: `Today is ${today}. Available units: ${JSON.stringify(units.map((unit) => unit.name))}\n\nDATE RULES: Resolve “this week” and “next week” from today's date, not from dates printed in an old uploaded PDF. Never schedule a date before today unless the administrator explicitly asks for a historical timetable. Calculate the real weekday for every ISO date. Never schedule Saturday or Sunday. Use at most one lesson per date.\n\nOFFICIAL CLASS TIMETABLE (source; extracted from PDF, Word or CSV):\n${classSourceText}\n\nBEST-EFFORT STRUCTURED ROWS:\n${JSON.stringify(classTimetable)}\n\nCURRENT GROUP 13 TIMETABLE (context only):\n${JSON.stringify(lessons)}\n\nADMIN INSTRUCTION FOR THE GROUP TIMETABLE:\n${instruction.trim()}\n\nReturn all eligible crucial units that fit the requested weekday windows, not only the first few units. Exclude Communication Skills for Lawyers when requested or prohibited by the instruction.`,
           },
         ],
       });
@@ -338,10 +348,10 @@ export default function AdminTimetablePlanner({
         lessons?: unknown;
       };
       const sourceUnits = (classTimetable ?? []).map((lesson) => lesson.unit);
-      const proposed = cleanLessons(data.lessons, [
+      const proposed = useAssignedRepresentatives(cleanLessons(data.lessons, [
         ...units.map((unit) => unit.name),
         ...sourceUnits,
-      ]);
+      ]), units);
       if (!proposed.length)
         throw new Error(
           response.answer ||
@@ -424,14 +434,14 @@ export default function AdminTimetablePlanner({
         mode: "general",
         messages: [{
           role: "user",
-          content: `Today is ${new Date().toISOString().slice(0, 10)}. Revise this existing timetable proposal into a new draft. Treat the existing proposal as a starting point, not as a permanent template: add, remove, move, replace or reschedule lessons exactly as the administrator requests, while preserving unaffected lessons. Calculate the real weekday for every ISO date; never trust a weekday label if it conflicts with the calendar. Never schedule Saturday or Sunday unless the administrator explicitly asks for a weekend. Use at most one lesson per date when the request says one class per day.\n\nEXISTING PROPOSAL:\n${JSON.stringify(proposal.proposed_lessons)}\n\nOFFICIAL SOURCE EXTRACT:\n${classSourceText || "Use the existing proposal as the source."}\n\nADMINISTRATOR EDIT REQUEST:\n${editInstruction.trim()}`,
+          content: `Today is ${new Date().toISOString().slice(0, 10)}. Revise this existing timetable proposal into a new draft. Treat the existing proposal as a starting point, not as a permanent template: add, remove, move, replace or reschedule lessons exactly as the administrator requests, while preserving unaffected lessons. Resolve this week and next week from today's date, not from old dates in the source; move old lessons forward when the administrator asks for a current timetable. Never schedule a date before today unless a historical timetable is explicitly requested. Calculate the real weekday for every ISO date; never trust a weekday label if it conflicts with the calendar. Never schedule Saturday or Sunday unless the administrator explicitly asks for a weekend. Use at most one lesson per date when the request says one class per day.\n\nEXISTING PROPOSAL:\n${JSON.stringify(proposal.proposed_lessons)}\n\nOFFICIAL SOURCE EXTRACT:\n${classSourceText || "Use the existing proposal as the source."}\n\nADMINISTRATOR EDIT REQUEST:\n${editInstruction.trim()}`,
         }],
       });
       const data = (response.data ?? {}) as { title?: string; rationale?: string; lessons?: unknown };
-      const revised = cleanLessons(data.lessons, [
+      const revised = useAssignedRepresentatives(cleanLessons(data.lessons, [
         ...units.map((unit) => unit.name),
         ...proposal.proposed_lessons.map((lesson) => lesson.unit),
-      ]);
+      ]), units);
       if (!revised.length) throw new Error(response.answer || "The AI did not return a usable edited timetable.");
       const issues = timetableIssues(revised);
       if (issues.length) throw new Error(`The edited timetable is invalid: ${issues.join("; ")}. Try a more specific weekday request.`);
@@ -643,6 +653,7 @@ export default function AdminTimetablePlanner({
                           <small>
                             {lesson.unit} · {displayDate(lesson.lesson_date)}
                             {lesson.venue ? ` · ${lesson.venue}` : ""}
+                            {lessonReps(lesson).length ? ` · ${lessonReps(lesson).join(", ")}` : ""}
                           </small>
                         </span>
                       </div>
