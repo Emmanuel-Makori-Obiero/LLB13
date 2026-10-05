@@ -186,7 +186,13 @@ type UserProfile = {
 };
 
 type PlayerTrack = { id: string; title: string; url: string; source: string; kind: "audio" | "youtube"; youtubeId?: string };
-
+const playlistTracks = (items: YouTubePlaylist["items"]): PlayerTrack[] =>
+  items.flatMap((item) => {
+    const id = youtubeVideoId(item.url);
+    return id
+      ? [{ id: `youtube-playlist-${item.id}`, title: item.title, url: item.url, source: "YouTube playlist", kind: "youtube" as const, youtubeId: id }]
+      : [];
+  });
 declare global {
   interface Window {
     YT?: any;
@@ -2744,6 +2750,16 @@ function MediaPage({
     }
   };
 
+  const playCloudAsset = async (asset: MediaAsset) => {
+    try {
+      const url = await getMediaAssetUrl(asset);
+      if (!url) throw new Error("This media file has no playable URL.");
+      onPlayQueue([{ id: `cloud-${asset.id}`, title: asset.title, url, source: "Saved media", kind: "audio" }], 0);
+    } catch (error) {
+      setCloudError(error instanceof Error ? error.message : "Could not play saved media.");
+    }
+  };
+
   const refreshVideoStatus = async (asset: MediaAsset) => {
     if (checkingVideoId || videoBusy) return;
     setCheckingVideoId(asset.id);
@@ -2779,6 +2795,15 @@ function MediaPage({
       setFilmNote("A 7-day share link was copied to your clipboard.");
     } catch (error) {
       setCloudError(error instanceof Error ? error.message : "Could not share cloud media.");
+    }
+  };
+
+  const shareCloudAssetWithGroup = async (asset: MediaAsset) => {
+    try {
+      await createMediaShare({ assetId: asset.id, visibility: "group" });
+      setFilmNote("Saved media is now shared with Group 13. Other signed-in members can find it in Media.");
+    } catch (error) {
+      setCloudError(error instanceof Error ? error.message : "Could not share cloud media with the group.");
     }
   };
 
@@ -2927,13 +2952,14 @@ function MediaPage({
       <div className="card card-pad youtube-playlist-card" style={{ marginTop: 18 }}>
         <CardHeader label="My YouTube playlist" action={`${savedPlaylist?.items.length ?? 0} songs`} />
         <p className="field-hint">Add songs one by one. Each song is saved privately and added to the player queue.</p>
+        {!!savedPlaylist?.items.length && <button className="primary-button" type="button" onClick={() => onPlayQueue(playlistTracks(savedPlaylist.items), 0)}><Play size={13} /> Play all songs</button>}
         <form className="data-form playlist-add-form" onSubmit={(event) => void addPlaylistSong(event)}>
           <label>Song title<input required value={playlistTitle} onChange={(event) => setPlaylistTitle(event.target.value)} placeholder="e.g. Focus study music" /></label>
           <label>YouTube video URL<input required type="url" value={playlistUrl} onChange={(event) => setPlaylistUrl(event.target.value)} placeholder="https://www.youtube.com/watch?v=…" /></label>
           <button className="primary-button" type="submit">Add new song</button>
         </form>
         {playlistNote && <p className="field-hint">{playlistNote}</p>}
-        {savedPlaylist?.items.length ? <div className="playlist-list">{savedPlaylist.items.map((item, index) => <div className="playlist-row" key={item.id}><button className="playlist-play" onClick={() => { const id = youtubeVideoId(item.url); if (id) onPlayQueue([{ id: `youtube-${id}`, title: item.title, url: item.url, source: "YouTube playlist", kind: "youtube", youtubeId: id }], 0); }}>{index + 1}. {item.title}</button><button className="icon-button" aria-label={`Remove ${item.title}`} onClick={async () => { await removeYouTubeItem(item.id); setSavedPlaylist((current) => current ? { ...current, items: current.items.filter((song) => song.id !== item.id) } : current); }}>×</button></div>)}</div> : <div className="empty">Your playlist is empty. Add your first YouTube song above.</div>}
+        {savedPlaylist?.items.length ? <div className="playlist-list">{savedPlaylist.items.map((item, index) => <div className="playlist-row" key={item.id}><button className="playlist-play" type="button" onClick={() => { const tracks = playlistTracks(savedPlaylist.items); const trackIndex = tracks.findIndex((track) => track.id === `youtube-playlist-${item.id}`); if (trackIndex >= 0) onPlayQueue(tracks, trackIndex); }}>{index + 1}. {item.title}</button><button className="icon-button" type="button" aria-label={`Remove ${item.title}`} onClick={async () => { await removeYouTubeItem(item.id); setSavedPlaylist((current) => current ? { ...current, items: current.items.filter((song) => song.id !== item.id) } : current); }}>×</button></div>)}</div> : <div className="empty">Your playlist is empty. Add your first YouTube song above.</div>}
       </div>
 
       <div className="card card-pad" style={{ marginTop: 18 }}>
@@ -2970,7 +2996,7 @@ function MediaPage({
       </div>
 
       {cloudError && <div className="connection-error" style={{ marginTop: 18 }}>{cloudError}</div>}
-        {cloudAssets.length > 0 && <><PageHeading eyebrow="Generated and uploaded" title="Cloud media." subtitle="Files are stored privately in Supabase Storage and can be opened from any signed-in device." /><div className="media-grid">{cloudAssets.map((asset) => <article className="card media-card" key={asset.id}><div className="media-link-card"><Film size={24} /><strong>{asset.title}</strong><span className="chip">{asset.kind} · {asset.status}</span><div className="media-actions">{(asset.kind === "video_lesson" || asset.kind === "film_clip") && (asset.status === "queued" || asset.status === "processing") && <button className="secondary-button" disabled={videoBusy || checkingVideoId === asset.id} onClick={() => void refreshVideoStatus(asset)}>{checkingVideoId === asset.id ? "Checking…" : videoBusy ? "Generation checking…" : "Refresh video status"}</button>}<button className="secondary-button" onClick={() => void openCloudAsset(asset)}>Open cloud file</button><button className="secondary-button" onClick={() => void shareCloudAsset(asset)}>Copy 7-day link</button><button className="danger-button" onClick={() => void removeCloudAsset(asset)}>Delete</button></div></div></article>)}</div></>}
+        {cloudAssets.length > 0 && <><PageHeading eyebrow="Generated and uploaded" title="Cloud media archive." subtitle="Generated podcasts, lessons, images, and videos are saved privately here and remain available across signed-in devices." /><div className="media-grid">{cloudAssets.map((asset) => <article className="card media-card" key={asset.id}><div className="media-link-card"><Film size={24} /><strong>{asset.title}</strong><span className="chip">{asset.kind} · {asset.status}</span><div className="media-actions">{asset.kind === "podcast_audio" && asset.status === "ready" && <button className="secondary-button" onClick={() => void playCloudAsset(asset)}><Play size={13} /> Play podcast</button>}{(asset.kind === "video_lesson" || asset.kind === "film_clip") && (asset.status === "queued" || asset.status === "processing") && <button className="secondary-button" disabled={videoBusy || checkingVideoId === asset.id} onClick={() => void refreshVideoStatus(asset)}>{checkingVideoId === asset.id ? "Checking…" : videoBusy ? "Generation checking…" : "Refresh video status"}</button>}<button className="secondary-button" onClick={() => void openCloudAsset(asset)}>Open cloud file</button><button className="secondary-button" onClick={() => void shareCloudAssetWithGroup(asset)}>Share with Group 13</button><button className="secondary-button" onClick={() => void shareCloudAsset(asset)}>Copy 7-day link</button><button className="danger-button" onClick={() => void removeCloudAsset(asset)}>Delete</button></div></div></article>)}</div></>}
 
       <div className="media-grid">
         {media.map((item) => (

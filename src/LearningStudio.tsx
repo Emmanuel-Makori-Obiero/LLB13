@@ -123,7 +123,7 @@ export default function LearningStudio() {
       setAudioUrl(result.signed_url);
       setAudioMimeType(result.mime_type || "audio/mpeg");
       setAudioProvider(result.asset?.provider || null);
-      setAudioNote("Audio is ready. Use the player below to listen, or download the audio file.");
+      setAudioNote("Audio is ready and saved in Media archive. Listen below, download it, or open Media to play and share it with Group 13.");
     } catch (e) {
       if (requestId === audioRequestId.current) setAudioNote(e instanceof Error ? e.message : "Could not create audio.");
     } finally {
