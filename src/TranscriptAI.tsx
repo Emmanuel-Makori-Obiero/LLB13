@@ -23,6 +23,12 @@ import {
 import { Answer, type Turn } from "./StudyAssistant";
 import "./assistant.css";
 import { downloadBlob, downloadPdf, downloadWord } from "./export";
+import {
+  assignmentJobKey,
+  getAssignmentJob,
+  startAssignmentJob,
+  subscribeAssignmentJob,
+} from "./transcriptJobs";
 
 const SECTIONS_PER_PART = 6; // sections read per request: small enough for free-tier token limits
 const WAITS = [0, 25_000, 50_000]; // retry pauses when every AI provider is busy
@@ -138,6 +144,7 @@ export function TranscriptAI({
   const [reload, setReload] = useState(0);
   const [extracted, setExtracted] = useState<ExtractedAssignment[]>([]);
   const [assignmentMsg, setAssignmentMsg] = useState("");
+  const assignmentKey = assignmentJobKey(transcriptId, userId);
   const [quality, setQuality] = useState<QualityReport | null>(null);
 
   const mkTask = (a: Action) => ({
@@ -196,6 +203,50 @@ export function TranscriptAI({
       setQuality({ status: "review", score: 0, summary: `Quality review could not complete: ${(error as Error).message}`, spelling_issues: [], meaning_issues: [], unsupported_claims: [], missing_points: [], authority_checks: [] });
     }
   };
+
+  const applyAssignmentResult = (result: AIResult) => {
+    const raw = result.data as { assignments?: unknown[] } | null;
+    const rows = Array.isArray(raw?.assignments)
+      ? raw.assignments
+          .map((item, index) => {
+            const row = item as Record<string, unknown>;
+            return {
+              localId: `${transcriptId}-${index}`,
+              title: String(row.title ?? "").trim(),
+              brief: String(row.brief ?? "").trim(),
+              due: String(row.due ?? "").trim(),
+              confidence: Math.max(0, Math.min(1, Number(row.confidence ?? 0))),
+              source_excerpt: String(row.source_excerpt ?? "").trim(),
+              status: "pending" as const,
+            };
+          })
+          .filter((row) => row.title)
+      : [];
+    setExtracted(rows);
+    setAssignmentMsg(rows.length ? "Review the suggested assignments before adding them." : "No clear assignments were found in this lesson.");
+    const action = ACTIONS.find((item) => item.feature === "extract_assignments");
+    if (action) setTurn({ id: 1, task: mkTask(action), prompt: action.prompt, result });
+  };
+
+  useEffect(() => {
+    const job = getAssignmentJob(assignmentKey);
+    if (!job) return;
+    return subscribeAssignmentJob(assignmentKey, (snapshot) => {
+      if (snapshot.status === "running") {
+        setBusy("extract_assignments");
+        setStep("Finding teacher-directed assignments in the transcript");
+      } else if (snapshot.status === "done" && snapshot.result) {
+        applyAssignmentResult(snapshot.result);
+        setBusy(null);
+        setStep("");
+      } else if (snapshot.status === "error") {
+        const action = ACTIONS.find((item) => item.feature === "extract_assignments");
+        if (action) setTurn({ id: 1, task: mkTask(action), prompt: action.prompt, error: snapshot.error?.message ?? "Assignment extraction failed." });
+        setBusy(null);
+        setStep("");
+      }
+    });
+  }, [assignmentKey]);
 
   const run = async (action: Action) => {
     if (busy) return;
@@ -297,39 +348,21 @@ export function TranscriptAI({
       }
 
       setStep(`${action.label} in progress`);
-      const result = await askAI({
-        feature: action.feature,
-        mode: "materials",
-        messages: [{ role: "user", content: action.prompt }],
-        docIds: [doc.id],
-      });
+      const result = action.feature === "extract_assignments"
+        ? await startAssignmentJob(assignmentKey, () => askAI({
+            feature: action.feature,
+            mode: "materials",
+            messages: [{ role: "user", content: action.prompt }],
+            docIds: [doc.id],
+          })).promise
+        : await askAI({
+            feature: action.feature,
+            mode: "materials",
+            messages: [{ role: "user", content: action.prompt }],
+            docIds: [doc.id],
+          });
       if (action.feature === "extract_assignments") {
-        const raw = result.data as { assignments?: unknown[] } | null;
-        const rows = Array.isArray(raw?.assignments)
-          ? raw.assignments
-              .map((item, index) => {
-                const row = item as Record<string, unknown>;
-                return {
-                  localId: `${transcriptId}-${index}-${Date.now()}`,
-                  title: String(row.title ?? "").trim(),
-                  brief: String(row.brief ?? "").trim(),
-                  due: String(row.due ?? "").trim(),
-                  confidence: Math.max(
-                    0,
-                    Math.min(1, Number(row.confidence ?? 0)),
-                  ),
-                  source_excerpt: String(row.source_excerpt ?? "").trim(),
-                  status: "pending" as const,
-                };
-              })
-              .filter((row) => row.title)
-          : [];
-        setExtracted(rows);
-        setAssignmentMsg(
-          rows.length
-            ? "Review the suggested assignments before adding them."
-            : "No clear assignments were found in this lesson.",
-        );
+        applyAssignmentResult(result);
       }
       setTurn({ id: 1, task, prompt: action.prompt, result });
       if (action.feature === "summarize") await reviewOutput(result.answer);
