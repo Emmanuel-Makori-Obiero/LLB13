@@ -28,6 +28,20 @@
 .scan-upload-row { margin: 18px 0 12px; }
 .scan-upload-row > span { font-size: 9px; }
 .scan-file-input { display: none; }
+.scan-camera-panel { margin: 16px 0 20px; padding: 15px; border: 1px solid #000; background: #f7f7f2; }
+.scan-camera-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; margin-bottom: 12px; }
+.scan-camera-heading > div { display: grid; gap: 5px; }
+.scan-camera-heading strong { font: 700 18px/1.15 "Source Serif 4", Georgia, serif; }
+.scan-camera-heading small { max-width: 560px; font-size: 9px; line-height: 1.55; }
+.scan-camera-close { display: grid; place-items: center; width: 32px; height: 32px; flex: none; border: 1px solid #000; background: #fff; color: #000; cursor: pointer; }
+.scan-camera-close:hover { background: #000; color: #fff; }
+.scan-camera-preview { position: relative; display: grid; place-items: center; min-height: 220px; overflow: hidden; background: #111; }
+.scan-camera-preview video { display: block; width: 100%; max-height: min(62vh, 520px); object-fit: contain; }
+.scan-camera-guide { position: absolute; inset: 9% 12%; border: 2px solid rgba(255, 255, 255, .9); box-shadow: 0 0 0 999px rgba(0, 0, 0, .2); pointer-events: none; }
+.scan-camera-canvas { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.scan-camera-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+.scan-camera-actions > span,.scan-camera-error { font-size: 9px; line-height: 1.55; }
+.scan-camera-error { margin: 10px 0 0; color: #9b1010; }
 .scan-primary-button,.scan-secondary-button,.scan-danger-button,.scan-text-button,.scan-back-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 38px; padding: 0 13px; border: 1px solid #000; border-radius: 0; background: #fff; color: #000; font: inherit; font-size: 10px; font-weight: 700; cursor: pointer; transition: background .15s, color .15s, border-color .15s; }
 .scan-primary-button { border-color: var(--scan-green); background: var(--scan-green); color: #fff; }
 .scan-primary-button:hover:not(:disabled) { border-color: var(--scan-green-dark); background: var(--scan-green-dark); }
@@ -115,6 +129,10 @@
   .scan-reader-heading { align-items: flex-start; }
   .scan-reader-actions > button { flex: 1 1 auto; }
   .scan-upload-row > span { width: 100%; }
+  .scan-camera-panel { margin-right: -1px; margin-left: -1px; padding: 11px; }
+  .scan-camera-preview { min-height: 180px; }
+  .scan-camera-guide { inset: 8% 7%; }
+  .scan-camera-actions .scan-primary-button { width: 100%; }
   .scan-page-queue { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .scan-page-thumb img { height: 120px; }
   .scan-notes-sidebar { padding: 16px; }

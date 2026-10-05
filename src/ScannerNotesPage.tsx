@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BookOpen,
+  Camera,
   Check,
   ChevronLeft,
   Download,
@@ -15,6 +16,7 @@ import {
   Share2,
   Trash2,
   Upload,
+  X,
 } from "lucide-react";
 import {
   createScannedNote,
@@ -27,8 +29,9 @@ import { optimizeScanImage } from "./lib/scanImage";
 import "./scanner.css";
 
 const MAX_PAGES = 10;
-const MAX_FILE_BYTES = 12 * 1024 * 1024;
-const MAX_BATCH_BYTES = 60 * 1024 * 1024;
+const MAX_SOURCE_FILE_BYTES = 25 * 1024 * 1024;
+const MAX_OPTIMIZED_FILE_BYTES = 2.5 * 1024 * 1024;
+const MAX_BATCH_BYTES = 24 * 1024 * 1024;
 const LANGUAGES: Record<string, string[]> = {
   eng: ["eng"],
   swa: ["swa"],
@@ -63,12 +66,18 @@ export default function ScannerNotesPage({ userId }: { userId: string | null }) 
   const [isEditingSaved, setIsEditingSaved] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isPreparing, setIsPreparing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraError, setCameraError] = useState("");
   const [progress, setProgress] = useState(0);
   const [progressLabel, setProgressLabel] = useState("Preparing OCR…");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const cameraCanvasRef = useRef<HTMLCanvasElement>(null);
+  const cameraStream = useRef<MediaStream | null>(null);
   const ocrWorker = useRef<Awaited<ReturnType<typeof import("tesseract.js").createWorker>> | null>(null);
   const ocrRunId = useRef(0);
   const progressPage = useRef(0);
@@ -101,6 +110,8 @@ export default function ScannerNotesPage({ userId }: { userId: string | null }) 
     const worker = ocrWorker.current;
     ocrWorker.current = null;
     if (worker) void worker.terminate().catch(() => undefined);
+    cameraStream.current?.getTracks().forEach((track) => track.stop());
+    cameraStream.current = null;
   }, []);
 
   useEffect(() => {
@@ -122,7 +133,85 @@ export default function ScannerNotesPage({ userId }: { userId: string | null }) 
     return latest;
   };
 
+  const stopCamera = () => {
+    cameraStream.current?.getTracks().forEach((track) => track.stop());
+    cameraStream.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
+    setCameraOpen(false);
+  };
+
+  const startCamera = async () => {
+    setCameraError("");
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError("Live camera access is not available in this browser. Use Choose or photograph pages instead.");
+      return;
+    }
+    if (!window.isSecureContext && !["localhost", "127.0.0.1"].includes(window.location.hostname)) {
+      setCameraError("The live camera needs a secure HTTPS page. Open the published HTTPS link or use Choose or photograph pages.");
+      return;
+    }
+    try {
+      cameraStream.current?.getTracks().forEach((track) => track.stop());
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1280, max: 1600 },
+          height: { ideal: 960, max: 1200 },
+        },
+      });
+      cameraStream.current = stream;
+      setCameraOpen(true);
+      requestAnimationFrame(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          void videoRef.current.play().catch(() => undefined);
+        }
+      });
+    } catch (cause) {
+      cameraStream.current = null;
+      const name = cause instanceof DOMException ? cause.name : "";
+      setCameraError(
+        name === "NotAllowedError"
+          ? "Camera permission was blocked. Allow camera access in your browser settings, then try again."
+          : name === "NotFoundError"
+            ? "No camera was found. Use Choose or photograph pages instead."
+            : "The camera could not be opened. Use Choose or photograph pages instead.",
+      );
+    }
+  };
+
+  const captureCameraPage = async () => {
+    const video = videoRef.current;
+    if (!video || video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
+      setCameraError("The camera is still starting. Hold the page steady and try again.");
+      return;
+    }
+    const canvas = cameraCanvasRef.current ?? document.createElement("canvas");
+    const scale = Math.min(1, 1280 / Math.max(video.videoWidth, video.videoHeight));
+    canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+    canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+    const context = canvas.getContext("2d", { alpha: false });
+    if (!context) {
+      setCameraError("This browser cannot capture a camera frame. Use Choose or photograph pages instead.");
+      return;
+    }
+    context.fillStyle = "#fff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.78));
+    canvas.width = 1;
+    canvas.height = 1;
+    if (!blob) {
+      setCameraError("The camera frame could not be prepared. Try again or choose an image.");
+      return;
+    }
+    const file = new File([blob], `camera-page-${Date.now()}.jpg`, { type: "image/jpeg" });
+    await addFiles([file]);
+  };
+
   const beginNewScan = () => {
+    stopCamera();
     setActiveNote(null);
     setIsEditingSaved(false);
     setFiles([]);
@@ -134,6 +223,7 @@ export default function ScannerNotesPage({ userId }: { userId: string | null }) 
   };
 
   const addFiles = async (incoming: FileList | File[]) => {
+    if (isPreparing) return;
     const batch = Array.from(incoming);
     if (!batch.length) return;
     const invalidType = batch.find((file) => !file.type.startsWith("image/"));
@@ -141,30 +231,32 @@ export default function ScannerNotesPage({ userId }: { userId: string | null }) 
       setError("Choose image files such as JPEG, PNG or WebP. PDF files are not supported by this scanner.");
       return;
     }
-    const oversized = batch.find((file) => file.size > MAX_FILE_BYTES);
+    const oversized = batch.find((file) => file.size > MAX_SOURCE_FILE_BYTES);
     if (oversized) {
-      setError(`${oversized.name} is over the 12 MB per-page limit. Choose a smaller image or reduce its size first.`);
+      setError(`${oversized.name} is over the 25 MB source limit. Use the live camera or choose a smaller image.`);
       return;
     }
-    const next = [...files, ...batch];
-    if (next.length > MAX_PAGES) {
+    if (files.length + batch.length > MAX_PAGES) {
       setError(`A scan can contain up to ${MAX_PAGES} pages. Start another note for additional pages.`);
       return;
     }
-    if (next.reduce((total, file) => total + file.size, 0) > MAX_BATCH_BYTES) {
-      setError("The total scan is over 60 MB. Remove a page or choose smaller images.");
-      return;
-    }
-    setNotice("Optimizing pages for low-memory OCR…");
+    setIsPreparing(true);
+    setNotice("Preparing one page at a time for low-memory OCR…");
     const optimized: File[] = [];
     try {
-      for (const file of next) optimized.push(await optimizeScanImage(file));
+      for (const file of batch) optimized.push(await optimizeScanImage(file));
+      const next = [...files, ...optimized];
+      if (optimized.some((file) => file.size > MAX_OPTIMIZED_FILE_BYTES) || next.reduce((total, file) => total + file.size, 0) > MAX_BATCH_BYTES) {
+        throw new Error("These pages could not be reduced enough for this phone. Add fewer pages or use the live camera one page at a time.");
+      }
+      setFiles(next);
     } catch (cause) {
       setNotice("");
-      setError(cause instanceof Error ? cause.message : "Could not prepare these images.");
+      setError(cause instanceof Error ? cause.message : "Could not prepare these images. Use the live camera or try one page at a time.");
       return;
+    } finally {
+      setIsPreparing(false);
     }
-    setFiles(optimized);
     setDraftText("");
     setProgress(0);
     setError("");
@@ -187,6 +279,7 @@ export default function ScannerNotesPage({ userId }: { userId: string | null }) 
     }
     setError("");
     setNotice("");
+    stopCamera();
     setProgress(0);
     setProgressLabel("Loading the local OCR engine…");
     setIsProcessing(true);
@@ -225,8 +318,14 @@ export default function ScannerNotesPage({ userId }: { userId: string | null }) 
         setNotice("Text extracted. Review names, section numbers and legal citations before saving.");
       }
     } catch (cause) {
-      if (ocrRunId.current === runId)
-        setError(cause instanceof Error ? cause.message : "OCR could not read these images. Try a clearer photo or another language setting.");
+      if (ocrRunId.current === runId) {
+        const message = cause instanceof Error ? cause.message : "";
+        setError(
+          /memory|allocation|wasm|abort/i.test(message)
+            ? "The browser ran out of memory while starting OCR. Try one page at a time, or capture the page with the live camera for a smaller image."
+            : message || "OCR could not read these images. Try a clearer photo or another language setting.",
+        );
+      }
     } finally {
       if (worker && ocrRunId.current === runId) {
         ocrWorker.current = null;
@@ -412,14 +511,24 @@ export default function ScannerNotesPage({ userId }: { userId: string | null }) 
                 <>
                   <div className="scan-toolbar">
                     <label className="scan-language-label"><Languages size={15} /><span>Text language</span><select value={language} onChange={(event) => setLanguage(event.target.value)} disabled={isProcessing}><option value="eng">English</option><option value="swa">Kiswahili</option><option value="eng+swa">English + Kiswahili</option></select></label>
-                    <span className="scan-page-limit">{files.length}/{MAX_PAGES} pages · up to 12 MB each</span>
+                    <span className="scan-page-limit">{files.length}/{MAX_PAGES} pages · resized to fit low-memory phones</span>
                   </div>
 
                   <div className="scan-upload-row">
-                    <button type="button" className="scan-primary-button" onClick={() => fileInput.current?.click()} disabled={isProcessing || files.length >= MAX_PAGES}><Upload size={16} /> Choose or photograph pages</button>
-                    <input ref={fileInput} className="scan-file-input" type="file" accept="image/*" capture="environment" multiple onChange={(event) => { if (event.target.files) addFiles(event.target.files); event.currentTarget.value = ""; }} />
-                    <span>JPEG, PNG or WebP images · resized locally for safer processing · up to 10 pages per note</span>
+                    <button type="button" className="scan-primary-button" onClick={() => fileInput.current?.click()} disabled={isProcessing || isPreparing || files.length >= MAX_PAGES}><Upload size={16} /> {isPreparing ? "Preparing page…" : "Choose or photograph pages"}</button>
+                    <button type="button" className="scan-secondary-button" onClick={() => void startCamera()} disabled={isProcessing || isPreparing || files.length >= MAX_PAGES || cameraOpen}><Camera size={16} /> {cameraOpen ? "Camera open" : "Open live camera"}</button>
+                    <input ref={fileInput} className="scan-file-input" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" multiple onChange={(event) => { if (event.target.files) void addFiles(event.target.files); event.currentTarget.value = ""; }} />
+                    <span>Choose files, use your phone camera, or capture pages live in this browser. Images are reduced before OCR and upload.</span>
                   </div>
+
+                  {cameraOpen && <div className="scan-camera-panel" aria-label="Live camera scanner">
+                    <div className="scan-camera-heading"><div><span className="scan-eyebrow"><Camera size={13} /> LIVE CAMERA</span><strong>Frame one page at a time.</strong><small>Keep the whole page inside the guide, then capture it. The camera stays open for the next page.</small></div><button type="button" className="scan-camera-close" onClick={stopCamera} aria-label="Close live camera"><X size={17} /></button></div>
+                    <div className="scan-camera-preview"><video ref={videoRef} autoPlay muted playsInline aria-label="Live camera preview" /><div className="scan-camera-guide" aria-hidden="true" /></div>
+                    <canvas ref={cameraCanvasRef} className="scan-camera-canvas" aria-hidden="true" />
+                    <div className="scan-camera-actions"><button type="button" className="scan-primary-button" onClick={() => void captureCameraPage()} disabled={isPreparing || files.length >= MAX_PAGES}><Camera size={16} /> Capture page</button><span>{files.length}/{MAX_PAGES} pages captured</span></div>
+                    {cameraError && <p className="scan-camera-error" role="alert">{cameraError}</p>}
+                  </div>}
+                  {cameraError && !cameraOpen && <p className="scan-camera-error" role="alert">{cameraError}</p>}
 
                   {files.length > 0 && <div className="scan-page-queue" aria-label="Pages selected for scanning">{files.map((file, index) => <figure key={`${file.name}-${index}`} className="scan-page-thumb"><img src={previews[index]} alt={`Selected page ${index + 1}`} /><figcaption><span>PAGE {index + 1}</span><span>{file.name}</span></figcaption><button type="button" onClick={() => removePage(index)} aria-label={`Remove page ${index + 1}`}><Trash2 size={13} /></button></figure>)}</div>}
 
