@@ -53,11 +53,13 @@ const e = (
 // Ordered strongest-reasoning-first, spread across providers so one quota running dry never stalls the chain.
 export const DEFAULT_CHAIN: Entry[] = [
   e("gemini", "gemini-3.6-flash", "effort", false, 16000),
+  // Reach an independent provider immediately if the primary Gemini endpoint
+  // is rate-limited, unavailable, or slow; do not exhaust every Gemini model first.
+  e("groq", "openai/gpt-oss-120b", "effort"),
+  e("groq", "llama-3.1-8b-instant"),
   e("gemini", "gemini-3.5-flash", "effort", false, 16000),
   e("gemini", "gemini-2.5-flash", "effort", false, 12000),
   e("gemini", "gemini-2.5-flash-lite", "effort", false, 8000),
-  e("groq", "openai/gpt-oss-120b", "effort"),
-  e("groq", "llama-3.1-8b-instant"),
   e("cerebras", "gpt-oss-120b", "effort"),
   e("openrouter", "deepseek/deepseek-v4-flash:free", "openrouter"),
   e("openrouter", "nvidia/nemotron-3-ultra-550b-a55b:free", "openrouter"),
@@ -195,10 +197,20 @@ export async function callChain(
   const perCall = opts.perCallMs ?? Number(Deno.env.get("AI_PER_CALL_MS") ?? 20_000);
   const attempts: Attempt[] = [];
   let retryAfterMs = 0;
+  // A 503, timeout, or network failure is normally shared by the provider/model
+  // endpoint. Do not spend the request deadline replaying that outage with every
+  // sibling key. 429 is different: another key may belong to another quota project,
+  // so quota failures continue to the next configured key.
+  const unavailableEntries = new Set<string>();
   for (const ent of orderedChain(opts.feature)) {
     const keys = secretKeys(ent.keyEnv);
     for (const [keyIndex, key] of keys.entries()) {
       const eid = `${id(ent)}#${keyIndex + 1}`;
+      const entryId = id(ent);
+      if (unavailableEntries.has(entryId)) {
+        attempts.push({ id: eid, status: "outage_skipped" });
+        continue;
+      }
       if ((cooldownUntil.get(eid) ?? 0) > Date.now()) {
         attempts.push({ id: eid, status: "cooldown" });
         continue;
@@ -251,6 +263,9 @@ export async function callChain(
             }
             const retryAfter = Number(res.headers.get("retry-after")) || 0;
             retryAfterMs = Math.max(retryAfterMs, retryAfter * 1000);
+            if (res.status === 500 || res.status === 502 || res.status === 503 || res.status === 504) {
+              unavailableEntries.add(entryId);
+            }
             const cool = res.status === 429 ? Math.max(retryAfter * 1000, 60_000) : res.status === 401 || res.status === 403 ? 15 * 60_000 : res.status === 404 || res.status === 400 ? 30 * 60_000 : 45_000;
             cooldownUntil.set(eid, Date.now() + cool);
             let detail: string | undefined;
@@ -260,6 +275,7 @@ export async function callChain(
             break;
           } catch (err) {
             cooldownUntil.set(eid, Date.now() + 45_000);
+            unavailableEntries.add(entryId);
             attempts.push({ id: eid, status: err instanceof DOMException ? "timeout" : "network" });
             break;
           }
