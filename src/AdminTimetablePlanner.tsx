@@ -169,6 +169,8 @@ export default function AdminTimetablePlanner({
   const [uploadId, setUploadId] = useState<string | null>(null);
   const [uploadStatus, setUploadStatus] = useState<Status>({ kind: "idle", text: "No timetable file selected yet." });
   const [proposalStatus, setProposalStatus] = useState<Status>({ kind: "idle", text: "Upload a timetable, then describe the change you want." });
+  const [editingProposalId, setEditingProposalId] = useState<string | null>(null);
+  const [editInstruction, setEditInstruction] = useState("");
   const [proposals, setProposals] = useState<TimetableProposal[]>([]);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -391,6 +393,49 @@ export default function AdminTimetablePlanner({
     }
   };
 
+  const reviseProposal = async (proposal: TimetableProposal) => {
+    if (!editInstruction.trim()) {
+      setNotice("Describe the change you want, for example: Add a Constitutional Law lesson on Monday at 10:00.");
+      return;
+    }
+    setBusy(true);
+    setProposalStatus({ kind: "working", text: `Editing “${proposal.title}” with your instruction…` });
+    try {
+      const response = await askAI({
+        feature: "timetable_proposal",
+        mode: "general",
+        messages: [{
+          role: "user",
+          content: `Today is ${new Date().toISOString().slice(0, 10)}. Revise this existing timetable proposal, preserving every lesson unless the administrator explicitly asks to change or remove it.\n\nEXISTING PROPOSAL:\n${JSON.stringify(proposal.proposed_lessons)}\n\nOFFICIAL SOURCE EXTRACT:\n${classSourceText || "Use the existing proposal as the source."}\n\nADMINISTRATOR EDIT REQUEST:\n${editInstruction.trim()}`,
+        }],
+      });
+      const data = (response.data ?? {}) as { title?: string; rationale?: string; lessons?: unknown };
+      const revised = cleanLessons(data.lessons, [
+        ...units.map((unit) => unit.name),
+        ...proposal.proposed_lessons.map((lesson) => lesson.unit),
+      ]);
+      if (!revised.length) throw new Error(response.answer || "The AI did not return a usable edited timetable.");
+      const created = await repository.createTimetableProposal({
+        title: data.title?.trim() || `${proposal.title} — edited`,
+        instruction: editInstruction.trim(),
+        source_filename: proposal.source_filename || sourceFilename || null,
+        proposed_lessons: revised,
+        rationale: data.rationale?.trim() || `Edited from “${proposal.title}”: ${editInstruction.trim()}`,
+      });
+      await repository.rejectTimetableProposal(proposal.id);
+      setProposals((current) => [created, ...current.map((item) => item.id === proposal.id ? { ...item, status: "rejected" as const } : item)]);
+      setEditInstruction("");
+      setEditingProposalId(null);
+      setProposalStatus({ kind: "success", text: `Edited proposal ready: ${revised.length} lessons. Review it below, then approve the edited version.` });
+      setNotice("Edited proposal saved. The original proposal was kept in history and marked replaced.");
+    } catch (error) {
+      setProposalStatus({ kind: "error", text: error instanceof Error ? `Edit failed: ${error.message}` : "Edit failed. Please try again." });
+      setNotice(error instanceof Error ? error.message : "Could not edit timetable proposal.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const reject = async (proposal: TimetableProposal) => {
     setBusy(true);
     try {
@@ -587,8 +632,35 @@ export default function AdminTimetablePlanner({
                   )}
                 </div>
               </details>
+              {proposal.status === "pending" && editingProposalId === proposal.id && (
+                <div className="proposal-edit-box">
+                  <label className="field-label">
+                    Change this proposal
+                    <textarea
+                      value={editInstruction}
+                      onChange={(event) => setEditInstruction(event.target.value)}
+                      placeholder="Example: Add a Constitutional Law lesson on Monday at 10:00 at the library. Keep all the other lessons."
+                      rows={3}
+                      disabled={busy}
+                    />
+                  </label>
+                  <div className="tt-actions">
+                    <button className="secondary-button" onClick={() => { setEditingProposalId(null); setEditInstruction(""); }} disabled={busy}>Cancel</button>
+                    <button className="primary-button" onClick={() => void reviseProposal(proposal)} disabled={busy || !editInstruction.trim()}>
+                      <Lightbulb size={14} /> {busy ? "Editing…" : "Generate edited proposal"}
+                    </button>
+                  </div>
+                </div>
+              )}
               {proposal.status === "pending" && (
                 <div className="tt-actions">
+                  <button
+                    className="secondary-button"
+                    onClick={() => { setEditingProposalId(proposal.id); setEditInstruction(""); }}
+                    disabled={busy}
+                  >
+                    Edit with AI
+                  </button>
                   <button
                     className="secondary-button"
                     onClick={() => void reject(proposal)}

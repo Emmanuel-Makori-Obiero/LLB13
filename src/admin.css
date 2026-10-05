@@ -192,6 +192,15 @@
 .proposal-card .tt-actions {
   margin-top: 14px;
 }
+.proposal-edit-box {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid #d6c69a;
+  background: #fffaf0;
+}
+.proposal-edit-box .tt-actions {
+  justify-content: flex-end;
+}
 .admin-timetable-planner > .field-hint:last-child {
   display: flex;
   align-items: center;
