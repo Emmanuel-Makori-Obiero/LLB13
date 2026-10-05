@@ -1,0 +1,43 @@
+.floating-lawyer { position: fixed; right: 20px; bottom: 22px; z-index: 70; display: flex; flex-direction: column; align-items: flex-end; }
+.floating-lawyer-trigger { display: flex; align-items: center; gap: 7px; padding: 5px 10px 5px 5px; border: 1px solid var(--forest); border-radius: 999px; background: var(--forest); color: #fff; box-shadow: 0 12px 28px rgba(22,58,52,.24); cursor: pointer; font-size: 10px; font-weight: 700; line-height: 1.05; text-align: left; }
+.floating-lawyer-trigger:hover { background: #000; }
+.lawyer-avatar { flex: 0 0 auto; width: 42px; height: 42px; }
+.lawyer-avatar.small { width: 34px; height: 34px; }
+.lawyer-avatar svg { display: block; width: 100%; height: 100%; }
+.lawyer-avatar-bg { fill: #c96e52; stroke: #f7f5f0; stroke-width: 2; }
+.lawyer-robe { fill: #163a34; }
+.lawyer-face { fill: #f0b98d; stroke: #402b26; stroke-width: 1.2; }
+.lawyer-hair { fill: #201b1a; }
+.lawyer-collar { fill: none; stroke: #f7f5f0; stroke-width: 3; stroke-linecap: round; }
+.lawyer-eye { fill: #201b1a; }
+.lawyer-mouth { fill: none; stroke: #8b4639; stroke-width: 1.5; stroke-linecap: round; }
+.lawyer-gavel { fill: none; stroke: #f7f5f0; stroke-width: 3; stroke-linecap: round; }
+.floating-lawyer-panel { display: flex; flex-direction: column; width: min(390px, calc(100vw - 28px)); max-height: min(650px, calc(100vh - 105px)); margin-bottom: 10px; overflow: hidden; border: 1px solid var(--forest); background: var(--paper); box-shadow: 0 18px 48px rgba(0,0,0,.24); }
+.floating-lawyer-panel header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 13px; background: var(--forest); color: #fff; }
+.floating-lawyer-title { display: flex; align-items: center; gap: 9px; }
+.floating-lawyer-title .lawyer-avatar { width: 35px; height: 35px; }
+.floating-lawyer-title strong,.floating-lawyer-title small { display: block; }
+.floating-lawyer-title strong { font: 600 17px "Source Serif 4", Georgia, serif; }
+.floating-lawyer-title small { margin-top: 2px; color: #d9e6dc; font-size: 9px; }
+.floating-lawyer-close { display: grid; place-items: center; border: 0; background: transparent; color: #fff; cursor: pointer; }
+.floating-lawyer-body { min-height: 145px; overflow: auto; padding: 12px; }
+.floating-lawyer-welcome { display: grid; grid-template-columns: auto 1fr; gap: 8px; padding: 10px; border: 1px solid var(--line); background: #fff; font-size: 11px; line-height: 1.5; }
+.floating-lawyer-welcome p { margin: 0; }
+.floating-lawyer-welcome>svg { color: var(--terracotta); }
+.floating-lawyer-quick { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.floating-lawyer-quick button { display: inline-flex; align-items: center; gap: 5px; padding: 7px 8px; border: 1px solid var(--line); background: var(--paper); color: var(--forest); font-size: 10px; cursor: pointer; }
+.floating-lawyer-message { margin: 7px 0; padding: 9px 10px; font-size: 11px; line-height: 1.55; }
+.floating-lawyer-message span { display: block; margin-bottom: 4px; color: var(--forest); font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.floating-lawyer-message p { margin: 0; white-space: pre-wrap; }
+.floating-lawyer-message.user { margin-left: 28px; background: #fff2e9; }
+.floating-lawyer-message.assistant { margin-right: 15px; border: 1px solid var(--line); background: #fff; }
+.floating-lawyer-message.assistant .md>:first-child { margin-top: 0; }
+.floating-lawyer-message.assistant .md>:last-child { margin-bottom: 0; }
+.floating-lawyer-thinking { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 10px; }
+.floating-lawyer-spin { animation: floating-lawyer-spin 1s linear infinite; }
+@keyframes floating-lawyer-spin { to { transform: rotate(360deg); } }
+.floating-lawyer-form { display: flex; gap: 6px; padding: 9px; border-top: 1px solid var(--line); background: #fff; }
+.floating-lawyer-form input { min-width: 0; flex: 1; padding: 9px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); font: inherit; font-size: 11px; }
+.floating-lawyer-form button { display: grid; place-items: center; width: 34px; border: 0; background: var(--forest); color: #fff; cursor: pointer; }
+.floating-lawyer-form button:disabled { opacity: .45; cursor: not-allowed; }
+@media(max-width:760px){.floating-lawyer{right:10px;bottom:calc(74px + env(safe-area-inset-bottom))}.floating-lawyer-panel{max-height:calc(100vh - 150px)}}

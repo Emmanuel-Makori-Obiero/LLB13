@@ -288,6 +288,19 @@ export const featureCatalog: FeatureEntry[] = [
     benefit: "Brings several guided study activities into one place and can help students make better use of their own readings and the shared library.",
   },
   {
+    id: "law_dictionary",
+    title: "Law dictionary and Lawyer Agent",
+    category: "AI study & practice",
+    availability: "live",
+    access: "Sign in with an approved Group 13 account. Treat definitions as study references and verify the governing authority.",
+    capabilities: [
+      "Search a Black's quick-reference shelf and a broader law dictionary by term, meaning, or tag.",
+      "Open a floating Lawyer Agent from any workspace page for contextual explanations and legal study guidance.",
+    ],
+    howToUse: "Open Law dictionary from the navigation, choose a shelf, and search. From any signed-in page, open the Lawyer Agent bubble and ask for a definition, explanation, case-study help, or the right next page.",
+    benefit: "Makes legal vocabulary and grounded study help available without losing your place in the workspace.",
+  },
+  {
     id: "learning_studio",
     title: "Learning studio",
     category: "AI study & practice",

@@ -33,6 +33,10 @@
       "title": "Library"
     },
     {
+      "path": "/dictionary",
+      "title": "Law dictionary"
+    },
+    {
       "path": "/library/materials/:id",
       "title": "Reading"
     },

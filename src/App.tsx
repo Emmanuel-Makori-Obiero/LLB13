@@ -84,6 +84,8 @@ import TimetablePage from "./TimetablePage";
 import TranscribePage from "./TranscribePage";
 import { CounsellorChat } from "./CounsellorChat";
 import { StudyAssistant } from "./StudyAssistant";
+import LegalDictionaryPage from "./LegalDictionaryPage";
+import FloatingLawyerAgent from "./FloatingLawyerAgent";
 import { ResearchWriter } from "./ResearchWriter";
 import { TranscriptAI } from "./TranscriptAI";
 import { askAI, extractText, type AIFeature } from "./lib/ai";
@@ -120,6 +122,7 @@ const nav = [
   { id: "todos", label: "My to-do", icon: CheckSquare },
   { id: "assignments", label: "Assignments", icon: FileText },
   { id: "library", label: "Library", icon: Library },
+  { id: "dictionary", label: "Law dictionary", icon: BookOpen },
   { id: "scanner", label: "Scan & notes", icon: ScanLine },
   { id: "guide", label: "Guided study", icon: GraduationCap },
   { id: "music", label: "Music & media", icon: Music2 },
@@ -472,6 +475,7 @@ function App() {
     [materials, search],
   );
   const visibleTodos = todos;
+  const currentPageLabel = nav.find((item) => item.id === view)?.label ?? "Group 13 workspace";
   const setPage = (next: string) => {
     const target = validViews.has(next) ? next : "dashboard";
     setMenuOpen(false);
@@ -660,15 +664,21 @@ function App() {
 
   if (view === "features")
     return (
-      <Suspense fallback={<div className="auth-page"><p className="subheading">Loading the feature guide…</p></div>}>
-        <FeaturesGuidePage />
-      </Suspense>
+      <>
+        <Suspense fallback={<div className="auth-page"><p className="subheading">Loading the feature guide…</p></div>}>
+          <FeaturesGuidePage />
+        </Suspense>
+        {userEmail && <FloatingLawyerAgent currentPage="All platform features" onOpenDictionary={() => setPage("dictionary")} />}
+      </>
     );
   if (view === "cases")
     return (
-      <Suspense fallback={<div className="auth-page"><p className="subheading">Loading Kenya Law…</p></div>}>
-        <KenyaLawCasesPage />
-      </Suspense>
+      <>
+        <Suspense fallback={<div className="auth-page"><p className="subheading">Loading Kenya Law…</p></div>}>
+          <KenyaLawCasesPage />
+        </Suspense>
+        {userEmail && <FloatingLawyerAgent currentPage="Kenya Law case finder" onOpenDictionary={() => setPage("dictionary")} />}
+      </>
     );
   if (authLoading)
     return (
@@ -728,6 +738,7 @@ function App() {
       }
     >
       <HelpButton floating onNavigate={setPage} />
+      <FloatingLawyerAgent currentPage={currentPageLabel} onOpenDictionary={() => setPage("dictionary")} />
       <aside className="sidebar">
         <Brand />
         <nav>
@@ -1125,6 +1136,7 @@ function App() {
           )}
           {view === "arena" && <GamesHub materials={materials} userId={userId} displayName={profile.displayName || userEmail?.split("@")[0] || "Player"} />}
           {view === "members" && <SectionedMembersPage members={members} />}
+          {view === "dictionary" && <LegalDictionaryPage />}
           {view === "assistant" && (
             <>
               <PageHeading
