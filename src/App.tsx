@@ -668,7 +668,7 @@ function App() {
         <Suspense fallback={<div className="auth-page"><p className="subheading">Loading the feature guide…</p></div>}>
           <FeaturesGuidePage />
         </Suspense>
-        {userEmail && <FloatingLawyerAgent currentPage="All platform features" onOpenDictionary={() => setPage("dictionary")} />}
+        {userEmail && <FloatingLawyerAgent historyKey={userEmail} currentPage="All platform features" onOpenDictionary={() => setPage("dictionary")} />}
       </>
     );
   if (view === "cases")
@@ -677,7 +677,7 @@ function App() {
         <Suspense fallback={<div className="auth-page"><p className="subheading">Loading Kenya Law…</p></div>}>
           <KenyaLawCasesPage />
         </Suspense>
-        {userEmail && <FloatingLawyerAgent currentPage="Kenya Law case finder" onOpenDictionary={() => setPage("dictionary")} />}
+        {userEmail && <FloatingLawyerAgent historyKey={userEmail} currentPage="Kenya Law case finder" onOpenDictionary={() => setPage("dictionary")} />}
       </>
     );
   if (authLoading)
@@ -738,7 +738,7 @@ function App() {
       }
     >
       <HelpButton floating onNavigate={setPage} />
-      <FloatingLawyerAgent currentPage={currentPageLabel} onOpenDictionary={() => setPage("dictionary")} />
+      <FloatingLawyerAgent historyKey={userEmail ?? "workspace"} currentPage={currentPageLabel} onOpenDictionary={() => setPage("dictionary")} />
       <aside className="sidebar">
         <Brand />
         <nav>
