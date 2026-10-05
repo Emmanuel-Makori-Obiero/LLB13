@@ -32,7 +32,7 @@ function decodeHtml(value: string) {
 function officialCaseUrl(value: string) {
   try {
     const url = new URL(value, "https://www.google.com");
-    const candidate = url.searchParams.get("q") || url.searchParams.get("url") || url.href;
+    const candidate = url.searchParams.get("q") || url.searchParams.get("url") || url.searchParams.get("uddg") || url.href;
     const clean = new URL(candidate);
     if (
       (clean.hostname === "new.kenyalaw.org" || clean.hostname === "kenyalaw.org") &&
@@ -66,6 +66,42 @@ function parseResults(html: string): CaseResult[] {
 function extractJudgmentText(html: string) {
   const main = html.match(/<main\b[\s\S]*?<\/main>/i)?.[0] ?? html;
   return decodeHtml(main.replace(/<(script|style|noscript)\b[\s\S]*?<\/\1>/gi, " ")).slice(0, 60000);
+}
+
+async function discoverResults(query: string): Promise<{ results: CaseResult[]; providers: string[] }> {
+  const sources = [
+    {
+      name: "Google",
+      url: `https://www.google.com/search?gbv=1&num=10&q=${encodeURIComponent(`site:new.kenyalaw.org/akn/ke/judgment ${query}`)}`,
+    },
+    {
+      name: "Bing",
+      url: `https://www.bing.com/search?count=10&q=${encodeURIComponent(`site:new.kenyalaw.org/akn/ke/judgment ${query}`)}`,
+    },
+    {
+      name: "Kenya Law",
+      url: `https://new.kenyalaw.org/search/?q=${encodeURIComponent(query)}`,
+    },
+  ];
+  const providers: string[] = [];
+  for (const source of sources) {
+    try {
+      const response = await fetch(source.url, {
+        headers: {
+          Accept: "text/html,application/xhtml+xml",
+          "User-Agent": "Mozilla/5.0 (compatible; Group13CaseFinder/1.0; +https://kenyalaw.org/)",
+        },
+        signal: AbortSignal.timeout(9000),
+      });
+      if (!response.ok) continue;
+      providers.push(source.name);
+      const results = parseResults(await response.text());
+      if (results.length) return { results, providers };
+    } catch {
+      /* Try the next independent source. */
+    }
+  }
+  return { results: [], providers };
 }
 
 Deno.serve(async (request) => {
@@ -108,19 +144,13 @@ Deno.serve(async (request) => {
   if (query.length < 3) return json({ error: "Enter at least three characters to search." }, 400);
   if (query.length > 180) return json({ error: "Keep the case query under 180 characters." }, 400);
 
-  const googleQuery = `site:new.kenyalaw.org/akn/ke/judgment ${query}`;
-  const googleUrl = new URL("https://www.google.com/search");
-  googleUrl.searchParams.set("gbv", "1");
-  googleUrl.searchParams.set("num", "10");
-  googleUrl.searchParams.set("q", googleQuery);
-  const response = await fetch(googleUrl, {
-    headers: {
-      Accept: "text/html,application/xhtml+xml",
-      "User-Agent": "Mozilla/5.0 (compatible; Group13CaseFinder/1.0; +https://kenyalaw.org/)",
-    },
+  const discovered = await discoverResults(query);
+  return json({
+    query,
+    results: discovered.results,
+    source: discovered.providers.length
+      ? `Official Kenya Law links discovered using ${discovered.providers.join(" / ")}`
+      : "No search provider responded; try the official Kenya Law collections below.",
+    degraded: discovered.providers.length === 0,
   });
-  if (!response.ok) return json({ error: "The free case search provider is temporarily unavailable." }, 502);
-
-  const results = parseResults(await response.text());
-  return json({ query, results, source: "Official Kenya Law links discovered from public web search" });
 });
