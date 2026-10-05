@@ -402,7 +402,7 @@ Deno.serve(async (req) => {
     if (jobUpdate.error) return await reply({ asset: updated, status: remaining ? "queued" : "failed", error: "The asset state was saved, but the retry record could not be updated." }, 500);
     return await reply({ asset: updated, status: remaining ? "queued" : "failed", provider_error: remaining ? "The first provider failed; a fallback provider will be retried shortly." : "The available video providers could not finish this clip. Check the saved media error details or try again later.", retrying: remaining, ...(remaining ? { retry_after_seconds: 30 } : {}) });
   }
-  const videoRef = events.slice().reverse().map(findVideoRef).find((candidate): candidate is string => Boolean(candidate)) || null;
+  const videoRef = events.slice().reverse().map((event) => findVideoRef(event)).find((candidate): candidate is string => Boolean(candidate)) || null;
   if (!videoRef) {
     if (completed) return await markProviderUnavailable("Provider reported completion without a usable video file.", true);
     const hasProgress = events.some((event) => /process_started|process_generating|progress|heartbeat|estimation|queue/i.test(typeof event === "string" ? event : JSON.stringify(event)));
