@@ -90,7 +90,20 @@ export async function askAI(args: {
   part?: number; // 'notes' only: which block of a document to read
   size?: number; // 'notes' only: how many sections per block
 }): Promise<AIResult> {
-  const { data, error } = await db().functions.invoke("ai", { body: args });
+  let data: unknown = null;
+  let error: unknown = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const response = await db().functions.invoke("ai", { body: args });
+    data = response.data;
+    error = response.error;
+    if (!error) break;
+    const status = Number((error as { context?: Response })?.context?.status ?? 0);
+    if (attempt === 0 && (status === 429 || status === 502 || status === 503 || status === 504)) {
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      continue;
+    }
+    break;
+  }
   if (error) {
     // supabase-js wraps non-2xx; try to surface the function's own message
     let msg = "The assistant is unavailable right now.";

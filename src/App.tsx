@@ -3068,6 +3068,30 @@ function CounsellorPage() {
       </div>
       <div className="grid grid-two">
         <div className="card card-pad">
+          <div className="eyebrow">Career research desk</div>
+          <h2>Compare paths with real signals.</h2>
+          <p className="subheading">Use these as research starting points. Check role descriptions, current skills, location, and entry-level requirements before deciding.</p>
+          <div className="row-list">
+            <a className="row" href="https://www.linkedin.com/jobs/" target="_blank" rel="noreferrer"><span className="row-main"><strong>LinkedIn Jobs</strong><small>Search internships and entry-level roles</small></span><span>↗</span></a>
+            <a className="row" href="https://careers.google.com/" target="_blank" rel="noreferrer"><span className="row-main"><strong>Google Careers</strong><small>See how technology roles are described</small></span><span>↗</span></a>
+            <a className="row" href="https://skillsbuild.org/" target="_blank" rel="noreferrer"><span className="row-main"><strong>IBM SkillsBuild</strong><small>Free skills and project pathways</small></span><span>↗</span></a>
+            <a className="row" href="https://www.onetonline.org/" target="_blank" rel="noreferrer"><span className="row-main"><strong>O*NET career profiles</strong><small>Tasks, skills and work context</small></span><span>↗</span></a>
+          </div>
+        </div>
+        <div className="card card-pad">
+          <div className="eyebrow">Keep learning current</div>
+          <h2>Follow the field, not just the title.</h2>
+          <p className="subheading">Read more than one source. News is useful for direction, but it is not a promise of a job or salary.</p>
+          <div className="row-list">
+            <a className="row" href="https://news.google.com/search?q=cybersecurity%20AI%20engineering%20jobs" target="_blank" rel="noreferrer"><span className="row-main"><strong>Current technology news</strong><small>Google News search for cybersecurity and AI engineering</small></span><span>↗</span></a>
+            <a className="row" href="https://www.weforum.org/publications/the-future-of-jobs-report-2025/" target="_blank" rel="noreferrer"><span className="row-main"><strong>Future of Jobs research</strong><small>Skills and role trends to discuss with the counsellor</small></span><span>↗</span></a>
+            <a className="row" href="https://www.coursera.org/career-academy" target="_blank" rel="noreferrer"><span className="row-main"><strong>Coursera Career Academy</strong><small>Explore beginner-to-job skill paths</small></span><span>↗</span></a>
+            <a className="row" href="https://www.pinterest.com/search/pins/?q=career%20roadmap%20technology" target="_blank" rel="noreferrer"><span className="row-main"><strong>Pinterest inspiration</strong><small>Visual roadmap ideas only; verify claims elsewhere</small></span><span>↗</span></a>
+          </div>
+        </div>
+      </div>
+      <div className="grid grid-two">
+        <div className="card card-pad">
           <div className="eyebrow">Start here</div>
           <h2>Take the next small step.</h2>
           <p className="subheading">

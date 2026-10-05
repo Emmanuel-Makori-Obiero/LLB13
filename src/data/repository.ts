@@ -85,6 +85,7 @@ export type Group13Repository = {
   approveTimetableProposal: (id: string) => Promise<number>;
   rollbackTimetableProposal: (id: string) => Promise<number>;
   rejectTimetableProposal: (id: string) => Promise<void>;
+  deleteTimetableProposal: (id: string) => Promise<void>;
   adminCreateUnit: (
     unit: Pick<Unit, "name" | "code" | "lead">,
   ) => Promise<Unit>;
@@ -322,6 +323,14 @@ const supabaseRepository: Group13Repository = {
       .eq("status", "pending");
     if (error)
       throw new Error(`Could not reject timetable proposal: ${error.message}`);
+  },
+  deleteTimetableProposal: async (id) => {
+    const { error } = await db()
+      .from("timetable_proposals")
+      .delete()
+      .eq("id", id);
+    if (error)
+      throw new Error(`Could not delete timetable proposal: ${error.message}`);
   },
   adminCreateUnit: async (unit) => {
     if (!supabase) throw new Error("Not connected.");

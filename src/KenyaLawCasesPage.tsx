@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { ArrowUpRight, BookOpen, Loader2, Search } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, BookOpen, Loader2, Search } from "lucide-react";
 import { askAI } from "./lib/ai";
-import { fetchKenyaLawCase, searchKenyaLaw, type KenyaLawCaseResult } from "./lib/kenyaLaw";
+import { fetchKenyaLawCase, searchKenyaLaw, suggestCaseQueries, type KenyaLawCaseResult } from "./lib/kenyaLaw";
 import { Markdown } from "./Markdown";
 import "./kenya-law.css";
 
@@ -25,6 +25,7 @@ export default function KenyaLawCasesPage() {
   const [summary, setSummary] = useState("");
   const [summaryBusy, setSummaryBusy] = useState(false);
   const [summaryError, setSummaryError] = useState("");
+  const [suggestions, setSuggestions] = useState<string[]>([]);
 
   const searchOfficialCases = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -36,8 +37,11 @@ export default function KenyaLawCasesPage() {
     setSelectedCase(null);
     setSummary("");
     setSummaryError("");
+    setSuggestions([]);
     try {
-      setResults(await searchKenyaLaw(term));
+      const found = await searchKenyaLaw(term);
+      setResults(found);
+      if (!found.length) setSuggestions(suggestCaseQueries(term));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The case search is unavailable right now.");
     } finally {
@@ -76,6 +80,7 @@ export default function KenyaLawCasesPage() {
           <span><strong>GROUP 13</strong><small>LAW SCHOOL HUB</small></span>
         </a>
         <nav className="kl-nav" aria-label="Public navigation">
+          <button type="button" className="kl-back" onClick={() => window.history.length > 1 ? window.history.back() : window.location.assign("/")}><ArrowLeft size={14} /> Back</button>
           <a href="/">Home</a>
           <a href="/features">All features</a>
           <a href="/login">Sign in</a>
@@ -96,7 +101,7 @@ export default function KenyaLawCasesPage() {
           <p className="kl-search-note">The free worker searches public official Kenya Law links and returns the result here. It does not require a Google login.</p>
           {error && <p className="kl-error" role="alert">{error}</p>}
           {results.length > 0 && <section className="kl-results" aria-live="polite" aria-labelledby="kl-results-title"><div className="kl-results-head"><div><p className="kl-eyebrow">RESEARCH OUTPUT</p><h2 id="kl-results-title">Relevant judgments.</h2></div><span>{results.length} result{results.length === 1 ? "" : "s"}</span></div><div className="kl-result-list">{results.map((result) => <button type="button" className={`kl-result-button${selectedCase?.url === result.url ? " active" : ""}`} key={result.url} onClick={() => void summarizeCase(result)} disabled={summaryBusy}><span><strong>{result.title}</strong>{result.citation && <small>{result.citation}</small>}<em>{selectedCase?.url === result.url && summaryBusy ? "Preparing structured brief…" : "Select case and summarize"}</em></span><ArrowUpRight size={17} aria-hidden="true" /></button>)}</div></section>}
-          {results.length === 0 && !busy && !error && query.trim().length >= 3 && <p className="kl-no-results">No official Kenya Law judgment links were found for that query. Try a case name, citation, statute, or legal issue.</p>}
+          {results.length === 0 && !busy && !error && query.trim().length >= 3 && <div className="kl-no-results"><p>No official Kenya Law judgment links were found for that query. Try a case name, citation, statute, or legal issue.</p>{suggestions.length > 0 && <div className="kl-suggestions"><strong>Try a related search:</strong>{suggestions.map((suggestion) => <button type="button" key={suggestion} onClick={() => { setQuery(suggestion); void searchKenyaLaw(suggestion).then((found) => { setResults(found); setSuggestions(found.length ? [] : suggestCaseQueries(suggestion)); }).catch((cause) => setError(cause instanceof Error ? cause.message : "The case search is unavailable right now.")); }}>{suggestion}</button>)}</div>}</div>}
           {selectedCase && <section className="kl-brief" aria-live="polite" aria-labelledby="kl-brief-title"><div className="kl-results-head"><div><p className="kl-eyebrow">STRUCTURED CASE BRIEF</p><h2 id="kl-brief-title">{selectedCase.title}</h2></div><a href={selectedCase.url} target="_blank" rel="noopener noreferrer">Open official judgment <ArrowUpRight size={15} /></a></div>{summaryBusy && <div className="kl-brief-loading"><Loader2 className="kl-spin" size={18} /> Reading the official judgment and preparing the brief…</div>}{summaryError && <p className="kl-error" role="alert">{summaryError}</p>}{summary && <div className="kl-brief-body"><Markdown text={summary} /></div>}</section>}
         </section>
 

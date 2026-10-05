@@ -12,11 +12,55 @@ export type KenyaLawCaseDocument = {
   text: string;
 };
 
+const COMMON_LEGAL_TERMS = [
+  "contract", "negligence", "defamation", "constitutional", "employment",
+  "land", "succession", "judicial review", "criminal appeal", "tort",
+];
+
+export function suggestCaseQueries(query: string): string[] {
+  const normalized = query.trim().toLowerCase();
+  const replacements: Record<string, string> = {
+    titt: "tort", tirt: "tort", conract: "contract", contractt: "contract",
+    neglegence: "negligence", negligencee: "negligence", constition: "constitutional",
+    constituton: "constitutional", emplyment: "employment", employement: "employment",
+    defamtion: "defamation", succesion: "succession", judical: "judicial review",
+  };
+  const direct = replacements[normalized];
+  const suggestions = direct ? [direct] : [];
+  if (!direct && normalized.length >= 4) {
+    const distance = (a: string, b: string) => {
+      const row = Array.from({ length: b.length + 1 }, (_, i) => i);
+      for (let i = 1; i <= a.length; i += 1) {
+        let previous = row[0]; row[0] = i;
+        for (let j = 1; j <= b.length; j += 1) {
+          const saved = row[j];
+          row[j] = Math.min(row[j] + 1, row[j - 1] + 1, previous + (a[i - 1] === b[j - 1] ? 0 : 1));
+          previous = saved;
+        }
+      }
+      return row[b.length];
+    };
+    for (const term of COMMON_LEGAL_TERMS) if (distance(normalized, term) <= Math.max(2, Math.floor(term.length / 4))) suggestions.push(term);
+  }
+  return [...new Set(suggestions)].slice(0, 4);
+}
+
 export async function searchKenyaLaw(query: string): Promise<KenyaLawCaseResult[]> {
   if (!supabase) throw new Error("Supabase is not configured.");
-  const { data, error } = await supabase.functions.invoke("kenya-law-search", {
-    body: { query },
-  });
+  let data: { results?: unknown } | null = null;
+  let error: unknown = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const response = await supabase.functions.invoke("kenya-law-search", { body: { query } });
+    data = response.data;
+    error = response.error;
+    if (!error) break;
+    const status = Number((error as { context?: Response })?.context?.status ?? 0);
+    if (attempt === 0 && (status === 502 || status === 503 || status === 504)) {
+      await new Promise((resolve) => setTimeout(resolve, 900));
+      continue;
+    }
+    break;
+  }
   if (error) {
     let message = "The case search is unavailable right now.";
     try {

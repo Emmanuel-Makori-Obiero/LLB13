@@ -355,6 +355,20 @@ export default function AdminTimetablePlanner({
     }
   };
 
+  const removeProposal = async (proposal: TimetableProposal) => {
+    if (!window.confirm(`Delete “${proposal.title}” from timetable history? This does not change the current timetable.`)) return;
+    setBusy(true);
+    try {
+      await repository.deleteTimetableProposal(proposal.id);
+      setProposals((current) => current.filter((item) => item.id !== proposal.id));
+      setNotice("Timetable proposal removed from history.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not delete timetable proposal.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const rollback = async (proposal: TimetableProposal) => {
     if (
       !window.confirm(
@@ -541,6 +555,15 @@ export default function AdminTimetablePlanner({
                     </button>
                   </div>
                 )}
+              <div className="tt-actions">
+                <button
+                  className="secondary-button"
+                  onClick={() => void removeProposal(proposal)}
+                  disabled={busy}
+                >
+                  <X size={14} /> Delete from history
+                </button>
+              </div>
             </div>
           ))}
         </div>
