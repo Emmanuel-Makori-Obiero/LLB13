@@ -202,6 +202,30 @@ export async function extractText(file: File): Promise<string> {
       await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() })
     ).value;
   }
+  if (name.endsWith(".pptx")) {
+    const JSZip = (await import("jszip")).default;
+    const zip = await JSZip.loadAsync(await file.arrayBuffer());
+    const slideFiles = Object.keys(zip.files)
+      .filter((path) => /^ppt\/slides\/slide\d+\.xml$/i.test(path))
+      .sort((a, b) => Number(a.match(/slide(\d+)/i)?.[1] ?? 0) - Number(b.match(/slide(\d+)/i)?.[1] ?? 0));
+    const decoder = document.createElement("textarea");
+    const decodeXml = (value: string) => {
+      decoder.innerHTML = value;
+      return decoder.value;
+    };
+    const slides: string[] = [];
+    for (const [index, slidePath] of slideFiles.entries()) {
+      const xml = await zip.files[slidePath].async("text");
+      const words = [...xml.matchAll(/<a:t[^>]*>([\s\S]*?)<\/a:t>/gi)]
+        .map((match) => decodeXml(match[1]).replace(/\s+/g, " ").trim())
+        .filter(Boolean);
+      if (words.length) slides.push(`Slide ${index + 1}\n${words.join(" ")}`);
+    }
+    return slides.join("\n\n");
+  }
+  if (name.endsWith(".ppt")) {
+    throw new Error("Legacy .ppt files are not supported in-browser. Save the slides as .pptx and upload again.");
+  }
   return await file.text(); // .txt, .md
 }
 

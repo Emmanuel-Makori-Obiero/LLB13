@@ -703,16 +703,16 @@ Deno.serve(async (req) => {
     : undefined;
 
   // Reserve atomically in Postgres so concurrent requests cannot bypass the cap.
-  // This covers ordinary assistant calls plus exam, copilot, and counsellor calls.
+  // Book-title metadata extraction uses its own high-cap bucket and does not consume ordinary text-AI credits.
   let textQuota;
   try {
-    textQuota = await reserveAiQuota(admin, u.user.id, "text");
+    textQuota = await reserveAiQuota(admin, u.user.id, feature === "book_metadata" ? "book_metadata" : "text");
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : "AI quota service is unavailable." }, 503);
   }
   if (!textQuota.allowed)
     return json(
-      { error: `Hourly text-AI limit reached (${textQuota.quota}). Try again later.`, retry_after_seconds: textQuota.retry_after_seconds },
+      { error: `Hourly ${feature === "book_metadata" ? "book-title extraction" : "text-AI"} limit reached (${textQuota.quota}). Try again later.`, retry_after_seconds: textQuota.retry_after_seconds },
       429,
     );
 

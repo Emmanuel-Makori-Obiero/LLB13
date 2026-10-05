@@ -2,6 +2,8 @@
 // per student/content type, so concurrent Edge Function requests cannot race past a cap.
 export const AI_QUOTAS = {
   text: 60,
+  // Metadata extraction is a short, low-cost request and has its own allowance.
+  book_metadata: 1000,
   podcast: 5,
   image: 3,
   video: 1,
