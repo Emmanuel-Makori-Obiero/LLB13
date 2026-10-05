@@ -51,6 +51,19 @@ export function suggestCaseQueries(query: string): string[] {
 
 export async function searchKenyaLaw(query: string): Promise<KenyaLawCaseResult[]> {
   if (!supabase) throw new Error("Supabase is not configured.");
+  try {
+    const localResponse = await fetch("/kenya-law-index.json", { cache: "no-store" });
+    if (localResponse.ok) {
+      const localData = await localResponse.json() as { results?: unknown };
+      const term = query.trim().toLowerCase();
+      const localResults = Array.isArray(localData.results)
+        ? (localData.results as KenyaLawCaseResult[]).filter((item) => `${item.title} ${item.citation ?? ""}`.toLowerCase().includes(term))
+        : [];
+      if (localResults.length) return localResults.slice(0, 30);
+    }
+  } catch {
+    /* The optional local cache is absent; use the authenticated worker below. */
+  }
   let data: { results?: unknown } | null = null;
   let error: unknown = null;
   for (let attempt = 0; attempt < 2; attempt += 1) {
