@@ -63,6 +63,11 @@ function parseResults(html: string): CaseResult[] {
   return results;
 }
 
+function extractJudgmentText(html: string) {
+  const main = html.match(/<main\b[\s\S]*?<\/main>/i)?.[0] ?? html;
+  return decodeHtml(main.replace(/<(script|style|noscript)\b[\s\S]*?<\/\1>/gi, " ")).slice(0, 60000);
+}
+
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (request.method !== "POST") return json({ error: "POST a case query." }, 405);
@@ -76,12 +81,29 @@ Deno.serve(async (request) => {
   const { data } = await userClient.auth.getUser();
   if (!data.user) return json({ error: "Please sign in before searching case law." }, 401);
 
-  let body: { query?: unknown };
+  let body: { query?: unknown; url?: unknown };
   try {
     body = await request.json();
   } catch {
     return json({ error: "Send a JSON body containing a query." }, 400);
   }
+  const requestedUrl = body.url ? officialCaseUrl(String(body.url)) : null;
+  if (body.url && !requestedUrl) return json({ error: "Only official Kenya Law judgment links can be opened." }, 400);
+  if (requestedUrl) {
+    const judgment = await fetch(requestedUrl, {
+      headers: {
+        Accept: "text/html,application/xhtml+xml",
+        "User-Agent": "Mozilla/5.0 (compatible; Group13CaseFinder/1.0; +https://kenyalaw.org/)",
+      },
+    });
+    if (!judgment.ok) return json({ error: "The official judgment could not be loaded right now." }, 502);
+    const html = await judgment.text();
+    const text = extractJudgmentText(html);
+    if (text.length < 100) return json({ error: "The official judgment did not contain readable text." }, 422);
+    const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    return json({ document: { title: titleMatch ? decodeHtml(titleMatch[1]) : "Kenya Law judgment", url: requestedUrl, text } });
+  }
+
   const query = String(body.query ?? "").trim().replace(/\s+/g, " ");
   if (query.length < 3) return json({ error: "Enter at least three characters to search." }, 400);
   if (query.length > 180) return json({ error: "Keep the case query under 180 characters." }, 400);
