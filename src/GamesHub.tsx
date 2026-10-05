@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { BookOpen, Clock3, Copy, Gavel, Library, Play, RefreshCw, Swords, Trophy, Users } from "lucide-react";
+import { BookOpen, Clock3, Copy, Gavel, GraduationCap, Library, Play, RefreshCw, Swords, Trophy, Users } from "lucide-react";
 import type { Material } from "./data/types";
 import { askAI } from "./lib/ai";
 import { searchKenyaLaw, type KenyaLawCaseResult } from "./lib/kenyaLaw";
@@ -24,7 +24,7 @@ import {
 } from "./lib/debate";
 import "./legal-arena-tournament.css";
 
-type GameTab = "computer" | "pvp" | "choices";
+type GameTab = "computer" | "training" | "pvp" | "choices";
 type LocalTurn = { label: string; text: string; role: "user" | "ai" };
 type ChoiceNode = { title: string; situation: string; choices: { label: string; consequence: string; next?: number }[] };
 
@@ -118,6 +118,11 @@ export default function GamesHub({
   const [computerInput, setComputerInput] = useState("");
   const [computerBusy, setComputerBusy] = useState(false);
   const [computerResult, setComputerResult] = useState("");
+  const [trainingBusy, setTrainingBusy] = useState(false);
+  const [trainingStep, setTrainingStep] = useState(0);
+  const [trainingDrill, setTrainingDrill] = useState<{ title: string; level: string; lesson: string; question: string; success_criteria: string[]; hint: string } | null>(null);
+  const [trainingAnswer, setTrainingAnswer] = useState("");
+  const [trainingResult, setTrainingResult] = useState<Record<string, unknown> | null>(null);
 
   const [room, setRoom] = useState<DebateRoom | null>(null);
   const [pvpMessages, setPvpMessages] = useState<DebateMessage[]>([]);
@@ -275,6 +280,29 @@ export default function GamesHub({
     setComputerInput("");
     setComputerResult("");
     setNotice("");
+  };
+
+  const startTrainingDrill = async () => {
+    if (!source || trainingBusy) return;
+    setTrainingBusy(true);
+    setTrainingResult(null);
+    try {
+      const response = await askAI({ feature: "arena_training", mode: "general", messages: [{ role: "user", content: `Create training step ${trainingStep + 1} for an extreme beginner in Kenyan legal advocacy. Selected library reference metadata: ${JSON.stringify({ title: source.title, topic: source.topic, source: source.source, url: source.url })}. Constitution foundation: Article 2 and constitutional supremacy. Start with one small skill only: issue, fact/evidence, source, inference, opposing point, or structure. Do not dump a full moot. Return the drill JSON.` }] });
+      setTrainingDrill(parseJsonAnswer(response.answer));
+      setTrainingAnswer("");
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Training drill unavailable."); }
+    finally { setTrainingBusy(false); }
+  };
+
+  const submitTrainingAnswer = async () => {
+    if (!source || !trainingDrill || !trainingAnswer.trim() || trainingBusy) return;
+    setTrainingBusy(true);
+    try {
+      const response = await askAI({ feature: "arena_training", mode: "general", messages: [{ role: "user", content: `Grade this beginner advocacy exercise as a Kenyan-law judge. Library metadata: ${JSON.stringify({ title: source.title, topic: source.topic, source: source.source, url: source.url })}. Constitution foundation: Article 2 and constitutional supremacy. DRILL: ${JSON.stringify(trainingDrill)}. STUDENT ANSWER: ${trainingAnswer.trim()}. Award marks for every valid point actually made, including a relevant source, fact/evidence, inference, issue, response to opposition, and clear structure. Separate verified authority from reasoning. Return the grading JSON exactly.` }] });
+      setTrainingResult(parseJsonAnswer(response.answer));
+      setTrainingStep((step) => step + 1);
+    } catch (error) { setNotice(error instanceof Error ? error.message : "The training judge is unavailable."); }
+    finally { setTrainingBusy(false); }
   };
 
   const submitComputerTurn = async () => {
@@ -455,8 +483,9 @@ export default function GamesHub({
     <div className="page-heading"><div><div className="eyebrow">Timed advocacy, grounded feedback</div><h1>Legal Arena.</h1><p>Play a fictional Kenyan-law case, use the stated authority packet, and receive study feedback—not legal advice.</p></div><Trophy size={32} /></div>
     <div className="games-directory" role="tablist" aria-label="Choose a Legal Arena game">
       <button className={`game-domain-card ${tab === "computer" ? "active" : ""}`} onClick={() => setTab("computer")}><span className="game-domain-icon"><Swords size={20} /></span><span><strong>Computer Court</strong><small>Test yourself as claimant or defendant against an AI opponent.</small></span><em>01</em></button>
-      <button className={`game-domain-card ${tab === "pvp" ? "active" : ""}`} onClick={() => setTab("pvp")}><span className="game-domain-icon"><Users size={20} /></span><span><strong>PVP Competition</strong><small>Invite one opponent to a role-based, turn-timed debate.</small></span><em>02</em></button>
-      <button className={`game-domain-card ${tab === "choices" ? "active" : ""}`} onClick={() => setTab("choices")}><span className="game-domain-icon"><Gavel size={20} /></span><span><strong>Choices</strong><small>Make consequential decisions in a short legal scenario.</small></span><em>03</em></button>
+      <button className={`game-domain-card ${tab === "training" ? "active" : ""}`} onClick={() => setTab("training")}><span className="game-domain-icon"><GraduationCap size={20} /></span><span><strong>Training Court</strong><small>Start with one small skill and earn marks from an AI judge.</small></span><em>02</em></button>
+      <button className={`game-domain-card ${tab === "pvp" ? "active" : ""}`} onClick={() => setTab("pvp")}><span className="game-domain-icon"><Users size={20} /></span><span><strong>PVP Competition</strong><small>Invite one opponent to a role-based, turn-timed debate.</small></span><em>03</em></button>
+      <button className={`game-domain-card ${tab === "choices" ? "active" : ""}`} onClick={() => setTab("choices")}><span className="game-domain-icon"><Gavel size={20} /></span><span><strong>Choices</strong><small>Make consequential decisions in a short legal scenario.</small></span><em>04</em></button>
     </div>
 
     <div className="card card-pad game-source-bar"><div><div className="section-label">Library reference</div><strong>{source ? sourceLabel : "Add a material in Library first"}</strong></div><div className="game-source-controls"><Library size={15} /><select value={sourceId} onChange={(event) => { setSourceId(event.target.value); setCasePacket(null); }} disabled={!sourceOptions.length}><option value="">Choose source</option>{sourceOptions.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></div></div>
@@ -477,6 +506,17 @@ export default function GamesHub({
       {computerTurns.length > 0 && <div className="card card-pad debate-thread">{computerTurns.map((turn, index) => <article className={`debate-turn ${turn.role}`} key={`${turn.label}-${index}`}><span>{turn.label}</span><Markdown text={turn.text} /></article>)}</div>}
       {computerActive && <div className="card card-pad arena-argument-form"><div className="section-label">Your {sideName(computerRole)} {phaseFor(computerTurns.filter((turn) => turn.role === "user").length)}</div><textarea rows={6} value={computerInput} onChange={(event) => setComputerInput(event.target.value)} placeholder="State your position, link it to an allowed source if you can, and explain your evidence…" /><button className="primary-button" onClick={() => void submitComputerTurn()} disabled={computerBusy || !computerInput.trim()}>{computerBusy ? "Computer is reading; your clock is paused…" : "Submit argument"}</button></div>}
       {computerResult && <div className="card card-pad game-evaluation"><div className="section-label">Final study judgment</div><Markdown text={computerResult} /><button className="secondary-button" onClick={startComputerCourt}><RefreshCw size={14} /> Retry this case</button></div>}
+      {notice && <div className="connection-error game-notice">{notice}</div>}
+    </section>}
+
+    {tab === "training" && <section className="game-room">
+      <div className="card card-pad arena-case-builder">
+        <div><div className="game-kicker"><GraduationCap size={14} /> Beginner pathway</div><h2>Training Court</h2><p><strong>How it works:</strong> learn one skill, answer one short exercise, and receive a judge's outcome with marks for every valid legal point you made. The next drill becomes harder only after you respond.</p></div>
+        <div className="arena-rules-grid"><div className="arena-rule"><strong>Small steps</strong>Issue, fact, source, inference, rebuttal, then full advocacy—one skill at a time.</div><div className="arena-rule"><strong>Real marks</strong>The judge rewards a relevant Constitution or library point, evidence, reasoning, and clear structure.</div><div className="arena-rule"><strong>Honest feedback</strong>Missing authority is not invented; reasoning is assessed separately and the outcome is explained.</div></div>
+        <div className="arena-invite-actions"><button className="primary-button" onClick={() => void startTrainingDrill()} disabled={!source || trainingBusy}>{trainingBusy ? "Preparing your next drill…" : trainingDrill ? "Try another small drill" : "Start beginner training"}</button>{trainingStep > 0 && <span className="chip">Step {trainingStep + 1}</span>}</div>
+      </div>
+      {trainingDrill && <div className="card card-pad arena-training-card"><div className="section-label">{trainingDrill.level} · {trainingDrill.title}</div><h3>{trainingDrill.lesson}</h3><p><strong>Exercise:</strong> {trainingDrill.question}</p><p className="field-hint"><strong>What earns marks:</strong> {trainingDrill.success_criteria.join(" · ")}</p><p className="arena-training-hint"><strong>Hint:</strong> {trainingDrill.hint}</p><textarea rows={6} value={trainingAnswer} onChange={(event) => setTrainingAnswer(event.target.value)} placeholder="Write your answer in your own words. Try to name the issue, source, fact, and why it supports your side…" disabled={trainingBusy} /><button className="primary-button" onClick={() => void submitTrainingAnswer()} disabled={trainingBusy || !trainingAnswer.trim()}>{trainingBusy ? "Judge is marking your answer…" : "Submit for marks and judgment"}</button></div>}
+      {trainingResult && <div className="card card-pad game-evaluation arena-training-result"><div className="section-label">Judge's outcome</div><div className="arena-training-score"><strong>{String(trainingResult.score ?? 0)} / {String(trainingResult.max_score ?? 100)}</strong><span>{String(trainingResult.outcome ?? "needs_more_practice")}</span></div><p>{String(trainingResult.judge_feedback ?? "Review the feedback and try the next drill.")}</p><div className="arena-result-grid"><div><strong>What you did right</strong><ul>{(Array.isArray(trainingResult.what_you_did_right) ? trainingResult.what_you_did_right : []).map((item, index) => <li key={index}>{String(item)}</li>)}</ul></div><div><strong>What was missing</strong><ul>{(Array.isArray(trainingResult.what_was_missing) ? trainingResult.what_was_missing : []).map((item, index) => <li key={index}>{String(item)}</li>)}</ul></div></div><p><strong>Marks earned:</strong> {JSON.stringify(trainingResult.marks_earned ?? [])}</p><p><strong>Legal accuracy:</strong> {String(trainingResult.legal_accuracy ?? "")}</p><p><strong>Next drill:</strong> {String(trainingResult.next_drill ?? "")}</p></div>}
       {notice && <div className="connection-error game-notice">{notice}</div>}
     </section>}
 

@@ -385,6 +385,10 @@ const FEATURES: Record<
   moot_guide: {
     task: "Teach a first-year student how moot court works progressively, one stage at a time. Explain one step, ask a retrieval question, correct gently, repeat an earlier idea, then unlock the next step. Cover roles, memorials, authorities, addressing the bench, timekeeping, rebuttal and common mistakes.",
   },
+  arena_training: {
+    json: true,
+    task: 'Coach an extreme beginner in Kenyan-law advocacy one small step at a time. Use the supplied Constitution foundation and selected library metadata as the permitted learning context; never invent a statute, case, quotation, or book content. For a drill request, return ONLY JSON: {"title":"","level":"starter|building|challenge","lesson":"one small concept","question":"one short fictional legal exercise","success_criteria":["..."],"hint":"one gentle hint"}. For a grading request, return ONLY JSON: {"score":0,"max_score":100,"outcome":"claimant|defendant|needs_more_practice","what_you_did_right":["..."],"marks_earned":[{"point":"","marks":0,"reason":""}],"what_was_missing":["..."],"legal_accuracy":"...","judge_feedback":"...","next_drill":"..."}. Award marks for correctly identifying an issue, applying an allowed constitutional or supplied source point, using a fact as evidence, explaining the inference, answering the opposing point, and clear structure. Do not award marks merely for confident unsupported legal claims. Be encouraging but act as a real judge: state the outcome and explain the result. Increase difficulty only gradually.',
+  },
   kmun: {
     task: "Act as a KMUN coach and realistic dais. Guide one decision at a time: country position, opening claim, caucus point, diplomatic response and resolution clause. Ask the delegate to produce each step before giving a model, and revisit procedure through quick recall.",
   },

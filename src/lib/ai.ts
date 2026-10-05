@@ -29,6 +29,7 @@ export type AIFeature =
   | "moot"
   | "moot_judge"
   | "moot_guide"
+  | "arena_training"
   | "kmun"
   | "kmun_guide"
   | "quiz"
