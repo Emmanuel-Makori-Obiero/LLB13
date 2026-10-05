@@ -12,6 +12,7 @@ type Props = {
 };
 
 type DraftLesson = Omit<Lesson, "id" | "created_by">;
+type Status = { kind: "idle" | "working" | "success" | "error"; text: string };
 
 const emptyLesson = (row: Record<string, string>): DraftLesson => ({
   unit: row.unit ?? row.course ?? row.subject ?? "",
@@ -165,6 +166,8 @@ export default function AdminTimetablePlanner({
   );
   const [classSourceText, setClassSourceText] = useState("");
   const [sourceFilename, setSourceFilename] = useState("");
+  const [uploadStatus, setUploadStatus] = useState<Status>({ kind: "idle", text: "No timetable file selected yet." });
+  const [proposalStatus, setProposalStatus] = useState<Status>({ kind: "idle", text: "Upload a timetable, then describe the change you want." });
   const [proposals, setProposals] = useState<TimetableProposal[]>([]);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -218,11 +221,14 @@ export default function AdminTimetablePlanner({
     setNotice(
       "Timetable proposal saved. Review the reasons, then press Approve to apply it.",
     );
+    setProposalStatus({ kind: "success", text: `Proposal ready: ${valid.length} lessons were generated and saved below for review.` });
   };
 
   const onFile = async (file?: File) => {
     if (!file) return;
     setBusy(true);
+    setUploadStatus({ kind: "working", text: `Reading ${file.name}…` });
+    setProposalStatus({ kind: "idle", text: "Upload loaded. Describe the change to generate a proposal." });
     try {
       const lowerName = file.name.toLowerCase();
       const text =
@@ -235,10 +241,12 @@ export default function AdminTimetablePlanner({
       setClassTimetable(parsed);
       setClassSourceText(text);
       setSourceFilename(file.name);
+      setUploadStatus({ kind: "success", text: `${file.name} uploaded and read successfully · ${parsed.length} structured row${parsed.length === 1 ? "" : "s"} found.` });
       setNotice(
         `Official class timetable loaded: ${parsed.length} structured rows${parsed.length ? "" : " (the AI will read the extracted document text directly)"}. Now describe how to turn it into the Group 13 timetable.`,
       );
     } catch (error) {
+      setUploadStatus({ kind: "error", text: error instanceof Error ? `Could not read ${file.name}: ${error.message}` : `Could not read ${file.name}.` });
       setNotice(
         error instanceof Error
           ? error.message
@@ -256,6 +264,7 @@ export default function AdminTimetablePlanner({
     }
     if (!window.confirm(`Apply the ${classTimetable.length} rows from “${sourceFilename || "the uploaded file"}” and replace the current Group 13 timetable?`)) return;
     setBusy(true);
+    setProposalStatus({ kind: "working", text: `Saving and applying ${classTimetable.length} uploaded rows…` });
     try {
       const created = await repository.createTimetableProposal({
         title: sourceFilename ? `Imported class timetable — ${sourceFilename}` : "Imported class timetable",
@@ -269,7 +278,9 @@ export default function AdminTimetablePlanner({
       onApplied(fresh);
       setProposals((current) => [{ ...created, status: "approved", approved_at: new Date().toISOString() }, ...current]);
       setNotice(`Uploaded timetable applied: ${count} lessons are now visible in the Group timetable.`);
+      setProposalStatus({ kind: "success", text: `Uploaded timetable applied successfully · ${count} lessons are now in the Group timetable.` });
     } catch (error) {
+      setProposalStatus({ kind: "error", text: error instanceof Error ? `Could not apply upload: ${error.message}` : "Could not apply upload." });
       setNotice(error instanceof Error ? error.message : "Could not apply the uploaded timetable.");
     } finally {
       setBusy(false);
@@ -284,6 +295,7 @@ export default function AdminTimetablePlanner({
       return;
     }
     setBusy(true);
+    setProposalStatus({ kind: "working", text: "Thinking through the uploaded timetable and preparing a proposal…" });
     try {
       const today = new Date().toISOString().slice(0, 10);
       const response = await askAI({
@@ -318,6 +330,7 @@ export default function AdminTimetablePlanner({
           "The planner generated this Group 13 schedule from the official class timetable and the admin instruction.",
       );
     } catch (error) {
+      setProposalStatus({ kind: "error", text: error instanceof Error ? `Proposal failed: ${error.message}` : "Proposal failed. Please try again." });
       setNotice(
         error instanceof Error
           ? error.message
@@ -460,6 +473,7 @@ export default function AdminTimetablePlanner({
               disabled={busy}
             />
           </label>
+          <div className={`timetable-status ${uploadStatus.kind}`} role="status">{uploadStatus.text}</div>
           <p className="field-hint">
             This only loads the official class timetable into the planner. It
             does not alter the current Group 13 timetable.
@@ -489,6 +503,7 @@ export default function AdminTimetablePlanner({
             <Lightbulb size={14} />{" "}
             {busy ? "Working…" : "Make Group 13 proposal"}
           </button>
+          <div className={`timetable-status ${proposalStatus.kind}`} role="status">{proposalStatus.text}</div>
         </div>
       </div>
       {classSourceText ? (

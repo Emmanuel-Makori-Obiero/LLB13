@@ -112,6 +112,18 @@
   margin-top: 10px;
   justify-content: center;
 }
+.timetable-status {
+  margin-top: 9px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  background: #f7f7f3;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.timetable-status.working { border-color: #cdbb85; background: #fffaf0; color: #6b5520; }
+.timetable-status.success { border-color: #b8d2bd; background: #f1faf2; color: #23633f; }
+.timetable-status.error { border-color: #dfb3a7; background: #fff4f0; color: #8c3329; }
 .field-label {
   display: grid;
   gap: 7px;

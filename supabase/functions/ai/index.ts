@@ -364,6 +364,10 @@ const FEATURES: Record<
     json: true,
     task: 'Judge the completed two-sided Legal Arena competition from the supplied case packet and recorded arguments. Return ONLY valid JSON with exactly these keys: {"playerOneScore":0,"playerTwoScore":0,"winner":"one|two|draw","summary":"","playerOneFeedback":"","playerTwoFeedback":"","evidenceAssessment":"","authorityAssessment":"","retryAdvice":""}. Give integer scores 0 to 100. The winner must agree with the scores, except equal scores require "draw". Treat only the listed Constitution, official Kenya Law references and selected library metadata as legal authority. Do not invent a statute, article, case, quotation, citation, or book content. Where the packet lacks material, assess the relevance, specificity and logical strength of stated evidence and reasoning instead of treating an assertion as verified law.',
   },
+  timetable_proposal: {
+    json: true,
+    task: 'Turn the uploaded official class timetable into a practical Group 13 timetable proposal using the administrator instruction. Return ONLY valid JSON with exactly this shape: {"title":"","rationale":"","lessons":[{"unit":"","topic":"","lesson_date":"YYYY-MM-DD","start_time":"HH:MM","end_time":"HH:MM","representative":"","representatives":[],"venue":""}]}. Preserve dates and times from the uploaded source when the instruction does not request a change. Use only units listed as available or present in the uploaded rows. Do not invent lessons or dates. If the source text is unclear, preserve the best-supported rows and explain the uncertainty in rationale.',
+  },
   study_plan: {
     json: true,
     task: "Create a source-grounded guided law-study syllabus. Return ONLY valid JSON matching the shape requested by the student; no markdown fences, no introductory prose, and no trailing commentary outside the JSON object.",
