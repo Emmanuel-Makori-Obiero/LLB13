@@ -424,7 +424,7 @@ export default function AdminTimetablePlanner({
         mode: "general",
         messages: [{
           role: "user",
-          content: `Today is ${new Date().toISOString().slice(0, 10)}. Revise this existing timetable proposal, preserving every lesson unless the administrator explicitly asks to change or remove it. Calendar facts: 8 Sep 2026 is Tuesday, 9 Sep Wednesday, 10 Sep Thursday, 11 Sep Friday, 12 Sep Saturday, 13 Sep Sunday, and the following Monday-Friday are 14-18 Sep. Never schedule Saturday or Sunday and use at most one lesson per date.\n\nEXISTING PROPOSAL:\n${JSON.stringify(proposal.proposed_lessons)}\n\nOFFICIAL SOURCE EXTRACT:\n${classSourceText || "Use the existing proposal as the source."}\n\nADMINISTRATOR EDIT REQUEST:\n${editInstruction.trim()}`,
+          content: `Today is ${new Date().toISOString().slice(0, 10)}. Revise this existing timetable proposal into a new draft. Treat the existing proposal as a starting point, not as a permanent template: add, remove, move, replace or reschedule lessons exactly as the administrator requests, while preserving unaffected lessons. Calculate the real weekday for every ISO date; never trust a weekday label if it conflicts with the calendar. Never schedule Saturday or Sunday unless the administrator explicitly asks for a weekend. Use at most one lesson per date when the request says one class per day.\n\nEXISTING PROPOSAL:\n${JSON.stringify(proposal.proposed_lessons)}\n\nOFFICIAL SOURCE EXTRACT:\n${classSourceText || "Use the existing proposal as the source."}\n\nADMINISTRATOR EDIT REQUEST:\n${editInstruction.trim()}`,
         }],
       });
       const data = (response.data ?? {}) as { title?: string; rationale?: string; lessons?: unknown };
@@ -442,12 +442,12 @@ export default function AdminTimetablePlanner({
         proposed_lessons: revised,
         rationale: data.rationale?.trim() || `Edited from “${proposal.title}”: ${editInstruction.trim()}`,
       });
-      await repository.rejectTimetableProposal(proposal.id);
-      setProposals((current) => [created, ...current.map((item) => item.id === proposal.id ? { ...item, status: "rejected" as const } : item)]);
+      if (proposal.status === "pending") await repository.rejectTimetableProposal(proposal.id);
+      setProposals((current) => [created, ...current.map((item) => item.id === proposal.id && item.status === "pending" ? { ...item, status: "rejected" as const } : item)]);
       setEditInstruction("");
       setEditingProposalId(null);
       setProposalStatus({ kind: "success", text: `Edited proposal ready: ${revised.length} lessons. Review it below, then approve the edited version.` });
-      setNotice("Edited proposal saved. The original proposal was kept in history and marked replaced.");
+      setNotice(proposal.status === "pending" ? "Edited proposal saved. The previous draft was kept in history and marked replaced." : "New timetable draft saved from the selected proposal. The live timetable has not changed.");
     } catch (error) {
       setProposalStatus({ kind: "error", text: error instanceof Error ? `Edit failed: ${error.message}` : "Edit failed. Please try again." });
       setNotice(error instanceof Error ? error.message : "Could not edit timetable proposal.");
@@ -652,7 +652,7 @@ export default function AdminTimetablePlanner({
                   )}
                 </div>
               </details>
-              {proposal.status === "pending" && editingProposalId === proposal.id && (
+              {proposal.status !== "rejected" && proposal.status !== "reverted" && editingProposalId === proposal.id && (
                 <div className="proposal-edit-box">
                   <label className="field-label">
                     Change this proposal
@@ -672,29 +672,33 @@ export default function AdminTimetablePlanner({
                   </div>
                 </div>
               )}
-              {proposal.status === "pending" && (
+              {proposal.status !== "rejected" && proposal.status !== "reverted" && (
                 <div className="tt-actions">
                   <button
                     className="secondary-button"
                     onClick={() => { setEditingProposalId(proposal.id); setEditInstruction(""); }}
                     disabled={busy}
                   >
-                    Edit with AI
+                    {proposal.status === "approved" ? "Create edited draft" : "Edit with AI"}
                   </button>
-                  <button
-                    className="secondary-button"
-                    onClick={() => void reject(proposal)}
-                    disabled={busy}
-                  >
-                    <X size={14} /> Reject
-                  </button>
-                  <button
-                    className="primary-button"
-                    onClick={() => void approve(proposal)}
-                    disabled={busy}
-                  >
-                    <Check size={14} /> Approve and apply
-                  </button>
+                  {proposal.status === "pending" && (
+                    <>
+                      <button
+                        className="secondary-button"
+                        onClick={() => void reject(proposal)}
+                        disabled={busy}
+                      >
+                        <X size={14} /> Reject
+                      </button>
+                      <button
+                        className="primary-button"
+                        onClick={() => void approve(proposal)}
+                        disabled={busy}
+                      >
+                        <Check size={14} /> Approve and apply
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
               {proposal.status === "approved" &&
