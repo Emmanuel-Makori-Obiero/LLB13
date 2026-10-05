@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { secretKeys } from "../_shared/keys.ts";
+import { reserveAiQuota } from "../_shared/quotas.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -344,6 +345,7 @@ Deno.serve(async (req) => {
   const userClient = createClient(url, anon, { global: { headers: { Authorization: authHeader } } });
   const { data: auth } = await userClient.auth.getUser();
   if (!auth.user) return json({ error: "Sign in before creating audio." }, 401);
+  const admin = createClient(url, service);
 
   let body: { text?: string; title?: string; language?: "en" | "sw" };
   try { body = await req.json(); } catch { return json({ error: "Invalid JSON body." }, 400); }
@@ -353,6 +355,12 @@ Deno.serve(async (req) => {
   if (text.length > 12000) return json({ error: "This script is too long for one audio request. Shorten the episode or generate it in parts." }, 400);
   const turns = speechTurns(text);
   const plainText = turns.map((turn) => turn.text).join("\n");
+  try {
+    const quota = await reserveAiQuota(admin, auth.user.id, "podcast");
+    if (!quota.allowed) return json({ error: `Hourly podcast limit reached (${quota.quota}). Try again later.`, retry_after_seconds: quota.retry_after_seconds }, 429);
+  } catch (error) {
+    return json({ error: error instanceof Error ? error.message : "AI quota service is unavailable." }, 503);
+  }
   if (!elevenLabsKeys.length && !(geminiEnabled && geminiKeys.length) && !(language === "en" && openAIEnabled && openAIKeys.length) && !(language === "en" && hfFallbackEnabled && hfTokens.length)) {
     return json({ error: language === "sw" ? "Kiswahili audio needs ELEVENLABS_API_KEY_1 or GEMINI_API_KEY_1 in Supabase Edge Function secrets." : "No speech provider is configured. Add an ElevenLabs or Gemini API key; OpenAI TTS is also available when OPENAI_API_KEY_1 is configured." }, 503);
   }
@@ -390,7 +398,6 @@ Deno.serve(async (req) => {
   }
 
   const extension = audio.mimeType === "audio/ogg" ? "ogg" : audio.mimeType === "audio/mpeg" ? "mp3" : "wav";
-  const admin = createClient(url, service);
   const assetId = crypto.randomUUID();
   const storagePath = `${auth.user.id}/generated/${assetId}.${extension}`;
   const upload = await admin.storage.from("media").upload(storagePath, audio.bytes, { contentType: audio.mimeType, upsert: false });

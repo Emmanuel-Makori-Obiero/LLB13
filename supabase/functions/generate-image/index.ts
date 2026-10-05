@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { secretKeys } from "../_shared/keys.ts";
+import { reserveAiQuota } from "../_shared/quotas.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -101,6 +102,7 @@ Deno.serve(async (req) => {
   });
   const { data: auth } = await userClient.auth.getUser();
   if (!auth.user) return json({ error: "Sign in before generating an image." }, 401);
+  const admin = createClient(supabaseUrl, serviceRoleKey);
 
   let body: { prompt?: string; model?: string; width?: number; height?: number };
   try {
@@ -111,6 +113,12 @@ Deno.serve(async (req) => {
   const prompt = String(body.prompt ?? "").trim();
   if (prompt.length < 8) return json({ error: "Provide a descriptive image prompt." }, 400);
   if (prompt.length > 3000) return json({ error: "Prompt is too long." }, 400);
+  try {
+    const quota = await reserveAiQuota(admin, auth.user.id, "image");
+    if (!quota.allowed) return json({ error: `Hourly image limit reached (${quota.quota}). Try again later.`, retry_after_seconds: quota.retry_after_seconds }, 429);
+  } catch (error) {
+    return json({ error: error instanceof Error ? error.message : "AI quota service is unavailable." }, 503);
+  }
 
   const model = String(body.model || "black-forest-labs/FLUX.1-schnell");
   const width = Math.min(1536, Math.max(512, Number(body.width) || 1024));
@@ -155,7 +163,6 @@ Deno.serve(async (req) => {
   }
   if (!bytes) return json({ error: "No configured image provider generated a file.", detail: failures.join("; ") || "Configure HF_TOKEN_1 or opt in to the Gemini API fallback." }, failures.length ? 502 : 503);
 
-  const admin = createClient(supabaseUrl, serviceRoleKey);
   const assetId = crypto.randomUUID();
   const storagePath = `${auth.user.id}/generated/${assetId}.png`;
   const upload = await admin.storage.from("media").upload(storagePath, bytes, {

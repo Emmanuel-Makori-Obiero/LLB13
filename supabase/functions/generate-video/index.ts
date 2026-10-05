@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { providerChain, submitVideo } from "./video-providers.ts";
 import { secretKeyEntries } from "../_shared/keys.ts";
+import { reserveAiQuota } from "../_shared/quotas.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -33,6 +34,12 @@ Deno.serve(async (req) => {
   const seed = Number.isFinite(body.seed) ? Number(body.seed) : -1;
   const hfTokens = secretKeyEntries("HF_TOKEN");
   const admin = createClient(url, service);
+  try {
+    const quota = await reserveAiQuota(admin, auth.user.id, "video");
+    if (!quota.allowed) return response({ error: `Hourly video limit reached (${quota.quota}). Try again later.`, retry_after_seconds: quota.retry_after_seconds }, 429);
+  } catch (error) {
+    return response({ error: error instanceof Error ? error.message : "AI quota service is unavailable." }, 503);
+  }
   const providers = providerChain();
 
   const attempts: Array<{ provider: string; error: string }> = [];

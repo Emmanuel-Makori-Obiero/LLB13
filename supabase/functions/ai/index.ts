@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { EXTRA_FEATURES, handleExtra } from "./exam.ts";
 import { secretKeys } from "../_shared/keys.ts";
+import { reserveAiQuota } from "../_shared/quotas.ts";
 
 // ===== providers (fallback chain) =====
 // Free-tier fallback chain. Every provider speaks the OpenAI chat-completions format.
@@ -305,7 +306,6 @@ const json = (b: unknown, status = 200) =>
 // ---------- limits ----------
 const MAX_MSG_CHARS = 20_000; // research drafts are long
 const MAX_HISTORY = 12;
-const HOURLY_LIMIT = Number(Deno.env.get("AI_HOURLY_LIMIT") ?? 200);
 const JURISDICTION = Deno.env.get("AI_DEFAULT_JURISDICTION") ?? "Kenya";
 const CHUNKS_PER_QUERY = 8;
 const CHUNKS_PART = 10; // sections per 'notes' call: the client walks through a transcript part by part
@@ -699,16 +699,17 @@ Deno.serve(async (req) => {
     ? body.docIds.filter((x) => typeof x === "string").slice(0, 10)
     : undefined;
 
-  // per-user rate limit
-  const since = new Date(Date.now() - 3_600_000).toISOString();
-  const { count } = await admin
-    .from("ai_usage")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", u.user.id)
-    .gte("created_at", since);
-  if ((count ?? 0) >= HOURLY_LIMIT)
+  // Reserve atomically in Postgres so concurrent requests cannot bypass the cap.
+  // This covers ordinary assistant calls plus exam, copilot, and counsellor calls.
+  let textQuota;
+  try {
+    textQuota = await reserveAiQuota(admin, u.user.id, "text");
+  } catch (error) {
+    return json({ error: error instanceof Error ? error.message : "AI quota service is unavailable." }, 503);
+  }
+  if (!textQuota.allowed)
     return json(
-      { error: `Hourly limit reached (${HOURLY_LIMIT}). Try again later.` },
+      { error: `Hourly text-AI limit reached (${textQuota.quota}). Try again later.`, retry_after_seconds: textQuota.retry_after_seconds },
       429,
     );
 
