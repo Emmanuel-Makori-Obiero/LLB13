@@ -215,7 +215,12 @@ export default function GamesHub({
       .then(async () => {
         const updated = await getDebateRoom(room.id);
         setRoom(updated);
-        if (updated.status === "evaluating") setPvpNotice("The secure judge is reading the shared record. This page updates when the result is ready.");
+        if (updated.status === "evaluating") {
+          setPvpNotice("The secure judge is reading the shared record. This page updates when the result is ready.");
+          // A claimed evaluator has a five-minute server lease. If a worker died
+          // after claiming it, re-enable the effect after the lease for recovery.
+          window.setTimeout(() => setEvaluationRequested(false), 5 * 60 * 1000 + 1000);
+        }
       })
       .catch((error) => {
         setPvpNotice(error instanceof Error ? error.message : "The secure evaluator could not finish.");
