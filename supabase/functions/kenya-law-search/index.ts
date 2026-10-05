@@ -68,6 +68,26 @@ function extractJudgmentText(html: string) {
   return decodeHtml(main.replace(/<(script|style|noscript)\b[\s\S]*?<\/\1>/gi, " ")).slice(0, 60000);
 }
 
+function citationUrlCandidates(query: string): { url: string; citation: string }[] {
+  const match = query.match(/\[(\d{4})\]\s*(KEHC|KECA|KESC|KEELRC|KEELC|KEMC|KEKC|SCC)\s*(\d+)\s*\(KLR\)/i);
+  if (!match) return [];
+  const year = match[1];
+  const court = match[2].toLowerCase();
+  const number = match[3];
+  const date = query.match(/\b(\d{1,2})\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})\b/i);
+  const months = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+  const month = date ? String(months.indexOf(date[2].toLowerCase()) + 1).padStart(2, "0") : "";
+  const dated = date ? `${date[3]}-${month}-${String(date[1]).padStart(2, "0")}` : null;
+  const base = `https://kenyalaw.org/akn/ke/judgment/${court}/${year}/${number}/eng`;
+  const citation = `[${year}] ${match[2].toUpperCase()} ${number} (KLR)`;
+  return [...(dated ? [{ url: `${base}@${dated}`, citation }] : []), { url: base, citation }];
+}
+
+async function resolveCitation(query: string): Promise<CaseResult | null> {
+  const candidate = citationUrlCandidates(query)[0];
+  return candidate ? { title: query.slice(0, 240), url: candidate.url, citation: candidate.citation } : null;
+}
+
 async function discoverResults(query: string): Promise<{ results: CaseResult[]; providers: string[] }> {
   const queryVariants = [
     `site:new.kenyalaw.org/akn/ke/judgment ${query}`,
@@ -139,6 +159,8 @@ Deno.serve(async (request) => {
   const query = String(body.query ?? "").trim().replace(/\s+/g, " ");
   if (query.length < 3) return json({ error: "Enter at least three characters to search." }, 400);
   if (query.length > 180) return json({ error: "Keep the case query under 180 characters." }, 400);
+  const citationMatch = await resolveCitation(query);
+  if (citationMatch) return json({ query, results: [citationMatch], source: "Official Kenya Law citation resolver" });
 
   const discovered = await discoverResults(query);
   return json({
