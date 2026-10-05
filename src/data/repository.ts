@@ -89,6 +89,7 @@ export type Group13Repository = {
   deleteTimetableProposal: (id: string) => Promise<void>;
   getLatestTimetableUpload: () => Promise<SharedTimetableUpload | null>;
   createTimetableUpload: (upload: Pick<SharedTimetableUpload, "filename" | "mime_type" | "extracted_text" | "structured_rows">) => Promise<SharedTimetableUpload>;
+  updateTimetableUpload: (id: string, structured_rows: SharedTimetableUpload["structured_rows"]) => Promise<void>;
   adminCreateUnit: (
     unit: Pick<Unit, "name" | "code" | "lead">,
   ) => Promise<Unit>;
@@ -377,6 +378,13 @@ const supabaseRepository: Group13Repository = {
       .single();
     if (error) throw new Error(`Could not publish structured timetable upload: ${error.message}`);
     return { ...data, extracted_text: raw.extracted_text } as SharedTimetableUpload;
+  },
+  updateTimetableUpload: async (id, structured_rows) => {
+    const { error } = await db()
+      .from("shared_timetable_uploads")
+      .update({ structured_rows })
+      .eq("id", id);
+    if (error) throw new Error(`Could not update shared timetable preview: ${error.message}`);
   },
   adminCreateUnit: async (unit) => {
     if (!supabase) throw new Error("Not connected.");

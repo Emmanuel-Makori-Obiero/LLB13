@@ -166,6 +166,7 @@ export default function AdminTimetablePlanner({
   );
   const [classSourceText, setClassSourceText] = useState("");
   const [sourceFilename, setSourceFilename] = useState("");
+  const [uploadId, setUploadId] = useState<string | null>(null);
   const [uploadStatus, setUploadStatus] = useState<Status>({ kind: "idle", text: "No timetable file selected yet." });
   const [proposalStatus, setProposalStatus] = useState<Status>({ kind: "idle", text: "Upload a timetable, then describe the change you want." });
   const [proposals, setProposals] = useState<TimetableProposal[]>([]);
@@ -238,12 +239,13 @@ export default function AdminTimetablePlanner({
       const parsed = lowerName.endsWith(".csv")
         ? parseCsv(text)
         : parseDocumentRows(text);
-      await repository.createTimetableUpload({
+      const savedUpload = await repository.createTimetableUpload({
         filename: file.name,
         mime_type: file.type || null,
         extracted_text: text,
         structured_rows: parsed,
       });
+      setUploadId(savedUpload.id);
       setClassTimetable(parsed);
       setClassSourceText(text);
       setSourceFilename(file.name);
@@ -329,6 +331,11 @@ export default function AdminTimetablePlanner({
           response.answer ||
             "The AI did not return a usable timetable. Try a more specific instruction.",
         );
+      if (uploadId) {
+        await repository.updateTimetableUpload(uploadId, proposed);
+        setClassTimetable(proposed);
+        setUploadStatus({ kind: "success", text: `${sourceFilename} is now structured and shared · ${proposed.length} timetable rows ready.` });
+      }
       await createProposal(
         data.title?.trim() || "Group 13 timetable proposal",
         proposed,

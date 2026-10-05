@@ -105,6 +105,17 @@ export default function TimetablePage({
   useEffect(() => {
     void repository.getLatestTimetableUpload().then(setLatestUpload).catch(() => setLatestUpload(null));
   }, []);
+  useEffect(() => {
+    if (!supabase) return;
+    const client = supabase;
+    const channel = client
+      .channel("shared-timetable-upload-preview")
+      .on("postgres_changes", { event: "*", schema: "public", table: "shared_timetable_uploads" }, () => {
+        void repository.getLatestTimetableUpload().then(setLatestUpload).catch(() => undefined);
+      });
+    void channel.subscribe();
+    return () => { void client.removeChannel(channel); };
+  }, []);
   const editAllowed = (lesson: Lesson) => {
     if (canEdit) return canEdit(lesson);
     if (canDelete(lesson)) return true;
@@ -231,7 +242,7 @@ export default function TimetablePage({
               </div>
             </div>
           ) : (
-            <p className="field-hint">No structured rows could be detected from this file. The original source is available below.</p>
+            <p className="field-hint">{isAdmin ? "No structured rows have been generated yet. Use the timetable planner to create the shared structure." : "The administrator is preparing the structured timetable preview."}</p>
           )}
           {isAdmin && latestUpload.extracted_text ? (
             <details>
