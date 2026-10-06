@@ -99,6 +99,7 @@ Deno.serve(async (request) => {
   const transcriptId = String(form.get("transcript_id") ?? "");
   const idx = Number(form.get("idx") ?? 0);
   const offset = Number(form.get("offset") ?? 0) || 0;
+  const continuation = String(form.get("continuation") ?? "").trim().slice(-1800);
   // 16 kB/s is the 128 kbps worst case, only used when the client does not send a duration.
   const estimate = Math.max(
     10,
@@ -150,7 +151,7 @@ Deno.serve(async (request) => {
   body.append("response_format", "verbose_json");
   body.append("temperature", "0");
   if (language) body.append("language", language);
-  if (language === "en") body.append("prompt", LAW_PROMPT);
+  if (language === "en") body.append("prompt", `${LAW_PROMPT}${continuation ? ` Continue naturally from the previous recording. Recent transcript context:\n${continuation}` : ""}`);
 
   const result = await fetch(
     "https://api.groq.com/openai/v1/audio/transcriptions",

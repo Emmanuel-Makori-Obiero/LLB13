@@ -169,7 +169,7 @@ export default function TranscribePage({
   const [unit, setUnit] = useState(initialUnit ?? "");
   const [lessonNumber, setLessonNumber] = useState("");
   const [language, setLanguage] = useState("en");
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [message, setMessage] = useState("");
@@ -242,7 +242,10 @@ export default function TranscribePage({
     transcriptId: string,
     done: number,
     total: number,
-  ) => {
+    globalIndex: number,
+    offsetSeconds: number,
+    previousText: string,
+  ): Promise<string> => {
     let attempts = 0;
     for (;;) {
       if (cancelRef.current) throw new Error("cancelled");
@@ -253,9 +256,10 @@ export default function TranscribePage({
       form.append("audio", blob, `chunk_${index}.mp3`);
       form.append("language", language);
       form.append("transcript_id", transcriptId);
-      form.append("idx", String(index));
-      form.append("offset", String(index * CHUNK_SECONDS));
+      form.append("idx", String(globalIndex));
+      form.append("offset", String(offsetSeconds + index * CHUNK_SECONDS));
       form.append("duration", String(duration));
+      if (previousText) form.append("continuation", previousText.slice(-1800));
       let response: Response;
       try {
         response = await fetch(endpoint!, {
@@ -296,11 +300,12 @@ export default function TranscribePage({
         await sleep(3000 * attempts);
         continue;
       }
-      return;
+      const result = (await response.json().catch(() => ({}))) as { text?: string };
+      return String(result.text ?? "");
     }
   };
 
-  const run = async (audio: File, existing: TranscriptRow | null) => {
+  const run = async (audioFiles: File[], existing: TranscriptRow | null) => {
     if (!supabase || !endpoint) {
       setNotice(
         "Transcription is not configured yet. Add VITE_TRANSCRIBE_URL.",
@@ -334,15 +339,11 @@ export default function TranscribePage({
         done: 0,
         total: 1,
       });
-      splitter = await splitAudio(audio, (ratio) =>
-        setProgress({
-          phase: `Preparing audio on your device… ${Math.round(ratio * 100)}%`,
-          done: 0,
-          total: 1,
-        }),
-      );
       let record = existing;
       let finished = new Set<number>();
+      let globalIndex = 0;
+      let offsetSeconds = 0;
+      let previousText = "";
       if (record) {
         const { data } = await supabase
           .from("transcript_chunks")
@@ -351,56 +352,50 @@ export default function TranscribePage({
         finished = new Set(
           (data ?? []).map((row) => (row as { idx: number }).idx),
         );
-      } else {
-        const { data, error } = await supabase
-          .from("transcripts")
-          .insert({
-            title: title.trim(),
-            unit: unit || null,
-            lesson_number: lessonNumber ? Number(lessonNumber) : null,
-            lesson_title: title.trim() || null,
-            language,
-            uploader_name: displayName,
-            duration_seconds: Math.round(splitter.duration),
-            total_chunks: splitter.count,
-            status: "processing",
-          })
-          .select(COLUMNS)
-          .single();
-        if (error || !data)
-          throw new Error(error?.message ?? "Could not start the transcript.");
-        record = data as TranscriptRow;
-        setRows((current) => [record as TranscriptRow, ...current]);
       }
-      const total = splitter.count;
-      for (let index = 0; index < total; index += 1) {
-        if (finished.has(index)) continue;
-        const done = finished.size;
-        setProgress({
-          phase: `Transcribing part ${index + 1} of ${total}…`,
-          done,
-          total,
-        });
-        const blob = await splitter.read(index);
-        await sendChunk(
-          blob,
-          index,
-          Math.max(
-            10,
-            Math.min(CHUNK_SECONDS, splitter.duration - index * CHUNK_SECONDS),
-          ),
-          record.id,
-          done,
-          total,
+      for (let fileIndex = 0; fileIndex < audioFiles.length; fileIndex += 1) {
+        const audio = audioFiles[fileIndex];
+        setProgress({ phase: `Preparing part ${fileIndex + 1} of ${audioFiles.length}…`, done: finished.size, total: Math.max(finished.size + 1, globalIndex + 1) });
+        splitter = await splitAudio(audio, (ratio) =>
+          setProgress({ phase: `Preparing ${audio.name}… ${Math.round(ratio * 100)}%`, done: finished.size, total: Math.max(finished.size + 1, globalIndex + 1) }),
         );
-        finished.add(index);
+        const partTotal = splitter.count;
+        if (!record) {
+          const { data, error } = await supabase
+            .from("transcripts")
+            .insert({ title: title.trim(), unit: unit || null, lesson_number: lessonNumber ? Number(lessonNumber) : null, lesson_title: title.trim() || null, language, uploader_name: displayName, duration_seconds: Math.round(splitter.duration), total_chunks: partTotal, status: "processing" })
+            .select(COLUMNS).single();
+          if (error || !data) throw new Error(error?.message ?? "Could not start the transcript.");
+          record = data as TranscriptRow;
+          setRows((current) => [record as TranscriptRow, ...current]);
+        } else if (fileIndex > 0 || globalIndex > 0) {
+          const durationTotal = (record.duration_seconds ?? 0) + Math.round(splitter.duration);
+          const chunkTotal = (record.total_chunks ?? 0) + partTotal;
+          await supabase.from("transcripts").update({ duration_seconds: durationTotal, total_chunks: chunkTotal }).eq("id", record.id);
+          record = { ...record, duration_seconds: durationTotal, total_chunks: chunkTotal };
+        }
+        const total = Math.max(finished.size + partTotal, globalIndex + partTotal);
+        for (let index = 0; index < partTotal; index += 1) {
+          if (finished.has(globalIndex)) { globalIndex += 1; continue; }
+          const done = finished.size;
+          setProgress({ phase: `Transcribing ${fileIndex + 1}/${audioFiles.length}, part ${index + 1} of ${partTotal}…`, done, total });
+          const blob = await splitter.read(index);
+          const recognized = await sendChunk(blob, index, Math.max(10, Math.min(CHUNK_SECONDS, splitter.duration - index * CHUNK_SECONDS)), record.id, done, total, globalIndex, offsetSeconds, previousText);
+          finished.add(globalIndex);
+          globalIndex += 1;
+          previousText = `${previousText} ${recognized}`.trim().slice(-1800);
+        }
+        offsetSeconds += splitter.duration;
+        splitter.terminate();
+        splitter = null;
       }
+      if (!record) throw new Error("Could not create the stitched transcript.");
       await supabase
         .from("transcripts")
         .update({ status: "done" })
         .eq("id", record.id);
       setProgress(null);
-      setFile(null);
+      setFiles([]);
       setTitle("");
       setLessonNumber("");
       setNotice("Transcript ready for everyone in the group.");
@@ -428,19 +423,19 @@ export default function TranscribePage({
   };
 
   const start = () => {
-    if (!file) {
-      setNotice("Choose an audio file first.");
+    if (!files.length) {
+      setNotice("Choose one or more audio files first.");
       return;
     }
     if (!title.trim()) {
       setNotice("Give the recording a title, e.g. Constitutional Law, Week 3.");
       return;
     }
-    if (file.size > 700 * 1024 * 1024) {
-      setNotice("That file is very large. Export it as MP3 or M4A first.");
+    if (files.some((item) => item.size > 700 * 1024 * 1024)) {
+      setNotice("One of those files is very large. Export it as MP3 or M4A first.");
       return;
     }
-    void run(file, null);
+    void run(files, null);
   };
 
   const remove = async (row: TranscriptRow) => {
@@ -517,8 +512,8 @@ export default function TranscribePage({
         <div>
           <h1 className="heading">Lecture transcripts.</h1>
           <p className="subheading">
-            Upload a lesson recording and it is turned into searchable text for
-            the whole group. Free to use.
+            Upload one or more recordings and they are stitched into one searchable
+            lesson transcript for the whole group. Put the recordings in order.
           </p>
         </div>
       </div>
@@ -577,19 +572,33 @@ export default function TranscribePage({
             </label>
           </div>
           <label>
-            Audio file
+            Audio files (select one or more)
             <input
               type="file"
               accept="audio/*,video/mp4,.m4a,.mp3,.wav,.aac,.ogg,.opus,.amr,.mp4"
-              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+              onChange={(event) => setFiles(Array.from(event.target.files ?? []))}
               disabled={busy}
+              multiple
             />
           </label>
+          {files.length > 0 && (
+            <div className="tr-file-list" aria-label="Ordered audio parts">
+              <div className="field-hint">These recordings will be stitched in this order:</div>
+              {files.map((item, index) => (
+                <div className="tr-file" key={`${item.name}-${item.size}-${index}`}>
+                  <span><strong>{index + 1}.</strong> {item.name}</span>
+                  <button type="button" className="icon-button" disabled={busy || index === 0} onClick={() => setFiles((current) => { const next = [...current]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; return next; })} aria-label="Move audio part up">↑</button>
+                  <button type="button" className="icon-button" disabled={busy || index === files.length - 1} onClick={() => setFiles((current) => { const next = [...current]; [next[index], next[index + 1]] = [next[index + 1], next[index]]; return next; })} aria-label="Move audio part down">↓</button>
+                  <button type="button" className="icon-button" disabled={busy} onClick={() => setFiles((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Remove ${item.name}`}><X size={13} /></button>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="tr-actions">
             <button
               className="primary-button"
               onClick={start}
-              disabled={busy || !file}
+              disabled={busy || !files.length}
             >
               <Mic size={14} style={{ verticalAlign: "middle" }} /> Start
               transcription
@@ -625,7 +634,7 @@ export default function TranscribePage({
         )}
         {message && <p className="tr-note">{message}</p>}
         <p className="tr-note">
-          The free service allows about 2 hours of audio per hour and 8 hours
+          Add as many recordings as you need for one class. The parts are joined in the order shown above, with continuous timestamps and context carried from one recording into the next. The free service allows about 2 hours of audio per hour and 8 hours
           per day for the whole group together. A 3-hour lesson can need a short
           wait partway through, and it carries on by itself. Recordings are sent
           to Groq for transcription.
@@ -637,10 +646,11 @@ export default function TranscribePage({
         type="file"
         accept="audio/*,video/mp4,.m4a,.mp3,.wav,.aac,.ogg,.opus,.amr,.mp4"
         hidden
+        multiple
         onChange={(event) => {
-          const picked = event.target.files?.[0];
+          const picked = Array.from(event.target.files ?? []);
           event.target.value = "";
-          if (picked && resumeFor) void run(picked, resumeFor);
+          if (picked.length && resumeFor) void run(picked, resumeFor);
         }}
       />
 

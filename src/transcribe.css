@@ -50,6 +50,25 @@
   line-height: 1.5;
   margin-top: 10px;
 }
+.tr-file-list {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  background: var(--soft);
+}
+.tr-file {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 0;
+  border-bottom: 1px solid #00000010;
+  font-size: 12px;
+}
+.tr-file:last-child { border-bottom: 0; }
+.tr-file > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tr-file .icon-button { width: 26px; height: 26px; padding: 0; }
 @media (max-width: 640px) {
   .tr-two {
     grid-template-columns: 1fr;
