@@ -17,6 +17,7 @@ const localDate = (date = new Date()) => {
 export default function ScheduledCourtCasesPage() {
   const { theme, toggleTheme } = useTheme();
   const [scope, setScope] = useState<CourtScope>("all");
+  const [station, setStation] = useState("Nairobi Milimani");
   const [dateMode, setDateMode] = useState<DateMode>("today");
   const [fromDate, setFromDate] = useState(localDate());
   const [toDate, setToDate] = useState(localDate());
@@ -35,7 +36,7 @@ export default function ScheduledCourtCasesPage() {
     setHasSearched(true);
     setError("");
     const scopeText = scope === "high-court" ? "High Court" : scope === "magistrates" ? "Chief Magistrate" : "High Court Magistrate";
-    const searchQuery = `${scopeText} Nairobi Milimani Law Courts cause list ${query.trim()}`.trim();
+    const searchQuery = `${scopeText} ${station.trim() || "Kenya"} cause list ${query.trim()}`.trim();
     const today = localDate();
     const dates = dateMode === "today"
       ? { fromDate: today, toDate: today }
@@ -81,7 +82,7 @@ export default function ScheduledCourtCasesPage() {
         <section className="scheduled-hero" aria-labelledby="scheduled-title">
           <div className="scheduled-kicker"><CalendarDays size={15} /> COURT SCHEDULES</div>
           <h1 id="scheduled-title">View scheduled<br /><em>court cases.</em></h1>
-          <p>Search public cause-list documents for Nairobi and Milimani Law Courts. Choose a court level, add a case name or division if you know it, and open the official schedule.</p>
+          <p>Search public cause-list documents for any Kenyan court station. Choose a court level, enter a station, add a case name or division if you know it, and open the official schedule.</p>
           <div className="scheduled-date-controls" aria-label="Date range">
             <span>Show</span>
             <button type="button" className={dateMode === "today" ? "active" : ""} onClick={() => setDateMode("today")}>Today</button>
@@ -96,6 +97,8 @@ export default function ScheduledCourtCasesPage() {
               <option value="high-court">High Court</option>
               <option value="magistrates">Chief Magistrate’s Court</option>
             </select>
+            <label htmlFor="scheduled-station">Station</label>
+            <input id="scheduled-station" type="search" value={station} onChange={(event) => setStation(event.target.value)} placeholder="Nairobi Milimani, Kisumu…" />
             <label className="scheduled-query-label" htmlFor="scheduled-query">Case or division</label>
             <input id="scheduled-query" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Optional: case name, Civil, Criminal…" />
             <button type="submit" disabled={busy}>{busy ? <><Loader2 className="scheduled-spin" size={16} /> Checking</> : <><Search size={16} /> View schedules</>}</button>

@@ -26,7 +26,7 @@
 .scheduled-date-controls button.active, .scheduled-date-controls button:hover { border-color: var(--scheduled-forest); background: var(--scheduled-forest); color: #fff; }
 .scheduled-date-controls label { margin-left: 5px; font-weight: 700; }
 .scheduled-date-controls input { min-height: 31px; padding: 0 7px; border: 1px solid var(--scheduled-line); background: #fff; color: var(--scheduled-ink); font: inherit; font-size: 11px; }
-.scheduled-search { display: grid; grid-template-columns: auto 220px 1fr auto; align-items: center; gap: 10px; max-width: 990px; padding: 10px; border: 1px solid var(--scheduled-line); background: #fff; box-shadow: 0 12px 32px rgba(21,59,45,.06); }
+.scheduled-search { display: grid; grid-template-columns: auto 210px auto minmax(180px, 220px) 1fr auto; align-items: center; gap: 10px; max-width: 1180px; padding: 10px; border: 1px solid var(--scheduled-line); background: #fff; box-shadow: 0 12px 32px rgba(21,59,45,.06); }
 .scheduled-search label { padding-left: 8px; color: #6a756e; font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
 .scheduled-search .scheduled-query-label { display: none; }
 .scheduled-search select, .scheduled-search input { min-width: 0; min-height: 43px; border: 1px solid var(--scheduled-line); background: #faf9f5; color: var(--scheduled-ink); padding: 0 12px; font: inherit; font-size: 13px; }
