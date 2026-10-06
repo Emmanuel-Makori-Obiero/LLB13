@@ -13,7 +13,7 @@ import { generateAudio } from "./lib/cloudMedia";
 import { Markdown } from "./Markdown";
 import "./learning-studio.css";
 
-type Doc = { id: string; title: string; scope: string };
+type Doc = { id: string; title: string; scope: "user" | "library"; citation?: string | null };
 type Mode = "podcast" | "video";
 const isBookSource = (_doc: Doc) => true;
 
@@ -556,7 +556,7 @@ export default function LearningStudio() {
         <aside className="studio-sources">
           <div className="section-label">Choose source books or transcripts</div>
           <p className="field-hint">
-            Select any AI-ready book, document, or saved transcript.
+            Select any AI-ready Library book, uploaded book, document, or saved transcript. Scroll inside the list when you have many sources.
           </p>
           <label className="secondary-button studio-upload-source">
             <Upload size={14} /> {uploadingSource ? "Uploading…" : "Upload book"}
@@ -565,19 +565,21 @@ export default function LearningStudio() {
           {docs.length === 0 ? (
             <div className="empty">No AI-ready sources yet. Upload a book or finish a transcript above.</div>
           ) : (
-            docs.map((doc) => (
-              <label
-                className={`studio-doc ${selected.includes(doc.id) ? "on" : ""}`}
-                key={doc.id}
-              >
-                <input
-                  type="checkbox"
-                  checked={selected.includes(doc.id)}
-                  onChange={() => toggle(doc.id)}
-                />
-                <span>{doc.title}<small>{/transcript|recording/i.test(doc.title) ? "Saved transcript" : "Book or document"}</small></span>
-              </label>
-            ))
+            <div className="studio-source-scroll" aria-label="Podcast source books and transcripts">
+              {docs.map((doc) => (
+                <label
+                  className={`studio-doc ${selected.includes(doc.id) ? "on" : ""}`}
+                  key={doc.id}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(doc.id)}
+                    onChange={() => toggle(doc.id)}
+                  />
+                  <span>{doc.title}<small>{doc.scope === "library" ? "Library book · AI-readable" : /transcript|recording/i.test(doc.title) ? "Saved transcript" : "My uploaded book or document"}</small></span>
+                </label>
+              ))}
+            </div>
           )}
         </aside>
       </div>
