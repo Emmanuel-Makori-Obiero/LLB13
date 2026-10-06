@@ -103,6 +103,7 @@ import { addYouTubeItem, loadPublicYouTubePlaylist, loadYouTubePlaylist, removeY
 import { useTheme, type Theme } from "./theme";
 import GamesHub from "./GamesHub";
 import {
+  analyzeImage,
   createFilmProject,
   createMediaShare,
   deleteMediaAsset,
@@ -2749,6 +2750,11 @@ function MediaPage({
   const [imageBusy, setImageBusy] = useState(false);
   const [imageNote, setImageNote] = useState("");
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
+  const [imageSourceData, setImageSourceData] = useState<string | null>(null);
+  const [imageSourceMime, setImageSourceMime] = useState("image/png");
+  const [imageSourceName, setImageSourceName] = useState("");
+  const [imageAnalysis, setImageAnalysis] = useState("");
+  const [imageAnalyzing, setImageAnalyzing] = useState(false);
   const [videoPrompt, setVideoPrompt] = useState("");
   const [videoBusy, setVideoBusy] = useState(false);
   const [videoNote, setVideoNote] = useState("");
@@ -3009,22 +3015,32 @@ function MediaPage({
     }
   };
 
+  const chooseImageSource = (file?: File) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { setImageNote("Choose a PNG, JPEG, WebP, GIF or HEIC image."); return; }
+    if (file.size > 18 * 1024 * 1024) { setImageNote("Choose an image under 18 MB."); return; }
+    const reader = new FileReader();
+    reader.onload = () => { setImageSourceData(String(reader.result)); setImageSourceMime(file.type || "image/png"); setImageSourceName(file.name); setImageAnalysis(""); setImageNote("Image uploaded. Ask Gemini to explain it or revise it below."); };
+    reader.readAsDataURL(file);
+  };
+  const analyzeUploadedImage = async () => {
+    if (!imageSourceData || imageAnalyzing) return;
+    setImageAnalyzing(true); setImageNote("");
+    try {
+      const result = await analyzeImage({ image_base64: imageSourceData, image_mime_type: imageSourceMime, prompt: imagePrompt.trim() || "Explain this image clearly for a law student. Describe what it shows, identify important labels or relationships, and point out anything that may be unclear." });
+      setImageAnalysis(result.analysis); setImageNote("Image analyzed. Use the explanation to decide what you want revised.");
+    } catch (error) { setImageNote(error instanceof Error ? error.message : "Could not analyze image."); }
+    finally { setImageAnalyzing(false); }
+  };
   const buildImage = async (event: React.FormEvent) => {
     event.preventDefault();
     if (imagePrompt.trim().length < 8 || imageBusy) return;
-    setImageBusy(true);
-    setImageNote("");
-    setGeneratedImageUrl(null);
+    setImageBusy(true); setImageNote(""); setGeneratedImageUrl(null);
     try {
-      const result = await generateImage({ prompt: imagePrompt.trim() });
-      setGeneratedImageUrl(result.signed_url);
-      setImageNote("Image generated and saved privately in Supabase Storage.");
-      setCloudAssets((current) => [result.asset, ...current]);
-    } catch (error) {
-      setImageNote(error instanceof Error ? error.message : "Could not generate image.");
-    } finally {
-      setImageBusy(false);
-    }
+      const result = await generateImage({ prompt: imageSourceData ? `Revise the uploaded image as requested. Preserve everything not mentioned, keep the subject's identity, structure, labels and visual context accurate. ${imagePrompt.trim()}` : imagePrompt.trim(), operation: imageSourceData ? "edit" : "generate", image_base64: imageSourceData || undefined, image_mime_type: imageSourceMime });
+      setGeneratedImageUrl(result.signed_url); setImageNote("Image ready and saved in Cloud media. You can download it or use another uploaded image for a further revision."); setCloudAssets((current) => [result.asset, ...current]);
+    } catch (error) { setImageNote(error instanceof Error ? error.message : "Could not generate or revise image."); }
+    finally { setImageBusy(false); }
   };
 
   const buildVideo = async (event: React.FormEvent) => {
@@ -3139,11 +3155,14 @@ function MediaPage({
       </div>
 
       <div className="card card-pad" style={{ marginTop: 18 }}>
-        <CardHeader label="Image Studio" action="Hugging Face · optional Gemini fallback" />
-        <p className="field-hint">Describe an illustration, study diagram, or film reference image. The deployed function needs an HF token with Inference Providers permission. Gemini is a separate, billable fallback and stays disabled unless an administrator explicitly opts in with GEMINI_IMAGE_ENABLED=true.</p>
+        <CardHeader label="Image Studio" action="Gemini Nano Banana · generate, explain, revise" />
+        <p className="field-hint">Generate an illustrative study image or upload any image for Gemini to analyze and revise. Ask what you do not understand, then describe the exact change you want. Uploaded images are sent to Gemini for processing; do not upload confidential material.</p>
+        <label className="primary-button upload-button">{imageSourceName ? `Replace ${imageSourceName}` : "Upload image to analyze or revise"}<input type="file" accept="image/*" onChange={(event) => { chooseImageSource(event.target.files?.[0]); event.currentTarget.value = ""; }} disabled={imageBusy || imageAnalyzing} /></label>
+        {imageSourceData && <div className="generated-image-result"><img src={imageSourceData} alt={imageSourceName || "Uploaded reference"} /><div className="media-actions"><button className="secondary-button" type="button" onClick={() => void analyzeUploadedImage()} disabled={imageAnalyzing}>{imageAnalyzing ? "Analyzing…" : "Explain this image"}</button><button className="secondary-button" type="button" onClick={() => { setImageSourceData(null); setImageSourceName(""); setImageAnalysis(""); setImageNote(""); }}>Remove image</button></div></div>}
+        {imageAnalysis && <div className="practice-answer"><strong>Gemini image explanation</strong><Markdown text={imageAnalysis} /></div>}
         <form className="data-form" onSubmit={(event) => void buildImage(event)}>
-          <label>Image prompt<textarea required minLength={8} rows={4} value={imagePrompt} onChange={(event) => setImagePrompt(event.target.value)} placeholder="A clean editorial illustration of a Kenyan courtroom, warm paper texture, no text" /></label>
-          <button className="primary-button" type="submit" disabled={imageBusy}>{imageBusy ? <><ImageIcon size={16} /> Generating…</> : <><Sparkles size={16} /> Generate image</>}</button>
+          <label>{imageSourceData ? "What should Gemini revise?" : "What should Gemini create?"}<textarea required minLength={8} rows={4} value={imagePrompt} onChange={(event) => setImagePrompt(event.target.value)} placeholder={imageSourceData ? "Explain the unclear labels and redraw the diagram with clearer arrows and larger text" : "A clear illustrative diagram explaining the hierarchy of Kenyan courts, editorial educational style, readable labels"} /></label>
+          <button className="primary-button" type="submit" disabled={imageBusy}>{imageBusy ? <><ImageIcon size={16} /> Working…</> : <><Sparkles size={16} /> {imageSourceData ? "Revise image" : "Generate image"}</>}</button>
           {imageNote && <p className="field-hint">{imageNote}</p>}
         </form>
         {generatedImageUrl && <div className="generated-image-result"><img src={generatedImageUrl} alt={imagePrompt} /><a className="material-link" href={generatedImageUrl} target="_blank" rel="noreferrer">Open full-size image</a></div>}

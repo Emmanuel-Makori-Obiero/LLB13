@@ -229,6 +229,9 @@ export async function listFilmShots(projectId: string) {
 
 export async function generateImage(args: {
   prompt: string;
+  operation?: "generate" | "edit";
+  image_base64?: string;
+  image_mime_type?: string;
   model?: string;
   width?: number;
   height?: number;
@@ -252,6 +255,29 @@ export async function generateImage(args: {
   }
   if (!data?.asset) throw new Error([data?.error, data?.detail].filter(Boolean).join(" — ") || "Image generation returned no asset.");
   return data as { asset: MediaAsset; signed_url: string | null };
+}
+
+export async function analyzeImage(args: {
+  prompt: string;
+  image_base64: string;
+  image_mime_type?: string;
+}) {
+  const { data, error } = await client().functions.invoke("generate-image", {
+    body: { ...args, operation: "analyze" },
+  });
+  if (error) {
+    let detail = error.message;
+    const context = (error as unknown as { context?: Response }).context;
+    if (context) {
+      try {
+        const body = await context.clone().json() as { error?: string; detail?: string };
+        detail = [body.error, body.detail].filter(Boolean).join(" — ") || detail;
+      } catch { /* keep the SDK message */ }
+    }
+    throw new Error(`Image analysis failed: ${detail}`);
+  }
+  if (!data?.analysis) throw new Error([data?.error, data?.detail].filter(Boolean).join(" — ") || "Image analysis returned no result.");
+  return data as { analysis: string; provider: string; model: string };
 }
 
 export async function generateVideoJob(args: { prompt: string; projectId?: string; shotIndex?: number; seed?: number }) {
