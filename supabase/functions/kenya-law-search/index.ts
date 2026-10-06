@@ -16,6 +16,14 @@ type CaseResult = {
   citation: string | null;
 };
 
+type CauseListResult = {
+  title: string;
+  url: string;
+  court: string;
+  dateRange: string | null;
+  source: "Kenya Law cause-list archive";
+};
+
 const FALLBACK_CASES: CaseResult[] = [
   { title: "Gachagua & 57 others v Speaker, National Assembly & 35 others [2026] KEHC 8198 (KLR)", url: "https://kenyalaw.org/akn/ke/judgment/kehc/2026/8198/eng@2026-06-08", citation: "[2026] KEHC 8198 (KLR)" },
   { title: "National Assembly v Gachagua & 66 others [2026] KESC 19 (KLR)", url: "https://kenyalaw.org/akn/ke/judgment/kesc/2026/19/eng@2026-01-30", citation: "[2026] KESC 19 (KLR)" },
@@ -87,6 +95,66 @@ function parseResults(html: string): CaseResult[] {
     if (results.length === 10) break;
   }
   return results;
+}
+
+function parseCauseLists(html: string, query: string): CauseListResult[] {
+  const results: CauseListResult[] = [];
+  const seen = new Set<string>();
+  const terms = query.toLowerCase().split(/\s+/).filter((term) =>
+    term.length >= 4 && !["find", "search", "look", "list", "case", "cases", "court", "courts", "cause", "causelists", "listings", "any", "there", "is"].includes(term)
+  );
+  const anchorPattern = /<a[^>]+href=["'](\/akn\/ke\/doc\/[^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  for (const match of html.matchAll(anchorPattern)) {
+    const title = decodeHtml(match[2]);
+    if (!/cause\s*list|causelist/i.test(title) || !/nairobi|milimani/i.test(title)) continue;
+    const normalized = title.toLowerCase();
+    if (terms.length && !terms.some((term) => normalized.includes(term))) continue;
+    const url = `https://kenyalaw.org${match[1]}`;
+    if (seen.has(url)) continue;
+    seen.add(url);
+    const dateRange = title.match(/\b\d{1,2}\s+[A-Za-z]+\s+\d{4}(?:\s+to\s+\d{1,2}\s+[A-Za-z]+\s+\d{4})?/i)?.[0] ?? null;
+    const court = title.split(/\s+[–-]\s+(?:Daily|Weekly|Monthly) Cause List/i)[0].trim();
+    results.push({ title: title.slice(0, 260), url, court, dateRange, source: "Kenya Law cause-list archive" });
+    if (results.length >= 12) break;
+  }
+  return results;
+}
+
+function causeListSearch(query: string) {
+  const normalized = query.toLowerCase();
+  const highCourt = /high\s+court|constitutional|commercial|civil|environment|family|judicial review|anti-?corruption/i.test(normalized);
+  const magistrate = /magistrate|chief magistrate|criminal|small claims/i.test(normalized);
+  const routes = highCourt && !magistrate
+    ? ["https://kenyalaw.org/causelists/KEHC/HCNRB/?natures=cause-list-weekly"]
+    : magistrate && !highCourt
+      ? ["https://kenyalaw.org/causelists/KEMC/?q=Milimani"]
+      : [
+          "https://kenyalaw.org/causelists/KEHC/HCNRB/?natures=cause-list-weekly",
+          "https://kenyalaw.org/causelists/KEMC/?q=Milimani",
+        ];
+  return routes;
+}
+
+async function discoverCauseLists(query: string): Promise<{ results: CauseListResult[]; providers: string[] }> {
+  const providers: string[] = [];
+  const all: CauseListResult[] = [];
+  const seen = new Set<string>();
+  for (const url of causeListSearch(query)) {
+    try {
+      const response = await fetch(url, {
+        headers: { Accept: "text/html,application/xhtml+xml", "User-Agent": "Mozilla/5.0 (compatible; Group13CaseFinder/1.0; +https://kenyalaw.org/)" },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!response.ok) continue;
+      providers.push("Kenya Law cause-list archive");
+      for (const result of parseCauseLists(await response.text(), query)) {
+        if (!seen.has(result.url)) { seen.add(result.url); all.push(result); }
+      }
+    } catch {
+      /* The other official route may still respond. */
+    }
+  }
+  return { results: all.slice(0, 12), providers: [...new Set(providers)] };
 }
 
 function extractJudgmentText(html: string) {
@@ -214,6 +282,19 @@ Deno.serve(async (request) => {
   const query = String(body.query ?? "").trim().replace(/\s+/g, " ");
   if (query.length < 3) return json({ error: "Enter at least three characters to search." }, 400);
   if (query.length > 180) return json({ error: "Keep the case query under 180 characters." }, 400);
+  if (/\b(cause\s*list|causelist|court\s+schedule|scheduled\s+(case|hearing)|milimani\s+law\s+courts)\b/i.test(query)) {
+    const discovered = await discoverCauseLists(query);
+    return json({
+      query,
+      results: discovered.results,
+      resultType: "cause-list",
+      source: discovered.providers.length ? "Official Kenya Law cause-list archive" : "No official cause-list provider responded",
+      degraded: discovered.providers.length === 0,
+      judiciaryPortalUrl: "https://causelist.court.go.ke/causelist",
+      officialSearchUrl: `https://kenyalaw.org/causelists/?q=${encodeURIComponent(query)}`,
+      caveat: "A cause list is a public court schedule for the stated date range. It is not a complete case register and a missing or present listing should be verified against the Judiciary portal and the linked official document.",
+    });
+  }
   const citationMatch = await resolveCitation(query);
   if (citationMatch) return json({ query, results: [citationMatch], source: "Official Kenya Law citation resolver" });
 

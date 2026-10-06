@@ -12,6 +12,14 @@ export type KenyaLawCaseDocument = {
   text: string;
 };
 
+export type KenyaCauseListResult = {
+  title: string;
+  url: string;
+  court: string;
+  dateRange: string | null;
+  source: "Kenya Law cause-list archive";
+};
+
 const COMMON_LEGAL_TERMS = [
   "contract", "negligence", "defamation", "constitutional", "employment",
   "land", "succession", "judicial review", "criminal appeal", "tort",
@@ -89,6 +97,32 @@ export async function searchKenyaLaw(query: string): Promise<KenyaLawCaseResult[
     throw new Error(message);
   }
   return Array.isArray(data?.results) ? (data.results as KenyaLawCaseResult[]) : [];
+}
+
+export async function searchKenyaCauseLists(query: string): Promise<{
+  results: KenyaCauseListResult[];
+  judiciaryPortalUrl: string;
+  officialSearchUrl: string;
+  caveat: string;
+}> {
+  if (!supabase) throw new Error("Supabase is not configured.");
+  const { data, error } = await supabase.functions.invoke("kenya-law-search", { body: { query } });
+  if (error) {
+    let message = "The official cause-list search is unavailable right now.";
+    try {
+      const body = await (error as { context?: Response }).context?.json();
+      if (body?.error) message = String(body.error);
+    } catch {
+      /* Keep the friendly fallback. */
+    }
+    throw new Error(message);
+  }
+  return {
+    results: Array.isArray(data?.results) ? data.results as KenyaCauseListResult[] : [],
+    judiciaryPortalUrl: String(data?.judiciaryPortalUrl ?? "https://causelist.court.go.ke/causelist"),
+    officialSearchUrl: String(data?.officialSearchUrl ?? "https://kenyalaw.org/causelists/"),
+    caveat: String(data?.caveat ?? "A cause list is a dated public court schedule, not a complete case register."),
+  };
 }
 
 export async function fetchKenyaLawCase(url: string): Promise<KenyaLawCaseDocument> {

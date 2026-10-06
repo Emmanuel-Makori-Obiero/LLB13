@@ -3,7 +3,7 @@ import { BookOpen, Bot, ChevronRight, Download, FileText, History, Loader2, Plus
 import { askAI, type AIMessage, type AIResult } from "./lib/ai";
 import { downloadPdf, downloadWord } from "./export";
 import { findLegalTerm, searchLegalDictionary } from "./legalDictionary";
-import { searchKenyaLaw } from "./lib/kenyaLaw";
+import { searchKenyaCauseLists, searchKenyaLaw } from "./lib/kenyaLaw";
 import { Markdown } from "./Markdown";
 import "./floating-lawyer.css";
 
@@ -95,6 +95,22 @@ export default function FloatingLawyerAgent({ currentPage, onOpenDictionary, his
     const local = findLegalTerm(question.replace(/[?!.]+$/g, ""));
     if (local) {
       updateMessages([...next, { role: "assistant", text: `**${local.term}**\n\n${local.definition}${local.example ? `\n\n**Example:** ${local.example}` : ""}\n\n*Study definition from the Group 13 dictionary. Check the governing Kenyan authority for your question.*` }]);
+      return;
+    }
+    const wantsCauseList = /\b(cause\s*list|causelist|court\s+schedule|scheduled\s+(case|hearing)|milimani\s+law\s+courts)\b/i.test(question);
+    if (wantsCauseList) {
+      setBusy(true);
+      try {
+        const response = await searchKenyaCauseLists(question);
+        const text = response.results.length
+          ? `**Official Nairobi/Milimani cause-list results**\n\n${response.results.map((result) => `- [${result.title}](${result.url})${result.dateRange ? ` — ${result.dateRange}` : ""}`).join("\n")}\n\n[Open the Judiciary Causelist Portal](${response.judiciaryPortalUrl}) · [Open the Kenya Law cause-list search](${response.officialSearchUrl})\n\n*${response.caveat}*`
+          : `I could not find a matching public Nairobi/Milimani cause-list document. [Open the Judiciary Causelist Portal](${response.judiciaryPortalUrl}) to check the live station, division and date filters.\n\n*${response.caveat}*`;
+        updateMessages([...next, { role: "assistant", text }]);
+      } catch (error) {
+        updateMessages([...next, { role: "assistant", text: error instanceof Error ? error.message : "The official cause-list search is unavailable right now." }]);
+      } finally {
+        setBusy(false);
+      }
       return;
     }
     const wantsCaseSearch = /\b(find|search|look up|locate)\b[\s\S]*\b(case|judgment|kenya law|citation)\b/i.test(question);
