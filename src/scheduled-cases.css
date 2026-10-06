@@ -91,3 +91,4 @@
 :root[data-theme="dark"] .scheduled-loading, :root[data-theme="dark"] .scheduled-empty { border-color: var(--scheduled-line); color: #a8b9ad; }
 
 .scheduled-page { background-image: linear-gradient(var(--wallpaper-overlay), var(--wallpaper-overlay)), var(--user-wallpaper); background-position: center center; background-repeat: no-repeat; background-size: cover; background-attachment: fixed; }
+.scheduled-page { background-size: contain; background-position: center center; background-repeat: no-repeat; }

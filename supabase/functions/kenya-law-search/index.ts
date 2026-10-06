@@ -101,12 +101,12 @@ function parseCauseLists(html: string, query: string): CauseListResult[] {
   const results: CauseListResult[] = [];
   const seen = new Set<string>();
   const terms = query.toLowerCase().split(/\s+/).filter((term) =>
-    term.length >= 4 && !["find", "search", "look", "list", "case", "cases", "court", "courts", "cause", "causelists", "listings", "any", "there", "is", "today", "tomorrow", "upcoming", "nairobi", "milimani"].includes(term)
+    term.length >= 4 && !["find", "search", "look", "list", "case", "cases", "court", "courts", "cause", "causelists", "listings", "any", "there", "is", "today", "tomorrow", "upcoming", "nairobi", "milimani", "where", "what", "have", "this", "week"].includes(term)
   );
   const anchorPattern = /<a[^>]+href=["'](\/akn\/ke\/doc\/[^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
   for (const match of html.matchAll(anchorPattern)) {
     const title = decodeHtml(match[2]);
-    if (!/cause\s*list|causelist/i.test(title) || !/nairobi|milimani/i.test(title)) continue;
+    if (!/cause\s*list|causelist/i.test(title)) continue;
     const normalized = title.toLowerCase();
     if (terms.length && !terms.some((term) => normalized.includes(term))) continue;
     const url = `https://kenyalaw.org${match[1]}`;
@@ -142,14 +142,12 @@ function causeListSearch(query: string) {
   const normalized = query.toLowerCase();
   const highCourt = /high\s+court|constitutional|commercial|civil|environment|family|judicial review|anti-?corruption/i.test(normalized);
   const magistrate = /magistrate|chief magistrate|criminal|small claims/i.test(normalized);
-  const routes = highCourt && !magistrate
-    ? ["https://kenyalaw.org/causelists/KEHC/HCNRB/?natures=cause-list-weekly"]
-    : magistrate && !highCourt
-      ? ["https://kenyalaw.org/causelists/KEMC/?q=Milimani"]
-      : [
-          "https://kenyalaw.org/causelists/KEHC/HCNRB/?natures=cause-list-weekly",
-          "https://kenyalaw.org/causelists/KEMC/?q=Milimani",
-        ];
+  const courtRoutes = normalized.includes("court of appeal") ? ["KECA"]
+    : normalized.includes("employment") || normalized.includes("labour") ? ["KEELRC"]
+      : normalized.includes("environment and land") ? ["KEELC"]
+        : highCourt && !magistrate ? ["KEHC"]
+          : magistrate && !highCourt ? ["KEMC"] : ["KEHC", "KEMC"];
+  const routes = ["https://kenyalaw.org/causelists/", ...courtRoutes.map((code) => `https://kenyalaw.org/causelists/${code}/` )];
   return routes;
 }
 

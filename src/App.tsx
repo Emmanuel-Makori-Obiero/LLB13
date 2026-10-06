@@ -252,9 +252,11 @@ function App() {
   const [musicPlaying, setMusicPlaying] = useState(false);
   const isAdmin = adminState === "yes";
   useEffect(() => {
+    const wallpaper = profile.wallpaperUrl || window.localStorage.getItem("group13-wallpaper") || "";
+    if (wallpaper) window.localStorage.setItem("group13-wallpaper", wallpaper);
     document.documentElement.style.setProperty(
       "--user-wallpaper",
-      profile.wallpaperUrl ? `url(${JSON.stringify(profile.wallpaperUrl)})` : "none",
+      wallpaper ? `url(${JSON.stringify(wallpaper)})` : "none",
     );
   }, [profile.wallpaperUrl]);
 
@@ -766,7 +768,9 @@ function App() {
         profile.wallpaperUrl
           ? {
               backgroundImage: `linear-gradient(var(--wallpaper-overlay), var(--wallpaper-overlay)), url(${profile.wallpaperUrl})`,
-              backgroundSize: "cover",
+              backgroundSize: "contain",
+              backgroundRepeat: "no-repeat",
+              backgroundPosition: "center center",
               backgroundAttachment: "fixed",
             }
           : undefined

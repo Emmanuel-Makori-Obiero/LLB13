@@ -102,7 +102,7 @@ export default function FloatingLawyerAgent({ currentPage, onOpenDictionary, his
       updateMessages([...next, { role: "assistant", text: `**${local.term}**\n\n${local.definition}${local.example ? `\n\n**Example:** ${local.example}` : ""}\n\n*Study definition from the Group 13 dictionary. Check the governing Kenyan authority for your question.*` }]);
       return;
     }
-    const wantsCauseList = /\b(cause\s*list|causelist|court\s+schedule|scheduled\s+(case|hearing)|milimani\s+(law\s+)?courts?|court\s+case(?:s)?\s+(today|tomorrow|upcoming)|case(?:s)?\s+(today|tomorrow|upcoming)\s+(at|in)\s+milimani)\b/i.test(question);
+    const wantsCauseList = /\b(cause\s*list|causelist|court\s+schedule|scheduled\s+(case|hearing)|court\s+case(?:s)?\s+(today|tomorrow|upcoming)|case(?:s)?\s+(today|tomorrow|upcoming)\s+(at|in)\s+[a-z][a-z -]{2,40}|(?:case|matter|hearing)s?\b.{0,50}\b(today|tomorrow|upcoming)\b)/i.test(question);
     if (wantsCauseList) {
       setBusy(true);
       try {
@@ -114,8 +114,8 @@ export default function FloatingLawyerAgent({ currentPage, onOpenDictionary, his
             : undefined;
         const response = await searchKenyaCauseLists(`${question} cause list`, dates);
         const text = response.results.length
-          ? `**Official Nairobi/Milimani cause-list results**\n\n${response.results.map((result) => `- [${result.title}](${result.url})${result.dateRange ? ` — ${result.dateRange}` : ""}`).join("\n")}\n\n[Open the Judiciary Causelist Portal](${response.judiciaryPortalUrl}) · [Open the Kenya Law cause-list search](${response.officialSearchUrl})\n\n*${response.caveat}*`
-          : `I could not find a matching public Nairobi/Milimani cause-list document. [Open the Judiciary Causelist Portal](${response.judiciaryPortalUrl}) to check the live station, division and date filters.\n\n*${response.caveat}*`;
+          ? `**Official court cause-list results**\n\n${response.results.map((result) => `- [${result.title}](${result.url})${result.dateRange ? ` — ${result.dateRange}` : ""}`).join("\n")}\n\n[Open the Judiciary Causelist Portal](${response.judiciaryPortalUrl}) · [Open the Kenya Law cause-list search](${response.officialSearchUrl})\n\n*${response.caveat}*`
+          : `I could not find a matching public court cause-list document. [Open the Judiciary Causelist Portal](${response.judiciaryPortalUrl}) to select the court, station, division and date filters.\n\n*${response.caveat}*`;
         updateMessages([...next, { role: "assistant", text }]);
       } catch (error) {
         updateMessages([...next, { role: "assistant", text: error instanceof Error ? error.message : "The official cause-list search is unavailable right now." }]);
