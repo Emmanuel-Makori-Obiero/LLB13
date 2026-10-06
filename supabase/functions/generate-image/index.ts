@@ -23,12 +23,12 @@ async function geminiImage(args: { prompt: string; keys: string[]; imageBase64?:
   const input = args.imageBase64 ? [{ type: "text", text: args.prompt }, { type: "image", data: imageData(args.imageBase64).data, mime_type: args.imageMimeType || imageData(args.imageBase64).mimeType }] : [{ type: "text", text: args.prompt }];
   for (const model of args.models) for (const [keyIndex, key] of args.keys.entries()) {
     try {
-      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", { method: "POST", headers: { "x-goog-api-key": key, "Content-Type": "application/json" }, body: JSON.stringify({ model, input, response_format: { type: "image", mime_type: "image/png", aspect_ratio: args.aspectRatio, image_size: args.imageSize } }), signal: AbortSignal.timeout(120_000) });
+      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", { method: "POST", headers: { "x-goog-api-key": key, "Content-Type": "application/json" }, body: JSON.stringify({ model, input, response_format: { type: "image", mime_type: "image/jpeg", aspect_ratio: args.aspectRatio, image_size: args.imageSize } }), signal: AbortSignal.timeout(120_000) });
       const raw = await response.text(); let payload: unknown; try { payload = JSON.parse(raw); } catch { payload = raw; }
       if (!response.ok) { failures.push(`${model} / key ${keyIndex + 1} HTTP ${response.status}: ${typeof payload === "string" ? payload.slice(0, 700) : findText(payload).slice(0, 700)}`); continue; }
       const encoded = findImageData(payload); if (!encoded) throw new Error(`${model} returned no image data.`);
       const bytes = decodeBase64(encoded); if (bytes.length < 100) throw new Error(`${model} returned an empty image.`);
-      return { bytes, model };
+      return { bytes, model, mimeType: "image/jpeg" };
     } catch (error) { failures.push(`${model} / key ${keyIndex + 1}: ${error instanceof Error ? error.message : String(error)}`); }
   }
   throw new Error(failures.slice(-3).join("; ") || "Gemini image generation did not return an image.");
@@ -71,9 +71,9 @@ Deno.serve(async (req) => {
     if (operation === "analyze") return json({ analysis: await analyzeGemini({ prompt, keys: geminiKeys, imageBase64: body.image_base64!, imageMimeType: body.image_mime_type || "image/png", model: visionModel }), provider: "gemini-vision", model: visionModel });
     const width = Math.min(1536, Math.max(512, Number(body.width) || 1024)); const height = Math.min(1536, Math.max(512, Number(body.height) || 1024)); const ratio = width / height > 1.6 ? "16:9" : width / height < 0.7 ? "9:16" : "1:1";
     const generated = await geminiImage({ prompt, keys: geminiKeys, imageBase64: body.image_base64, imageMimeType: body.image_mime_type, models: imageModels, aspectRatio: ratio, imageSize: "1K" });
-    const assetId = crypto.randomUUID(); const storagePath = `${auth.user.id}/generated/${assetId}.png`; const upload = await admin.storage.from("media").upload(storagePath, generated.bytes, { contentType: "image/png", upsert: false });
+    const assetId = crypto.randomUUID(); const storagePath = `${auth.user.id}/generated/${assetId}.jpg`; const upload = await admin.storage.from("media").upload(storagePath, generated.bytes, { contentType: generated.mimeType, upsert: false });
     if (upload.error) return json({ error: `Could not store generated image: ${upload.error.message}` }, 500);
-    const { data: asset, error: insertError } = await admin.from("media_assets").insert({ id: assetId, owner_id: auth.user.id, title: prompt.slice(0, 90), kind: "other", storage_path: storagePath, mime_type: "image/png", public_url: admin.storage.from("media").getPublicUrl(storagePath).data.publicUrl, status: "ready", provider: "gemini", metadata: { model: generated.model, operation, prompt, width, height } }).select("id,title,kind,storage_path,mime_type,status,provider,created_at").single();
+    const { data: asset, error: insertError } = await admin.from("media_assets").insert({ id: assetId, owner_id: auth.user.id, title: prompt.slice(0, 90), kind: "other", storage_path: storagePath, mime_type: generated.mimeType, public_url: admin.storage.from("media").getPublicUrl(storagePath).data.publicUrl, status: "ready", provider: "gemini", metadata: { model: generated.model, operation, prompt, width, height } }).select("id,title,kind,storage_path,mime_type,status,provider,created_at").single();
     if (insertError) { await admin.storage.from("media").remove([storagePath]); return json({ error: `Could not record generated image: ${insertError.message}` }, 500); }
     const signed = await admin.storage.from("media").createSignedUrl(storagePath, 3600); return json({ asset, signed_url: signed.data?.signedUrl ?? null, provider: "gemini", model: generated.model });
   } catch (error) { return json({ error: "Gemini image request failed.", detail: error instanceof Error ? error.message : String(error) }, 502); }
