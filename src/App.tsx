@@ -115,6 +115,7 @@ import {
 const FeaturesGuidePage = lazy(() => import("./FeaturesGuidePage"));
 const ScannerNotesPage = lazy(() => import("./ScannerNotesPage"));
 const KenyaLawCasesPage = lazy(() => import("./KenyaLawCasesPage"));
+const ScheduledCourtCasesPage = lazy(() => import("./ScheduledCourtCasesPage"));
 
 const nav = [
   { id: "dashboard", label: "Home", icon: LayoutDashboard },
@@ -136,6 +137,7 @@ const nav = [
   { id: "arena", label: "Games Hub", icon: Gavel },
   { id: "growth", label: "Growth studio", icon: Sparkles },
   { id: "cases", label: "Case law", icon: BookOpen },
+  { id: "scheduled-cases", label: "Scheduled cases", icon: CalendarDays },
   { id: "counsellor", label: "Counsellor", icon: Users },
 ];
 const validViews = new Set([
@@ -678,6 +680,15 @@ function App() {
           <KenyaLawCasesPage />
         </Suspense>
         {userEmail && <FloatingLawyerAgent historyKey={userEmail} currentPage="Kenya Law case finder" onOpenDictionary={() => setPage("dictionary")} />}
+      </>
+    );
+  if (view === "scheduled-cases")
+    return (
+      <>
+        <Suspense fallback={<div className="auth-page"><p className="subheading">Loading scheduled court cases…</p></div>}>
+          <ScheduledCourtCasesPage />
+        </Suspense>
+        {userEmail && <FloatingLawyerAgent historyKey={userEmail} currentPage="Scheduled court cases" onOpenDictionary={() => setPage("dictionary")} />}
       </>
     );
   if (authLoading)

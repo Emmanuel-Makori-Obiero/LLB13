@@ -113,6 +113,10 @@
       "title": "Kenya Law case finder"
     },
     {
+      "path": "/scheduled-cases",
+      "title": "Scheduled court cases"
+    },
+    {
       "path": "/scanner",
       "title": "Scan and notes"
     }
