@@ -244,6 +244,19 @@ export async function uploadMaterial(
   return storeText(file.name.replace(/\.[^.]+$/, ""), text, citation);
 }
 
+export async function importLibraryMaterial(source: { title: string; url?: string | null; citation?: string | null }) {
+  if (!source.url) throw new Error("This Library item does not have a readable file attached.");
+  const response = await fetch(source.url);
+  if (!response.ok) throw new Error(`Could not open ${source.title} (${response.status}).`);
+  const blob = await response.blob();
+  if (!blob.size) throw new Error(`${source.title} is empty.`);
+  const extension = (new URL(source.url).pathname.match(/\.([a-z0-9]+)$/i)?.[1] || "pdf").toLowerCase();
+  const file = new File([blob], `${source.title.replace(/[^a-z0-9._-]+/gi, "-")}.${extension}`, { type: blob.type || "application/octet-stream" });
+  const text = (await extractText(file)).trim();
+  if (text.length < 50) throw new Error(`${source.title} has no readable text. Scanned files need OCR first.`);
+  return saveTextMaterial(source.title, text, source.citation ?? undefined);
+}
+
 /** Save plain text (e.g. a lecture transcript) as a document the AI can read.
  *  Any earlier copy with the same title is replaced, so the AI never reads a stale version. */
 export async function saveTextMaterial(
