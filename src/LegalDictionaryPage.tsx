@@ -3,6 +3,7 @@ import { ArrowUpRight, BookOpen, Search } from "lucide-react";
 import { LEGAL_DICTIONARY, searchLegalDictionary, type DictionaryShelf } from "./legalDictionary";
 import "./legal-dictionary.css";
 import { searchKenyaLaw, type KenyaLawCaseResult } from "./lib/kenyaLaw";
+import StorytellButton from "./StorytellButton";
 
 export default function LegalDictionaryPage() {
   const [shelf, setShelf] = useState<DictionaryShelf>("blacks");
@@ -40,7 +41,7 @@ export default function LegalDictionaryPage() {
       </div>
       {(officialError || officialResults.length > 0) && <section className="dictionary-official card card-pad"><div className="dictionary-official-head"><div><div className="section-label">Official source lookup</div><p className="field-hint">Results are links to Kenya Law records. Open the source before relying on a definition or citation.</p></div><a href={`https://new.kenyalaw.org/search/?q=${encodeURIComponent(query.trim())}`} target="_blank" rel="noreferrer" className="dictionary-open-link">Open advanced search <ArrowUpRight size={14} /></a></div>{officialError && <p className="dictionary-error">{officialError}</p>}{officialResults.length > 0 && <div className="dictionary-official-list">{officialResults.slice(0, 8).map((result) => <a key={`${result.url}-${result.title}`} href={result.url} target="_blank" rel="noreferrer"><span><strong>{result.title}</strong>{result.citation && <small>{result.citation}</small>}</span><ArrowUpRight size={14} /></a>)}</div>}</section>}
       <div className="dictionary-list">
-        {matches.map((entry) => <article className="dictionary-entry" key={`${entry.shelf}-${entry.term}`}><div className="dictionary-entry-head"><h2>{entry.term}</h2><div>{entry.tags.map((tag) => <span className="dictionary-tag" key={tag}>{tag}</span>)}</div></div><p>{entry.definition}</p>{entry.example && <blockquote><strong>Example:</strong> {entry.example}</blockquote>}</article>)}
+        {matches.map((entry) => <article className="dictionary-entry" key={`${entry.shelf}-${entry.term}`}><div className="dictionary-entry-head"><h2>{entry.term}</h2><div>{entry.tags.map((tag) => <span className="dictionary-tag" key={tag}>{tag}</span>)}</div></div><p>{entry.definition}</p>{entry.example && <blockquote><strong>Example:</strong> {entry.example}</blockquote>}<StorytellButton title={entry.term} source={`${entry.term}: ${entry.definition}${entry.example ? ` Example: ${entry.example}` : ""}`} /></article>)}
         {!matches.length && <div className="card card-pad empty">No matching term yet. Try a broader word, or ask the floating lawyer agent to explain the concept in context.</div>}
       </div>
     </section>
