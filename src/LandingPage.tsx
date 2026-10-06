@@ -9,10 +9,13 @@ import {
   Headphones,
   Library,
   LockKeyhole,
+  Moon,
   RotateCcw,
+  Sun,
   X,
 } from "lucide-react";
 import InstallButton from "./InstallButton";
+import { useTheme } from "./theme";
 import "./landing.css";
 
 type LandingPageProps = {
@@ -212,6 +215,7 @@ export default function LandingPage({
   signedInPreview = false,
   onEnterWorkspace,
 }: LandingPageProps) {
+  const { theme, toggleTheme } = useTheme();
   const [activeChapter, setActiveChapter] = useState(0);
   const [bookOpen, setBookOpen] = useState(false);
   const [gavelImpact, setGavelImpact] = useState(false);
@@ -283,6 +287,7 @@ export default function LandingPage({
           <a href="#inside">Inside the hub</a>
           <a href="/features">All features</a>
           <a href="/cases">Case law</a>
+          <button className="g13-theme-button" type="button" onClick={toggleTheme} aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}>{theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}</button>
           <HelpButton onSignUp={signedInPreview ? undefined : onSignUp} onNavigate={exploreSection} />
         </nav>
         <div className="g13-header-actions">

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, ArrowUpRight, CalendarDays, ExternalLink, Loader2, Search } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, CalendarDays, ExternalLink, Loader2, Moon, Search, Sun } from "lucide-react";
 import { searchKenyaCauseLists, type KenyaCauseListResult } from "./lib/kenyaLaw";
+import { useTheme } from "./theme";
 import "./scheduled-cases.css";
 
 type CourtScope = "all" | "high-court" | "magistrates";
@@ -14,6 +15,7 @@ const localDate = (date = new Date()) => {
 };
 
 export default function ScheduledCourtCasesPage() {
+  const { theme, toggleTheme } = useTheme();
   const [scope, setScope] = useState<CourtScope>("all");
   const [dateMode, setDateMode] = useState<DateMode>("today");
   const [fromDate, setFromDate] = useState(localDate());
@@ -70,6 +72,7 @@ export default function ScheduledCourtCasesPage() {
         <nav aria-label="Scheduled cases navigation">
           <button type="button" onClick={() => window.history.length > 1 ? window.history.back() : window.location.assign("/")}><ArrowLeft size={14} /> Back</button>
           <a href="/cases">Case law</a>
+          <button type="button" className="scheduled-theme-toggle" onClick={toggleTheme}>{theme === "dark" ? <Sun size={14} /> : <Moon size={14} />} {theme === "dark" ? "Light mode" : "Dark mode"}</button>
           <a href={portalUrl} target="_blank" rel="noopener noreferrer">Judiciary portal <ExternalLink size={13} /></a>
         </nav>
       </header>

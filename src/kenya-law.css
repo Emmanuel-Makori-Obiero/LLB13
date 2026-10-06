@@ -127,3 +127,26 @@
   .kl-footer { align-items: start; flex-wrap: wrap; padding: 18px; }
   .kl-footer > span { order: 3; width: 100%; }
 }
+
+.kl-theme-toggle { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; color: inherit; font: inherit; font-size: 11px; cursor: pointer; }
+.kl-theme-toggle:hover { color: #a8beb1; }
+:root[data-theme="dark"] .kl-page { --kl-forest: #a9d0bc; background: #111815; color: #edf4ef; }
+:root[data-theme="dark"] .kl-header { background: #0d2119; }
+:root[data-theme="dark"] .kl-main { color: #edf4ef; }
+:root[data-theme="dark"] .kl-lede, :root[data-theme="dark"] .kl-search-note, :root[data-theme="dark"] .kl-no-results, :root[data-theme="dark"] .kl-brief-loading { color: #a8b9ad; }
+:root[data-theme="dark"] .kl-search { border-color: #496052; }
+:root[data-theme="dark"] .kl-search input { color: #edf4ef; }
+:root[data-theme="dark"] .kl-search button { background: #a9d0bc; color: #10271d; }
+:root[data-theme="dark"] .kl-result-button { color: #edf4ef; border-color: #34483d; }
+:root[data-theme="dark"] .kl-result-button em, :root[data-theme="dark"] .kl-results-head > span { color: #a8b9ad; }
+:root[data-theme="dark"] .kl-results, :root[data-theme="dark"] .kl-result-list { border-color: #34483d; }
+:root[data-theme="dark"] .kl-brief { background: #19231e; border-color: #496052; }
+:root[data-theme="dark"] .kl-brief .kl-results-head { border-color: #34483d; }
+:root[data-theme="dark"] .kl-brief-body { color: #dbe7de; }
+:root[data-theme="dark"] .kl-court-list { border-color: #34483d; }
+:root[data-theme="dark"] .kl-court-list a { color: #edf4ef; border-color: #34483d; }
+:root[data-theme="dark"] .kl-court-list a small { color: #a8b9ad; }
+:root[data-theme="dark"] .kl-constitution { background: #214f40; }
+:root[data-theme="dark"] .kl-study-note { border-color: #34483d; }
+:root[data-theme="dark"] .kl-study-note > p { color: #a8b9ad; }
+:root[data-theme="dark"] .kl-footer { border-color: #34483d; }

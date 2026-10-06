@@ -33,6 +33,7 @@ import {
   Mic,
   Minimize2,
   MoreHorizontal,
+  Moon,
   PenLine,
   Pause,
   Play,
@@ -44,6 +45,7 @@ import {
   SkipBack,
   SkipForward,
   Sparkles,
+  Sun,
   Trash2,
   UserCircle,
   Users,
@@ -98,6 +100,7 @@ import LearningStudio from "./LearningStudio";
 import GuidedStudyPage from "./GuidedStudyPage";
 import AssignmentHelperPage from "./AssignmentHelperPage";
 import { addYouTubeItem, loadYouTubePlaylist, removeYouTubeItem, youtubePlaylistExportJson, youtubePlaylistExportText, type YouTubePlaylist } from "./lib/youtubePlaylist";
+import { useTheme, type Theme } from "./theme";
 import GamesHub from "./GamesHub";
 import {
   createFilmProject,
@@ -206,6 +209,7 @@ declare global {
 }
 
 function App() {
+  const { theme, toggleTheme } = useTheme();
   const [authLoading, setAuthLoading] = useState(true);
   const [showLandingPreview, setShowLandingPreview] = useState(false);
   const [authCallbackNotice, setAuthCallbackNotice] = useState("");
@@ -755,7 +759,7 @@ function App() {
       style={
         profile.wallpaperUrl
           ? {
-              backgroundImage: `linear-gradient(rgba(247,245,240,.76), rgba(247,245,240,.76)), url(${profile.wallpaperUrl})`,
+              backgroundImage: `linear-gradient(var(--wallpaper-overlay), var(--wallpaper-overlay)), url(${profile.wallpaperUrl})`,
               backgroundSize: "cover",
               backgroundAttachment: "fixed",
             }
@@ -974,6 +978,8 @@ function App() {
           initials={profileInitials(profile.displayName, userEmail ?? "")}
           image={profile.avatarUrl}
           userId={userId}
+          theme={theme}
+          onToggleTheme={toggleTheme}
           onOpenNotifications={() => setPage("discussions")}
           onSignOut={async () => {
             await supabase?.auth.signOut();
@@ -1463,6 +1469,8 @@ function Topbar({
   initials,
   image,
   userId,
+  theme,
+  onToggleTheme,
   onOpenNotifications,
   onSignOut,
 }: {
@@ -1472,6 +1480,8 @@ function Topbar({
   initials: string;
   image?: string;
   userId: string | null;
+  theme: Theme;
+  onToggleTheme: () => void;
   onOpenNotifications: () => void;
   onSignOut: () => void;
 }) {
@@ -1485,6 +1495,9 @@ function Topbar({
       </div>
       <div className="top-actions">
         <InstallButton className="secondary-button install-button" />
+        <button className="icon-button theme-toggle" title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"} aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"} onClick={onToggleTheme}>
+          {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+        </button>
         <NotificationBell userId={userId} onOpen={onOpenNotifications} />
         <span className="signed-in-as" title={email}>
           {name || email}

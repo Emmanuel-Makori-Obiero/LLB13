@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { ArrowLeft, ArrowUpRight, BookOpen, Loader2, Search } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, BookOpen, Loader2, Moon, Search, Sun } from "lucide-react";
 import { askAI } from "./lib/ai";
 import { fetchKenyaLawCase, searchKenyaLaw, suggestCaseQueries, type KenyaLawCaseResult } from "./lib/kenyaLaw";
 import { Markdown } from "./Markdown";
+import { useTheme } from "./theme";
 import "./kenya-law.css";
 
 const courts = [
@@ -17,6 +18,7 @@ const courts = [
 ];
 
 export default function KenyaLawCasesPage() {
+  const { theme, toggleTheme } = useTheme();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<KenyaLawCaseResult[]>([]);
   const [busy, setBusy] = useState(false);
@@ -83,6 +85,7 @@ export default function KenyaLawCasesPage() {
           <button type="button" className="kl-back" onClick={() => window.history.length > 1 ? window.history.back() : window.location.assign("/")}><ArrowLeft size={14} /> Back</button>
           <a href="/">Home</a>
           <a href="/features">All features</a>
+          <button type="button" className="kl-theme-toggle" onClick={toggleTheme}>{theme === "dark" ? <Sun size={14} /> : <Moon size={14} />} {theme === "dark" ? "Light mode" : "Dark mode"}</button>
           <a href="/login">Sign in</a>
         </nav>
       </header>
