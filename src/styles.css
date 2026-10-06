@@ -1042,3 +1042,13 @@ html, body { background-color: var(--paper); background-image: var(--user-wallpa
 :root[data-theme="dark"] html, :root[data-theme="dark"] body { background-color: var(--paper); }
 
 html, body { background-size: contain; background-position: center center; background-repeat: no-repeat; }
+
+.public-playlist-page { min-height:100vh; padding:clamp(28px,7vw,84px) 20px; background:var(--paper); color:var(--ink); }
+.public-playlist-shell { width:min(900px,100%); margin:0 auto; }
+.public-playlist-shell h1 { margin:8px 0; font-size:clamp(34px,6vw,64px); }
+.public-playlist-list { display:grid; gap:18px; margin-top:30px; }
+.public-playlist-item { display:grid; gap:12px; padding:18px; border:1px solid var(--line); background:var(--white); }
+.public-playlist-item > div { display:flex; align-items:center; gap:10px; }
+.public-playlist-item iframe { display:block; width:100%; min-height:180px; border:0; background:#111; }
+.public-playlist-item .chip { flex:none; }
+@media (min-width:700px) { .public-playlist-item iframe { min-height:260px; } }

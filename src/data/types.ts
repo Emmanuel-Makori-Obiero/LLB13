@@ -74,6 +74,7 @@ export type MediaResource = {
   url: string;
   topic: string;
   source: string;
+  is_public?: boolean;
 };
 export type AdminAccount = {
   id: string;

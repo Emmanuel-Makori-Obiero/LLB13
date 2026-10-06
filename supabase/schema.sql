@@ -77,7 +77,8 @@ create table if not exists public.media_resources (
   url text not null,
   topic text not null,
   source text not null,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  is_public boolean not null default true
 );
 
 alter table public.units enable row level security;
@@ -108,6 +109,7 @@ create policy "Group 13 discussions are readable" on public.discussions for sele
 create policy "Group 13 members are readable" on public.members for select to authenticated using (true);
 create policy "Users can manage their own todos" on public.todos for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
 create policy "Users can manage media resources" on public.media_resources for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy "Public media resources are readable by everyone" on public.media_resources for select to anon, authenticated using (is_public = true);
 
 insert into storage.buckets (id, name, public)
 values ('materials', 'materials', true)
@@ -130,6 +132,7 @@ grant select on table public.units, public.materials, public.assignments, public
 grant update on table public.assignments to authenticated;
 grant insert on table public.materials, public.assignments to authenticated;
 grant select, insert, update, delete on table public.todos, public.media_resources to authenticated;
+grant select on table public.media_resources to anon;
 
 /* Demo seed data intentionally disabled. Add your own units, members, materials,
    assignments, and discussions through Supabase or the app. */

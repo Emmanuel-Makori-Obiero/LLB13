@@ -551,7 +551,7 @@ const supabaseRepository: Group13Repository = {
     readRequired<MediaResource>("media_resources", async () =>
       supabase!
         .from("media_resources")
-        .select("id,kind,title,url,topic,source")
+        .select("id,kind,title,url,topic,source,is_public")
         .order("title"),
     ),
   createMedia: async (media) => {
@@ -560,13 +560,13 @@ const supabaseRepository: Group13Repository = {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) throw new Error("Please sign in before adding media.");
-    const record = { id: crypto.randomUUID(), user_id: user.id, ...media };
+    const record = { id: crypto.randomUUID(), user_id: user.id, is_public: true, ...media };
     if (!/^https?:\/\//i.test(record.url.trim()))
       throw new Error("Links must start with http:// or https://");
     const { data, error } = await supabase
       .from("media_resources")
       .insert(record)
-      .select("id,kind,title,url,topic,source")
+      .select("id,kind,title,url,topic,source,is_public")
       .single();
     if (error) throw new Error(`Could not add media: ${error.message}`);
     return data as MediaResource;

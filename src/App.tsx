@@ -99,7 +99,7 @@ import BookReader from "./BookReader";
 import LearningStudio from "./LearningStudio";
 import GuidedStudyPage from "./GuidedStudyPage";
 import AssignmentHelperPage from "./AssignmentHelperPage";
-import { addYouTubeItem, loadYouTubePlaylist, removeYouTubeItem, youtubePlaylistExportJson, youtubePlaylistExportText, type YouTubePlaylist } from "./lib/youtubePlaylist";
+import { addYouTubeItem, loadPublicYouTubePlaylist, loadYouTubePlaylist, removeYouTubeItem, updateYouTubePlaylist, youtubePlaylistExportJson, youtubePlaylistExportText, type YouTubePlaylist } from "./lib/youtubePlaylist";
 import { useTheme, type Theme } from "./theme";
 import GamesHub from "./GamesHub";
 import {
@@ -112,6 +112,7 @@ import {
   getMediaAssetUrl,
   listMediaAssets,
   saveFilmShots,
+  uploadMediaAsset,
   type MediaAsset,
 } from "./lib/cloudMedia";
 
@@ -158,12 +159,14 @@ const validViews = new Set([
   "features",
   "login",
   "signup",
+  "public-playlist",
 ]);
 const viewFromPath = () => {
   const path = window.location.pathname.replace(/^\/+|\/+$/g, "");
   if (path.startsWith("meetings/")) return "meeting";
   if (path.startsWith("units/")) return "unit";
   if (path.startsWith("library/materials/")) return "reader";
+  if (path.startsWith("playlist/")) return "public-playlist";
   return path && validViews.has(path) ? path : "dashboard";
 };
 const statusOrder: AssignmentStatus[] = [
@@ -176,6 +179,7 @@ const statusOrder: AssignmentStatus[] = [
 ];
 const initials = "13";
 const roomLink = (id: string) => `${window.location.origin}/meetings/${id}`;
+const playlistLink = (id: string) => `${window.location.origin}/playlist/${id}`;
 const whatsappLink = (discussion: Discussion) =>
   `https://wa.me/?text=${encodeURIComponent(`Join "${discussion.title}" on Group 13: ${roomLink(discussion.id)}`)}`;
 const profileInitials = (name: string, email = "") =>
@@ -703,6 +707,7 @@ function App() {
         {userEmail && <FloatingLawyerAgent historyKey={userEmail} currentPage="Scheduled court cases" onOpenDictionary={() => setPage("dictionary")} />}
       </>
     );
+  if (view === "public-playlist") return <PublicPlaylistPage />;
   if (authLoading)
     return (
       <div className="auth-page">
@@ -768,7 +773,7 @@ function App() {
         profile.wallpaperUrl
           ? {
               backgroundImage: `linear-gradient(var(--wallpaper-overlay), var(--wallpaper-overlay)), url(${profile.wallpaperUrl})`,
-              backgroundSize: "contain",
+              backgroundSize: "cover",
               backgroundRepeat: "no-repeat",
               backgroundPosition: "center center",
               backgroundAttachment: "fixed",
@@ -2514,6 +2519,33 @@ function TodoPage({
   );
 }
 
+function PublicPlaylistPage() {
+  const playlistId = window.location.pathname.split("/").filter(Boolean)[1] || "";
+  const [playlist, setPlaylist] = useState<YouTubePlaylist | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    if (!playlistId) { setError("Playlist link is incomplete."); return; }
+    void loadPublicYouTubePlaylist(playlistId).then(setPlaylist).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not load this playlist."));
+  }, [playlistId]);
+  return <main className="public-playlist-page">
+    <div className="public-playlist-shell">
+      <p className="eyebrow">Group 13 public media</p>
+      <h1>{playlist?.title || "Emmanuels playlist"}</h1>
+      <p className="subheading">Anyone can listen to this playlist. Select play on any song below.</p>
+      {error && <div className="connection-error">{error}</div>}
+      {!playlist && !error && <p className="field-hint">Loading playlist…</p>}
+      {playlist && <div className="public-playlist-list">{playlist.items.map((item, index) => {
+        const id = youtubeVideoId(item.url);
+        return <article className="public-playlist-item" key={item.id}>
+          <div><span className="chip">{index + 1}</span><strong>{item.title}</strong></div>
+          {id ? <iframe src={`https://www.youtube.com/embed/${id}?rel=0&playsinline=1`} title={item.title} loading="lazy" allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen /> : <a className="primary-button" href={safeUrl(item.url) || undefined} target="_blank" rel="noreferrer">Open song</a>}
+        </article>;
+      })}</div>}
+      {playlist?.items.length === 0 && <div className="empty">This playlist has no songs yet.</div>}
+    </div>
+  </main>;
+}
+
 let youtubeApiPromise: Promise<any> | null = null;
 function loadYouTubeApi() {
   if (window.YT?.Player) return Promise.resolve(window.YT);
@@ -2656,13 +2688,18 @@ function GlobalMusicPlayer({
 
   useEffect(() => {
     if (!current) return;
-    if (current.kind === "audio") {
-      if (playing) void audioRef.current?.play().catch(() => onPlaying(false));
-      else audioRef.current?.pause();
-    } else if (youtubePlayerRef.current) {
-      if (playing) youtubePlayerRef.current.playVideo();
-      else youtubePlayerRef.current.pauseVideo();
-    }
+    const syncPlayback = () => {
+      if (current.kind === "audio") {
+        if (playing) void audioRef.current?.play().catch(() => onPlaying(false));
+        else audioRef.current?.pause();
+      } else if (youtubePlayerRef.current) {
+        if (playing) youtubePlayerRef.current.playVideo();
+        else youtubePlayerRef.current.pauseVideo();
+      }
+    };
+    syncPlayback();
+    document.addEventListener("visibilitychange", syncPlayback);
+    return () => document.removeEventListener("visibilitychange", syncPlayback);
   }, [playing, current?.kind, current?.id]);
 
   return (
@@ -2723,6 +2760,9 @@ function MediaPage({
   const [playlistTitle, setPlaylistTitle] = useState("");
   const [playlistUrl, setPlaylistUrl] = useState("");
   const [playlistNote, setPlaylistNote] = useState("");
+  const [playlistBusy, setPlaylistBusy] = useState(false);
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const [uploadNote, setUploadNote] = useState("");
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const change = (key: keyof typeof form, value: string) =>
     setForm((current) => ({ ...current, [key]: value }));
@@ -2732,6 +2772,16 @@ function MediaPage({
     const id = youtubeVideoId(playlistUrl.trim());
     if (!savedPlaylist || !playlistTitle.trim() || !id) { setPlaylistNote("Enter a song title and a valid YouTube video URL."); return; }
     try { const item = await addYouTubeItem(savedPlaylist.id, playlistTitle, playlistUrl); setSavedPlaylist((current) => current ? { ...current, items: [...current.items, item] } : current); onAddQueue([{ id: `youtube-${id}`, title: item.title, url: item.url, source: "YouTube playlist", kind: "youtube", youtubeId: id }]); setPlaylistTitle(""); setPlaylistUrl(""); setPlaylistNote("Song added. It is now in your playlist and queue."); } catch (error) { setPlaylistNote(error instanceof Error ? error.message : "Could not add song."); }
+  };
+  const setPlaylistPublic = async (isPublic: boolean) => {
+    if (!savedPlaylist || playlistBusy) return;
+    setPlaylistBusy(true);
+    try {
+      const updated = await updateYouTubePlaylist({ id: savedPlaylist.id, title: "Emmanuels playlist", is_public: isPublic });
+      setSavedPlaylist((current) => current ? { ...current, ...updated } : current);
+      setPlaylistNote(isPublic ? `Emmanuels playlist is public. Share this link: ${playlistLink(savedPlaylist.id)}` : "Playlist is private again.");
+    } catch (error) { setPlaylistNote(error instanceof Error ? error.message : "Could not update playlist visibility."); }
+    finally { setPlaylistBusy(false); }
   };
   const downloadPlaylist = (format: "txt" | "json") => {
     if (!savedPlaylist?.items.length) return;
@@ -2747,9 +2797,9 @@ function MediaPage({
   };
   const sharePlaylist = async () => {
     if (!savedPlaylist?.items.length) return;
-    const text = youtubePlaylistExportText(savedPlaylist);
+    const text = `${savedPlaylist.title}\n${playlistLink(savedPlaylist.id)}\n\n${youtubePlaylistExportText(savedPlaylist)}`;
     try {
-      if (navigator.share) await navigator.share({ title: savedPlaylist.title, text });
+      if (navigator.share) await navigator.share({ title: savedPlaylist.title, text, url: playlistLink(savedPlaylist.id) });
       else {
         await navigator.clipboard.writeText(text);
         setPlaylistNote("Playlist copied to your clipboard.");
@@ -2909,6 +2959,20 @@ function MediaPage({
     }
   };
 
+  const uploadPublicVideo = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("video/")) { setUploadNote("Choose a video file."); return; }
+    setUploadBusy(true); setUploadNote("");
+    try {
+      const asset = await uploadMediaAsset({ file, title: file.name.replace(/\.[^.]+$/, ""), kind: "film_clip", metadata: { visibility: "public" } });
+      setCloudAssets((current) => [asset, ...current]);
+      setUploadNote("Video uploaded publicly. Anyone with its media link can play it.");
+    } catch (error) { setUploadNote(error instanceof Error ? error.message : "Could not upload video."); }
+    finally { setUploadBusy(false); }
+  };
+
   const buildFilmPlan = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!filmTitle.trim() || !filmBrief.trim() || filmBusy) return;
@@ -3042,9 +3106,9 @@ function MediaPage({
       </div>
 
       <div className="card card-pad youtube-playlist-card" style={{ marginTop: 18 }}>
-        <CardHeader label="My YouTube playlist" action={`${savedPlaylist?.items.length ?? 0} songs`} />
-        <p className="field-hint">Add songs one by one. Each song is saved privately and added to the player queue.</p>
-        {!!savedPlaylist?.items.length && <div className="media-actions"><button className="primary-button" type="button" onClick={() => onPlayQueue(playlistTracks(savedPlaylist.items), 0)}><Play size={13} /> Play all songs</button><button className="secondary-button" type="button" onClick={() => void sharePlaylist()}>Share playlist</button><button className="secondary-button" type="button" onClick={() => downloadPlaylist("txt")}><Download size={13} /> Download TXT</button><button className="secondary-button" type="button" onClick={() => downloadPlaylist("json")}><Download size={13} /> Download JSON</button></div>}
+        <CardHeader label="Emmanuels playlist" action={`${savedPlaylist?.items.length ?? 0} songs`} />
+        <p className="field-hint">This playlist is public to everyone. Anyone with the share link can open it and play every song.</p>
+        {!!savedPlaylist?.items.length && <div className="media-actions"><button className="primary-button" type="button" onClick={() => onPlayQueue(playlistTracks(savedPlaylist.items), 0)}><Play size={13} /> Play all songs</button><button className="secondary-button" type="button" onClick={() => void setPlaylistPublic(true)} disabled={playlistBusy}>{playlistBusy ? "Updating…" : "Make my playlist public"}</button><button className="secondary-button" type="button" onClick={() => void sharePlaylist()}>Share playlist link</button><button className="secondary-button" type="button" onClick={() => downloadPlaylist("txt")}><Download size={13} /> Download TXT</button><button className="secondary-button" type="button" onClick={() => downloadPlaylist("json")}><Download size={13} /> Download JSON</button></div>}
         <form className="data-form playlist-add-form" onSubmit={(event) => void addPlaylistSong(event)}>
           <label>Song title<input required value={playlistTitle} onChange={(event) => setPlaylistTitle(event.target.value)} placeholder="e.g. Focus study music" /></label>
           <label>YouTube video URL<input required type="url" value={playlistUrl} onChange={(event) => setPlaylistUrl(event.target.value)} placeholder="https://www.youtube.com/watch?v=…" /></label>
@@ -3052,6 +3116,13 @@ function MediaPage({
         </form>
         {playlistNote && <p className="field-hint">{playlistNote}</p>}
         {savedPlaylist?.items.length ? <div className="playlist-list">{savedPlaylist.items.map((item, index) => <div className="playlist-row" key={item.id}><button className="playlist-play" type="button" onClick={() => { const tracks = playlistTracks(savedPlaylist.items); const trackIndex = tracks.findIndex((track) => track.id === `youtube-playlist-${item.id}`); if (trackIndex >= 0) onPlayQueue(tracks, trackIndex); }}>{index + 1}. {item.title}</button><button className="icon-button" type="button" aria-label={`Remove ${item.title}`} onClick={async () => { await removeYouTubeItem(item.id); setSavedPlaylist((current) => current ? { ...current, items: current.items.filter((song) => song.id !== item.id) } : current); }}>×</button></div>)}</div> : <div className="empty">Your playlist is empty. Add your first YouTube song above.</div>}
+      </div>
+
+      <div className="card card-pad" style={{ marginTop: 18 }}>
+        <CardHeader label="Public video upload" action="Playable by everyone" />
+        <p className="field-hint">Upload a video here and it is stored in the public media library, like a YouTube link. Do not upload confidential material.</p>
+        <label className="primary-button upload-button">{uploadBusy ? "Uploading…" : "Choose video to upload"}<input type="file" accept="video/*" onChange={(event) => void uploadPublicVideo(event)} disabled={uploadBusy} /></label>
+        {uploadNote && <p className="field-hint">{uploadNote}</p>}
       </div>
 
       <div className="card card-pad" style={{ marginTop: 18 }}>

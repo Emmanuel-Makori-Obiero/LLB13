@@ -180,6 +180,7 @@ Deno.serve(async (req) => {
       kind: "other",
       storage_path: storagePath,
       mime_type: "image/png",
+      public_url: admin.storage.from("media").getPublicUrl(storagePath).data.publicUrl,
       status: "ready",
       provider,
       metadata: { model: actualModel, prompt, width, height },

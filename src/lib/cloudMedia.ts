@@ -117,6 +117,7 @@ export async function uploadMediaAsset(args: {
       duration_seconds: args.durationSeconds ?? null,
       provider: args.provider ?? null,
       metadata: args.metadata ?? {},
+      public_url: db.storage.from("media").getPublicUrl(path).data.publicUrl,
     })
     .select("*")
     .single();

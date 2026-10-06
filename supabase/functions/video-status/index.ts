@@ -458,7 +458,7 @@ Deno.serve(async (req) => {
     return await reply({ asset: failedAsset, status: "failed", provider_error: "Supabase Storage could not save this rendered video after four retries. Check the media bucket, then submit a new generation job.", ...(jobUpdate.error ? { warning: "The asset is marked failed, but its retry record could not be updated." } : {}) });
   }
   const { data: updated, error: readyError } = await admin.from("media_assets")
-    .update({ status: "ready", storage_path: path, mime_type: "video/mp4", metadata: { ...metadata, provider_status_failures: 0, storage_upload_failures: 0, last_error: null, provider_events: events.slice(-2) } })
+    .update({ status: "ready", storage_path: path, mime_type: "video/mp4", public_url: admin.storage.from("media").getPublicUrl(path).data.publicUrl, metadata: { ...metadata, provider_status_failures: 0, storage_upload_failures: 0, last_error: null, provider_events: events.slice(-2) } })
     .eq("id", asset.id).select("*").single();
   if (readyError || !updated) return await reply({ error: "The video file is saved, but its media record could not be marked ready. Refresh status to retry.", detail: readyError?.message }, 500);
   const jobUpdate = await admin.from("video_jobs").update({ status: "ready", last_error: null, next_attempt_at: new Date().toISOString() }).eq("asset_id", asset.id);
