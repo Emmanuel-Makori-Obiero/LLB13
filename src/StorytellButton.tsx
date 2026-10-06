@@ -17,6 +17,8 @@ function spokenText(value: string) {
 
 export default function StorytellButton({ source, title = "this topic" }: { source: string; title?: string }) {
   const [busy, setBusy] = useState(false);
+  const [simpleBusy, setSimpleBusy] = useState(false);
+  const [simple, setSimple] = useState("");
   const [story, setStory] = useState("");
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -40,5 +42,15 @@ export default function StorytellButton({ source, title = "this topic" }: { sour
     } finally { setBusy(false); }
   };
 
-  return <div className="storytell-control"><button type="button" className="secondary-button storytell-trigger" onClick={() => void tellStory()} disabled={busy || !source.trim()}>{busy ? <Loader2 size={13} className="storytell-spin" /> : <BookOpen size={13} />} {busy ? "Building story…" : "Storytell"}</button>{error && <span className="storytell-error">{error}</span>}{story && <div className="storytell-result"><div className="storytell-result-head"><strong><BookOpen size={13} /> {title} as a story</strong>{audioUrl && <span><Headphones size={12} /> Audio ready</span>}</div><Markdown text={story} />{audioUrl && <div className="storytell-audio"><audio controls preload="metadata" src={audioUrl} aria-label={`Storytell audio for ${title}`} /><a className="storytell-play-link" href={audioUrl} target="_blank" rel="noreferrer"><Play size={12} /> Open audio</a></div>}</div>}</div>;
+  const explainSimply = async () => {
+    if (simpleBusy || busy || !source.trim()) return;
+    setSimpleBusy(true); setError("");
+    try {
+      const result = await askAI({ feature: "chat", mode: "general", messages: [{ role: "user", content: `Explain the following definition or AI answer in very clear layman's language for a beginner. Start with one direct sentence beginning “In simple terms,” then use a short everyday analogy or example, and finish with one sentence explaining why it matters. Keep the meaning accurate, distinguish an analogy from a legal or historical fact, and do not add authorities, dates, names, or claims that are not supported by the supplied text. Avoid jargon; if a technical word is unavoidable, define it immediately.\n\nTOPIC: ${title}\n\nTEXT:\n${source.slice(0, 18000)}` }] });
+      setSimple(result.answer.trim());
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "The plain-language explanation is unavailable right now."); }
+    finally { setSimpleBusy(false); }
+  };
+
+  return <div className="storytell-control"><div className="storytell-actions"><button type="button" className="secondary-button storytell-trigger" onClick={() => void explainSimply()} disabled={busy || simpleBusy || !source.trim()}>{simpleBusy ? <Loader2 size={13} className="storytell-spin" /> : <BookOpen size={13} />} {simpleBusy ? "Simplifying…" : "Explain simply"}</button><button type="button" className="secondary-button storytell-trigger" onClick={() => void tellStory()} disabled={busy || simpleBusy || !source.trim()}>{busy ? <Loader2 size={13} className="storytell-spin" /> : <BookOpen size={13} />} {busy ? "Building story…" : "Storytell"}</button></div>{error && <span className="storytell-error">{error}</span>}{simple && <div className="storytell-result storytell-simple"><div className="storytell-result-head"><strong><BookOpen size={13} /> In plain language</strong></div><Markdown text={simple} /></div>}{story && <div className="storytell-result"><div className="storytell-result-head"><strong><BookOpen size={13} /> {title} as a story</strong>{audioUrl && <span><Headphones size={12} /> Audio ready</span>}</div><Markdown text={story} />{audioUrl && <div className="storytell-audio"><audio controls preload="metadata" src={audioUrl} aria-label={`Storytell audio for ${title}`} /><a className="storytell-play-link" href={audioUrl} target="_blank" rel="noreferrer"><Play size={12} /> Open audio</a></div>}</div>}</div>;
 }
