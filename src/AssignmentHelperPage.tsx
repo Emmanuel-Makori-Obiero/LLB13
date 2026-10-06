@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { BookOpen, CheckCircle2, Download, FileText, Lightbulb, RefreshCw, Sparkles } from "lucide-react";
 import { Markdown } from "./Markdown";
-import { askAI, type AIFeature, type AIResult } from "./lib/ai";
+import { askAI, importLibraryMaterial, type AIFeature, type AIResult } from "./lib/ai";
 import { listGuideSources, type SourceChoice } from "./lib/guidedStudy";
 import { downloadPdf, downloadWord } from "./export";
 import type { Assignment } from "./data/types";
@@ -26,6 +26,7 @@ export default function AssignmentHelperPage({ assignments }: { assignments: Ass
   const [result, setResult] = useState<AIResult | null>(null);
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const [importingSource, setImportingSource] = useState<string | null>(null);
   const [sourceFilter, setSourceFilter] = useState<"all" | "library" | "my">("all");
 
   const librarySources = useMemo(() => sources.filter((source) => source.kind === "document" || source.kind === "material"), [sources]);
@@ -34,11 +35,22 @@ export default function AssignmentHelperPage({ assignments }: { assignments: Ass
   const selectedIds = selectedSources.map((source) => source.id);
   const groundingMode = selectedSources.length > 0 && selectedSources.every((source) => source.scope === "library") ? "library" : selectedSources.some((source) => source.scope === "library") ? "auto" : "materials";
 
+  const importSource = async (source: SourceChoice) => {
+    if (source.kind !== "material" || !source.url || importingSource) return;
+    setImportingSource(source.id); setNotice(`Preparing ${source.title} for the assignment helper…`);
+    try {
+      const imported = await importLibraryMaterial({ title: source.title, url: source.url, citation: source.citation });
+      await loadSources();
+      setSelected((current) => [...current, imported.id]);
+      setNotice(`${source.title} is now AI-readable and selected.`);
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Could not prepare that Library book."); }
+    finally { setImportingSource(null); }
+  };
   const loadSources = async () => {
     try {
       const available = await listGuideSources();
       setSources(available);
-      setNotice(available.length ? "Choose AI-readable saved documents to ground the helper. Linked Library references are shown for context but do not supply source text." : "Add an AI-readable document in the Library, then refresh sources.");
+      setNotice(available.length ? "Choose AI-readable documents or click a Library book to prepare its text for the helper." : "Add an AI-readable document in the Library, then refresh sources.");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Could not load your saved sources.");
     }
@@ -91,7 +103,7 @@ export default function AssignmentHelperPage({ assignments }: { assignments: Ass
             <button type="button" className={sourceFilter === "my" ? "active" : ""} onClick={() => setSourceFilter("my")}>My uploads</button>
           </div>
         </div>
-        <div className="assignment-sources">{visibleSources.length ? visibleSources.map((source) => <label className={`assignment-source ${source.kind !== "document" ? "reference-only" : ""}`} key={`${source.kind}:${source.id}`}><input type="checkbox" checked={source.kind === "document" && selected.includes(source.id)} disabled={source.kind !== "document"} onChange={() => setSelected((current) => current.includes(source.id) ? current.filter((id) => id !== source.id) : [...current, source.id])} /><BookOpen size={14} /><span>{source.title}<small>{source.kind === "material" ? "Reference link only · upload/readable text needed for AI grounding" : source.scope === "library" ? "Library book · text supplied to AI" : "My saved document · text supplied to AI"}{source.citation ? ` · ${source.citation}` : ""}</small></span></label>) : <p className="empty">No sources in this filter. Add source text in Library, then refresh.</p>}</div>
+        <div className="assignment-sources">{visibleSources.length ? visibleSources.map((source) => <label className={`assignment-source ${source.kind !== "document" ? "reference-only" : ""}`} key={`${source.kind}:${source.id}`}><input type="checkbox" checked={source.kind === "document" && selected.includes(source.id)} disabled={source.kind === "material" && importingSource === source.id} onChange={() => source.kind === "material" ? void importSource(source) : setSelected((current) => current.includes(source.id) ? current.filter((id) => id !== source.id) : [...current, source.id])} /><BookOpen size={14} /><span>{source.title}<small>{source.kind === "material" ? (importingSource === source.id ? "Preparing Library book for AI…" : "Library book · click to add readable text") : source.scope === "library" ? "Library book · text supplied to AI" : "My saved document · text supplied to AI"}{source.citation ? ` · ${source.citation}` : ""}</small></span></label>) : <p className="empty">No sources in this filter. Add source text in Library, then refresh.</p>}</div>
         <div className="assignment-actions"><button className="secondary-button" onClick={() => void loadSources()}><RefreshCw size={13} /> Refresh sources</button><button className="primary-button" onClick={() => void run()} disabled={busy || !brief.trim()}><Sparkles size={14} /> {busy ? "Working…" : tool.label}</button></div>
       </div>
       <div className="card card-pad assignment-helper-result"><div className="assignment-result-head"><div className="section-label">Your tutor's response</div>{result && <div className="export-actions"><button className="secondary-button small-action" onClick={() => downloadWord(title || "Assignment helper", result.answer, "assignment-helper.doc", { eyebrow: "Group 13 · Assignment helper", subtitle: title || "Study notes", sources: selectedSources.map((source) => source.title) })}><Download size={13} /> Word</button><button className="secondary-button small-action" onClick={() => downloadPdf(title || "Assignment helper", result.answer, "assignment-helper.pdf", { eyebrow: "Group 13 · Assignment helper", subtitle: title || "Study notes", sources: selectedSources.map((source) => source.title) })}><Download size={13} /> PDF</button></div>}</div>{result ? <><div className="assignment-result-meta"><CheckCircle2 size={15} /> {result.grounded ? "Grounded in selected sources" : "General legal overview"}{assignmentId ? ` · Linked to ${assignments.find((assignment) => assignment.id === assignmentId)?.title ?? "assignment"}` : ""}</div><Markdown text={result.answer} />{result.warnings.length > 0 && <div className="assignment-warnings"><strong>Source note</strong>{result.warnings.map((warning) => <p key={warning}>{warning}</p>)}</div>}</> : <div className="assignment-empty"><Sparkles size={28} /><h2>Start with the question</h2><p>Choose an assignment or paste the question, then select AI-readable source text to ground your work.</p></div>}</div>
