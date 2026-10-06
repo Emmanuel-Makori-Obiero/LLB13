@@ -33,6 +33,22 @@ async function geminiImage(args: { prompt: string; keys: string[]; imageBase64?:
   }
   throw new Error(failures.slice(-3).join("; ") || "Gemini image generation did not return an image.");
 }
+async function huggingFaceImage(args: { prompt: string; tokens: string[]; model: string; width: number; height: number }) {
+  const failures: string[] = [];
+  const endpoint = `https://router.huggingface.co/hf-inference/models/${args.model}`;
+  for (const [tokenIndex, token] of args.tokens.entries()) {
+    try {
+      const response = await fetch(endpoint, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "image/png, application/json" }, body: JSON.stringify({ inputs: args.prompt, parameters: { width: args.width, height: args.height, num_inference_steps: 4 } }), signal: AbortSignal.timeout(120_000) });
+      const contentType = response.headers.get("content-type") || "";
+      if (!response.ok) { failures.push(`Hugging Face / token ${tokenIndex + 1} HTTP ${response.status}: ${(await response.text()).slice(0, 700)}`); continue; }
+      if (!contentType.startsWith("image/")) { failures.push(`Hugging Face / token ${tokenIndex + 1}: provider returned ${contentType || "no image"}`); continue; }
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      if (bytes.length < 100) { failures.push(`Hugging Face / token ${tokenIndex + 1}: empty image`); continue; }
+      return { bytes, model: args.model, mimeType: contentType.split(";")[0] || "image/png" };
+    } catch (error) { failures.push(`Hugging Face / token ${tokenIndex + 1}: ${error instanceof Error ? error.message : String(error)}`); }
+  }
+  throw new Error(failures.join("; ") || "Hugging Face did not return an image.");
+}
 async function analyzeGemini(args: { prompt: string; keys: string[]; imageBase64: string; imageMimeType: string; model: string }) {
   const source = imageData(args.imageBase64); const failures: string[] = [];
   for (const key of args.keys) {
@@ -49,7 +65,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
   const supabaseUrl = Deno.env.get("SUPABASE_URL"); const anonKey = Deno.env.get("SUPABASE_ANON_KEY"); const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const geminiKeys = secretKeys("GEMINI_API_KEY"); const geminiEnabled = Deno.env.get("GEMINI_IMAGE_ENABLED")?.toLowerCase() !== "false";
+  const geminiKeys = secretKeys("GEMINI_API_KEY"); const hfTokens = secretKeys("HF_TOKEN"); const geminiEnabled = Deno.env.get("GEMINI_IMAGE_ENABLED")?.toLowerCase() !== "false";
   if (!supabaseUrl || !anonKey || !serviceRoleKey) return json({ error: "Image generation is missing Supabase server configuration." }, 503);
   const authHeader = req.headers.get("Authorization") ?? ""; const userClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } }); const { data: auth } = await userClient.auth.getUser();
   if (!auth.user) return json({ error: "Sign in before using Image Studio." }, 401);
@@ -70,7 +86,13 @@ Deno.serve(async (req) => {
   try {
     if (operation === "analyze") return json({ analysis: await analyzeGemini({ prompt, keys: geminiKeys, imageBase64: body.image_base64!, imageMimeType: body.image_mime_type || "image/png", model: visionModel }), provider: "gemini-vision", model: visionModel });
     const width = Math.min(1536, Math.max(512, Number(body.width) || 1024)); const height = Math.min(1536, Math.max(512, Number(body.height) || 1024)); const ratio = width / height > 1.6 ? "16:9" : width / height < 0.7 ? "9:16" : "1:1";
-    const generated = await geminiImage({ prompt, keys: geminiKeys, imageBase64: body.image_base64, imageMimeType: body.image_mime_type, models: imageModels, aspectRatio: ratio, imageSize: "1K" });
+    let generated: { bytes: Uint8Array; model: string; mimeType: string };
+    try {
+      generated = await geminiImage({ prompt, keys: geminiKeys, imageBase64: body.image_base64, imageMimeType: body.image_mime_type, models: imageModels, aspectRatio: ratio, imageSize: "1K" });
+    } catch (geminiError) {
+      if (!hfTokens.length) throw geminiError;
+      generated = await huggingFaceImage({ prompt, tokens: hfTokens, model: Deno.env.get("HF_IMAGE_MODEL") || "black-forest-labs/FLUX.1-schnell", width, height });
+    }
     const assetId = crypto.randomUUID(); const storagePath = `${auth.user.id}/generated/${assetId}.jpg`; const upload = await admin.storage.from("media").upload(storagePath, generated.bytes, { contentType: generated.mimeType, upsert: false });
     if (upload.error) return json({ error: `Could not store generated image: ${upload.error.message}` }, 500);
     const { data: asset, error: insertError } = await admin.from("media_assets").insert({ id: assetId, owner_id: auth.user.id, title: prompt.slice(0, 90), kind: "other", storage_path: storagePath, mime_type: generated.mimeType, public_url: admin.storage.from("media").getPublicUrl(storagePath).data.publicUrl, status: "ready", provider: "gemini", metadata: { model: generated.model, operation, prompt, width, height } }).select("id,title,kind,storage_path,mime_type,status,provider,created_at").single();
