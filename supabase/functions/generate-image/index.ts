@@ -91,7 +91,7 @@ Deno.serve(async (req) => {
       generated = await geminiImage({ prompt, keys: geminiKeys, imageBase64: body.image_base64, imageMimeType: body.image_mime_type, models: imageModels, aspectRatio: ratio, imageSize: "1K" });
     } catch (geminiError) {
       if (!hfTokens.length) throw geminiError;
-      generated = await huggingFaceImage({ prompt, tokens: hfTokens, model: Deno.env.get("HF_IMAGE_MODEL") || "black-forest-labs/FLUX.1-schnell", width, height });
+      generated = await huggingFaceImage({ prompt, tokens: hfTokens, model: Deno.env.get("HF_IMAGE_MODEL") || "black-forest-labs/FLUX.1-dev", width, height });
     }
     const assetId = crypto.randomUUID(); const storagePath = `${auth.user.id}/generated/${assetId}.jpg`; const upload = await admin.storage.from("media").upload(storagePath, generated.bytes, { contentType: generated.mimeType, upsert: false });
     if (upload.error) return json({ error: `Could not store generated image: ${upload.error.message}` }, 500);
