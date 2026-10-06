@@ -696,6 +696,7 @@ function App() {
           <KenyaLawCasesPage />
         </Suspense>
         {userEmail && <FloatingLawyerAgent historyKey={userEmail} currentPage="Kenya Law case finder" onOpenDictionary={() => setPage("dictionary")} />}
+        {musicQueue.length > 0 && <GlobalMusicPlayer queue={musicQueue} index={musicIndex} playing={musicPlaying} onPlaying={setMusicPlaying} onToggle={() => setMusicPlaying((current) => !current)} onStep={stepMusic} onSelect={(nextIndex) => { setMusicIndex(nextIndex); setMusicPlaying(true); }} onAddQueue={addMusicToQueue} onEnded={() => stepMusic(1)} />}
       </>
     );
   if (view === "scheduled-cases")
@@ -705,6 +706,7 @@ function App() {
           <ScheduledCourtCasesPage />
         </Suspense>
         {userEmail && <FloatingLawyerAgent historyKey={userEmail} currentPage="Scheduled court cases" onOpenDictionary={() => setPage("dictionary")} />}
+        {musicQueue.length > 0 && <GlobalMusicPlayer queue={musicQueue} index={musicIndex} playing={musicPlaying} onPlaying={setMusicPlaying} onToggle={() => setMusicPlaying((current) => !current)} onStep={stepMusic} onSelect={(nextIndex) => { setMusicIndex(nextIndex); setMusicPlaying(true); }} onAddQueue={addMusicToQueue} onEnded={() => stepMusic(1)} />}
       </>
     );
   if (view === "public-playlist") return <PublicPlaylistPage />;
