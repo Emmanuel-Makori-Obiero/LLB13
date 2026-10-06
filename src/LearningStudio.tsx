@@ -8,12 +8,12 @@ import {
   Upload,
   Video,
 } from "lucide-react";
-import { askAI, listMyMaterials, uploadMaterial } from "./lib/ai";
+import { askAI, importLibraryMaterial, listMyMaterials, uploadMaterial } from "./lib/ai";
 import { generateAudio } from "./lib/cloudMedia";
 import { Markdown } from "./Markdown";
 import "./learning-studio.css";
 
-type Doc = { id: string; title: string; scope: "user" | "library"; citation?: string | null };
+type Doc = { id: string; title: string; scope: "user" | "library"; citation?: string | null; kind?: "document" | "library"; url?: string | null };
 type Mode = "podcast" | "video";
 const isBookSource = (_doc: Doc) => true;
 
@@ -49,6 +49,7 @@ export default function LearningStudio() {
   const [rendering, setRendering] = useState(false);
   const [renderProgress, setRenderProgress] = useState(0);
   const [uploadingSource, setUploadingSource] = useState(false);
+  const [importingSource, setImportingSource] = useState<string | null>(null);
   const [audioBusy, setAudioBusy] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [audioMimeType, setAudioMimeType] = useState("audio/mpeg");
@@ -56,15 +57,15 @@ export default function LearningStudio() {
   const [audioNote, setAudioNote] = useState("");
   const audioRequestId = useRef(0);
 
-  useEffect(() => {
-    void listMyMaterials()
-      .then((items) => {
-        const books = (items as Doc[]).filter(isBookSource);
-        setDocs(books);
-        setSelected((current) => current.filter((id) => books.some((doc) => doc.id === id)));
-      })
-      .catch(() => setError("Could not load your AI-ready documents."));
-  }, []);
+  const loadSources = async () => {
+    const [items, library] = await Promise.all([listMyMaterials(), import("./lib/guidedStudy").then(({ listGuideSources }) => listGuideSources())]);
+    const documents = (items as Doc[]).filter(isBookSource).map((doc) => ({ ...doc, kind: "document" as const }));
+    const libraryBooks = library.filter((source) => source.kind === "material" && source.url).map((source) => ({ id: `library:${source.id}`, title: source.title, scope: "library" as const, citation: source.citation, kind: "library" as const, url: source.url }));
+    const books = [...documents, ...libraryBooks];
+    setDocs(books);
+    setSelected((current) => current.filter((id) => books.some((doc) => doc.id === id)));
+  };
+  useEffect(() => { void loadSources().catch(() => setError("Could not load your Library and AI-ready sources.")); }, []);
   const selectedDocs = useMemo(
     () => docs.filter((doc) => selected.includes(doc.id)),
     [docs, selected],
@@ -78,12 +79,18 @@ export default function LearningStudio() {
     [script],
   );
 
-  const toggle = (id: string) =>
-    setSelected((current) =>
-      current.includes(id)
-        ? current.filter((item) => item !== id)
-        : [...current, id].slice(-6),
-    );
+  const toggle = (id: string) => setSelected((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id].slice(-6));
+  const toggleSource = async (doc: Doc) => {
+    if (doc.kind !== "library") { toggle(doc.id); return; }
+    if (!doc.url || importingSource) return;
+    setImportingSource(doc.id); setError("");
+    try {
+      const imported = await importLibraryMaterial({ title: doc.title, url: doc.url, citation: doc.citation });
+      await loadSources();
+      setSelected((current) => [...current.filter((id) => id !== doc.id), imported.id].slice(-6));
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not prepare that Library book for AI."); }
+    finally { setImportingSource(null); }
+  };
   const download = () => {
     const blob = new Blob([script], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -99,8 +106,7 @@ export default function LearningStudio() {
     setError("");
     try {
       const uploaded = await uploadMaterial(file);
-      const items = (await listMyMaterials() as Doc[]).filter(isBookSource);
-      setDocs(items);
+      await loadSources();
       setSelected((current) => [...current, uploaded.id].slice(-6));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not upload that book.");
@@ -573,10 +579,11 @@ export default function LearningStudio() {
                 >
                   <input
                     type="checkbox"
-                    checked={selected.includes(doc.id)}
-                    onChange={() => toggle(doc.id)}
+                    checked={doc.kind !== "library" && selected.includes(doc.id)}
+                    disabled={doc.kind === "library" && importingSource === doc.id}
+                    onChange={() => void toggleSource(doc)}
                   />
-                  <span>{doc.title}<small>{doc.scope === "library" ? "Library book · AI-readable" : /transcript|recording/i.test(doc.title) ? "Saved transcript" : "My uploaded book or document"}</small></span>
+                  <span>{doc.title}<small>{doc.kind === "library" ? (importingSource === doc.id ? "Preparing Library book for AI…" : "Library book · click to add readable text") : /transcript|recording/i.test(doc.title) ? "Saved transcript" : "My uploaded book or document"}</small></span>
                 </label>
               ))}
             </div>
