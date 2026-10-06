@@ -43,6 +43,22 @@ const dayLabel = (d: string) =>
     day: "numeric",
     month: "long",
   });
+const weekdayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const;
+const weekdayOf = (date: string) => weekdayNames[new Date(`${date}T00:00:00`).getDay()];
+const studyBlockPattern = /\b(study|studying|write|writing|course notes?|review|revise|revision|read|reading|research|assignment|quiz|exam preparation|prepare for)\b/i;
+function extractNoStudyWeekdays(instruction: string) {
+  const blocked = new Set<string>();
+  for (const day of weekdayNames) {
+    const escaped = day.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const explicit = new RegExp(`(?:not\\s+supposed\\s+to|do\\s+not|don't|no|avoid)[^.!?\\n]{0,100}\\b${escaped}\\b`, "i").test(instruction)
+      || new RegExp(`\\b${escaped}\\b[^.!?\\n]{0,60}(?:not\\s+included|no\\s+study|without\\s+study)`, "i").test(instruction);
+    if (explicit) blocked.add(day);
+  }
+  return blocked;
+}
+function removeForbiddenStudyBlocks<T extends { lesson_date: string; topic: string; unit: string }>(lessons: T[], blockedWeekdays: Set<string>) {
+  return lessons.filter((lesson) => !(blockedWeekdays.has(weekdayOf(lesson.lesson_date)) && studyBlockPattern.test(`${lesson.topic} ${lesson.unit}`)));
+}
 const uploadRows = (upload: SharedTimetableUpload) =>
   (Array.isArray(upload.structured_rows) ? upload.structured_rows : [])
     .filter((row) => row?.lesson_date && row?.topic)
@@ -239,13 +255,19 @@ export default function TimetablePage({
     if (!personalInstruction.trim() || personalAIBusy) { if (!personalInstruction.trim()) setNotice("Describe your routine, commitments and goals first."); return; }
     setPersonalAIbusy(true);
     try {
+      const blockedStudyWeekdays = extractNoStudyWeekdays(personalInstruction);
       const groupContext = lessons.filter((lesson) => lesson.lesson_date >= today()).slice(0, 80).map((lesson) => ({ unit: lesson.unit, topic: lesson.topic, date: lesson.lesson_date, start: hm(lesson.start_time), end: hm(lesson.end_time), venue: lesson.venue }));
-      const response = await askAI({ feature: "personal_timetable_proposal", mode: "general", messages: [{ role: "user", content: `Create a personal weekly timetable proposal for a Kenyan law student. Current date: ${today()}. Student's description: ${personalInstruction.trim()}. Optional uploaded timetable (${personalUploadName || "none"})—treat as user context, not verified group authority: ${personalUploadText || "none"}. Current shared group timetable—do not move or overwrite these classes: ${JSON.stringify(groupContext)}. Return the exact JSON contract required by the feature. Include study blocks and any extracurricular activities the student requested. Avoid clashes with group lessons, preserve sleep/meals/commute where described, and use realistic dates on or after today. One block per line.` }] });
+      const hardConstraint = blockedStudyWeekdays.size
+        ? `HARD CONSTRAINT: Do not create any study, course-note, revision, review, reading, research, assignment, or exam-preparation block on ${[...blockedStudyWeekdays].join(", ")}. These days are unavailable for study and must not appear in the study timetable. `
+        : "";
+      const response = await askAI({ feature: "personal_timetable_proposal", mode: "general", messages: [{ role: "user", content: `Create a personal weekly timetable proposal for a Kenyan law student. Current date: ${today()}. Student's description: ${personalInstruction.trim()}. ${hardConstraint}Treat explicit unavailable days and fixed commitments in the student's description as non-negotiable constraints. Optional uploaded timetable (${personalUploadName || "none"})—treat as user context, not verified group authority: ${personalUploadText || "none"}. Current shared group timetable—do not move or overwrite these classes: ${JSON.stringify(groupContext)}. Return the exact JSON contract required by the feature. Include study blocks and any extracurricular activities the student requested. Avoid clashes with group lessons, preserve sleep/meals/commute where described, and use realistic dates on or after today. One block per line.` }] });
       const raw = (response.data && typeof response.data === "object" ? response.data : parseAIJson(response.answer)) as { title?: unknown; rationale?: unknown; lessons?: unknown };
-      const proposed = Array.isArray(raw.lessons) ? raw.lessons.map((item) => { const value = item as Record<string, unknown>; return { unit: String(value.unit ?? "Personal study"), topic: String(value.topic ?? "Study block"), lesson_date: String(value.lesson_date ?? "").slice(0, 10), start_time: String(value.start_time ?? "").slice(0, 5) || null, end_time: String(value.end_time ?? "").slice(0, 5) || null, representatives: [], representative: null, venue: String(value.venue ?? "Personal") }; }).filter((item) => /^\d{4}-\d{2}-\d{2}$/.test(item.lesson_date) && item.topic) : [];
+      const proposedRaw = Array.isArray(raw.lessons) ? raw.lessons.map((item) => { const value = item as Record<string, unknown>; return { unit: String(value.unit ?? "Personal study"), topic: String(value.topic ?? "Study block"), lesson_date: String(value.lesson_date ?? "").slice(0, 10), start_time: String(value.start_time ?? "").slice(0, 5) || null, end_time: String(value.end_time ?? "").slice(0, 5) || null, representatives: [], representative: null, venue: String(value.venue ?? "Personal") }; }).filter((item) => /^\d{4}-\d{2}-\d{2}$/.test(item.lesson_date) && item.topic) : [];
+      const proposed = removeForbiddenStudyBlocks(proposedRaw, blockedStudyWeekdays);
       if (!proposed.length) throw new Error("The AI did not return any usable timetable blocks. Try describing your available days and times more clearly.");
+      const removedCount = proposedRaw.length - proposed.length;
       setPersonalProposal({ title: String(raw.title ?? "Personal AI timetable proposal"), rationale: String(raw.rationale ?? "Balanced around your group classes and stated commitments."), lessons: proposed });
-      setNotice("Your personal plan is ready. Review it carefully, then approve it to add the blocks and to-do items.");
+      setNotice(`${removedCount ? `${removedCount} study block${removedCount === 1 ? "" : "s"} removed from your unavailable day. ` : ""}Your personal plan is ready. Review it carefully, then approve it to add the blocks and to-do items.`);
     } catch (error) { setNotice(error instanceof Error ? error.message : "Could not generate your personal AI timetable."); }
     finally { setPersonalAIbusy(false); }
   };
