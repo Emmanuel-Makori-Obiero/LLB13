@@ -2,15 +2,26 @@ import { useEffect, useState } from "react";
 import {
   CalendarDays,
   Clock3,
+  FileUp,
   MapPin,
   Pencil,
   Plus,
+  Sparkles,
   Trash2,
   User,
 } from "lucide-react";
 import { repository, supabase } from "./data/repository";
 import type { Lesson, Member, SharedTimetableUpload, Unit } from "./data/types";
 import { lessonReps, unitReps } from "./data/types";
+import { askAI, extractText } from "./lib/ai";
+
+type PersonalProposal = { title: string; rationale: string; lessons: Omit<Lesson, "id" | "created_by">[] };
+function parseAIJson(value: string): unknown {
+  const clean = value.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
+  const start = clean.indexOf("{");
+  const end = clean.lastIndexOf("}");
+  return JSON.parse(start >= 0 && end > start ? clean.slice(start, end + 1) : clean);
+}
 
 type Props = {
   lessons: Lesson[];
@@ -57,6 +68,11 @@ export default function TimetablePage({
   const [viewerName, setViewerName] = useState("");
   const [personalLessons, setPersonalLessons] = useState<Lesson[]>([]);
   const [latestUpload, setLatestUpload] = useState<SharedTimetableUpload | null>(null);
+  const [personalInstruction, setPersonalInstruction] = useState("");
+  const [personalUploadText, setPersonalUploadText] = useState("");
+  const [personalUploadName, setPersonalUploadName] = useState("");
+  const [personalAIBusy, setPersonalAIbusy] = useState(false);
+  const [personalProposal, setPersonalProposal] = useState<PersonalProposal | null>(null);
   const [schedule, setSchedule] = useState<"personal" | "group">("personal");
   const [showPast, setShowPast] = useState(false);
   const [f, setF] = useState({
@@ -210,6 +226,43 @@ export default function TimetablePage({
     }
   };
 
+  const readPersonalTimetableFile = async (file?: File) => {
+    if (!file) return;
+    try {
+      setPersonalUploadName(file.name);
+      setPersonalUploadText((await extractText(file)).slice(0, 16000));
+      setNotice(`${file.name} is ready as optional context for your personal plan.`);
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Could not read that timetable file."); }
+  };
+
+  const generatePersonalProposal = async () => {
+    if (!personalInstruction.trim() || personalAIBusy) { if (!personalInstruction.trim()) setNotice("Describe your routine, commitments and goals first."); return; }
+    setPersonalAIbusy(true);
+    try {
+      const groupContext = lessons.filter((lesson) => lesson.lesson_date >= today()).slice(0, 80).map((lesson) => ({ unit: lesson.unit, topic: lesson.topic, date: lesson.lesson_date, start: hm(lesson.start_time), end: hm(lesson.end_time), venue: lesson.venue }));
+      const response = await askAI({ feature: "personal_timetable_proposal", mode: "general", messages: [{ role: "user", content: `Create a personal weekly timetable proposal for a Kenyan law student. Current date: ${today()}. Student's description: ${personalInstruction.trim()}. Optional uploaded timetable (${personalUploadName || "none"})—treat as user context, not verified group authority: ${personalUploadText || "none"}. Current shared group timetable—do not move or overwrite these classes: ${JSON.stringify(groupContext)}. Return the exact JSON contract required by the feature. Include study blocks and any extracurricular activities the student requested. Avoid clashes with group lessons, preserve sleep/meals/commute where described, and use realistic dates on or after today. One block per line.` }] });
+      const raw = (response.data && typeof response.data === "object" ? response.data : parseAIJson(response.answer)) as { title?: unknown; rationale?: unknown; lessons?: unknown };
+      const proposed = Array.isArray(raw.lessons) ? raw.lessons.map((item) => { const value = item as Record<string, unknown>; return { unit: String(value.unit ?? "Personal study"), topic: String(value.topic ?? "Study block"), lesson_date: String(value.lesson_date ?? "").slice(0, 10), start_time: String(value.start_time ?? "").slice(0, 5) || null, end_time: String(value.end_time ?? "").slice(0, 5) || null, representatives: [], representative: null, venue: String(value.venue ?? "Personal") }; }).filter((item) => /^\d{4}-\d{2}-\d{2}$/.test(item.lesson_date) && item.topic) : [];
+      if (!proposed.length) throw new Error("The AI did not return any usable timetable blocks. Try describing your available days and times more clearly.");
+      setPersonalProposal({ title: String(raw.title ?? "Personal AI timetable proposal"), rationale: String(raw.rationale ?? "Balanced around your group classes and stated commitments."), lessons: proposed });
+      setNotice("Your personal plan is ready. Review it carefully, then approve it to add the blocks and to-do items.");
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Could not generate your personal AI timetable."); }
+    finally { setPersonalAIbusy(false); }
+  };
+
+  const approvePersonalProposal = async () => {
+    if (!personalProposal || personalAIBusy) return;
+    setPersonalAIbusy(true);
+    try {
+      const created = await Promise.all(personalProposal.lessons.map((lesson) => repository.createPersonalLesson(lesson)));
+      await Promise.all(created.map((lesson) => repository.createTodo({ title: `Prepare: ${lesson.topic}`, due: lesson.lesson_date, completed: false, source: "manual" })));
+      setPersonalLessons((current) => [...current, ...created]);
+      setPersonalProposal(null);
+      setNotice(`${created.length} personal timetable blocks approved and added to your to-do list.`);
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Could not apply the personal timetable proposal."); }
+    finally { setPersonalAIbusy(false); }
+  };
+
   const activeLessons = schedule === "personal" ? personalLessons : lessons;
   const visible = activeLessons.filter((l) => showPast || l.lesson_date >= today());
   const days = [...new Set(visible.map((l) => l.lesson_date))].sort();
@@ -271,6 +324,8 @@ export default function TimetablePage({
           ) : null}
         </div>
       )}
+      {schedule === "personal" && <div className="card card-pad personal-ai-builder"><div className="game-kicker"><Sparkles size={14} /> Personal AI timetable coach</div><h2>Describe your life. Get a plan.</h2><p>Tell the coach about your classes, sleep, work, family responsibilities, commute, goals and extracurricular activities. Uploading a timetable is optional. The coach checks the current group timetable automatically and proposes a plan for your approval.</p><label className="personal-ai-label">Your routine and goals<textarea rows={5} value={personalInstruction} onChange={(event) => setPersonalInstruction(event.target.value)} placeholder="Example: I work Monday to Friday until 5pm, sleep by 10:30pm, commute for an hour, want to revise Constitutional Law and play football on Saturday morning…" /></label><label className="personal-ai-upload"><FileUp size={15} /> Optional timetable upload<input type="file" accept=".pdf,.docx,.pptx,.txt,.md,.csv" onChange={(event) => void readPersonalTimetableFile(event.target.files?.[0])} />{personalUploadName && <span>{personalUploadName} ready</span>}</label><button className="primary-button" onClick={() => void generatePersonalProposal()} disabled={personalAIBusy || !personalInstruction.trim()}>{personalAIBusy ? "Building your personal plan…" : "Propose my timetable"}</button></div>}
+      {personalProposal && schedule === "personal" && <div className="card card-pad personal-ai-proposal"><div className="section-label">Review before applying</div><h2>{personalProposal.title}</h2><p>{personalProposal.rationale}</p><div className="row-list">{personalProposal.lessons.map((lesson, index) => <div className="row" key={`${lesson.lesson_date}-${lesson.topic}-${index}`}><div className="row-main"><div className="row-title">{lesson.topic}</div><div className="row-meta">{lesson.lesson_date} · {hm(lesson.start_time)}–{hm(lesson.end_time)} · {lesson.venue || "Personal"}</div></div></div>)}</div><div className="arena-invite-actions"><button className="primary-button" onClick={() => void approvePersonalProposal()} disabled={personalAIBusy}>Approve and add to my timetable</button><button className="secondary-button" onClick={() => setPersonalProposal(null)} disabled={personalAIBusy}>Keep editing description</button></div></div>}
       {days.length === 0 && (
         <div className="card card-pad empty-state">
           <CalendarDays size={22} />

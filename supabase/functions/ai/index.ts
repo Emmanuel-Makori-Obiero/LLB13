@@ -393,6 +393,10 @@ const FEATURES: Record<
     json: true,
     task: 'Create a short fictional Kenyan-law decision game. Return ONLY JSON: {"title":"","situation":"","choices":[{"label":"","consequence":"","next":null}]}. Include 5 genuinely different choices, each with a distinct action and specific consequence; never return only yes/no, never duplicate labels, and never combine choices. Use the selected library metadata and Constitution foundation only as context. Do not invent authorities or book content. Distinguish verified legal authority from strategic reasoning in the consequences.',
   },
+  personal_timetable_proposal: {
+    json: true,
+    task: 'Design a personal timetable from a student description. Return ONLY JSON: {"title":"","rationale":"","lessons":[{"unit":"","topic":"","lesson_date":"YYYY-MM-DD","start_time":"HH:MM","end_time":"HH:MM","venue":""}]}. Treat the shared group timetable as fixed constraints and avoid clashes. The uploaded personal timetable is optional context and must not override the shared group schedule. Respect the student\'s sleep, meals, commute, work, family, health, religious commitments and preferred study times when stated. Add extracurricular activities only when the student requests or describes them. Include realistic study, revision, rest and extracurricular blocks; do not invent fixed commitments. Use dates on or after the supplied current date. Return concise, usable blocks and explain the trade-offs in rationale. This is planning support, not medical, legal or financial advice.',
+  },
   kmun: {
     task: "Act as a KMUN coach and realistic dais. Guide one decision at a time: country position, opening claim, caucus point, diplomatic response and resolution clause. Ask the delegate to produce each step before giving a model, and revisit procedure through quick recall.",
   },

@@ -33,6 +33,13 @@
 .personal-group-context { display:grid; gap:10px; }
 .personal-group-context .row { align-items:center; }
 .personal-group-context .secondary-button { white-space:nowrap; }
+.personal-ai-builder, .personal-ai-proposal { display:grid; gap:12px; }
+.personal-ai-builder h2, .personal-ai-proposal h2 { margin:0; }
+.personal-ai-label { display:grid; gap:6px; font-size:12px; font-weight:600; }
+.personal-ai-label textarea { width:100%; box-sizing:border-box; padding:11px; border:1px solid var(--line); background:var(--paper); color:var(--ink); font:inherit; resize:vertical; }
+.personal-ai-upload { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:11px; border:1px dashed var(--forest); background:var(--soft); font-size:12px; font-weight:600; }
+.personal-ai-upload input { max-width:100%; }
+.personal-ai-upload span { color:var(--forest); font-weight:400; }
 .quick-row { display:none; }
 .tabbar, .mobile-title, .mobile-avatar, .drawer-profile { display:none; }
 .install-chip { display:none; }
