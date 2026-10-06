@@ -27,6 +27,7 @@ import "./legal-arena-tournament.css";
 type GameTab = "computer" | "training" | "pvp" | "choices";
 type LocalTurn = { label: string; text: string; role: "user" | "ai" };
 type ChoiceNode = { title: string; situation: string; choices: { label: string; consequence: string; next?: number }[] };
+type TrainingHistoryItem = { title: string; score: number; maxScore: number; outcome: string; date: string };
 
 const CONSTITUTION_REFERENCE: KenyaLawCaseResult = {
   title: "Constitution of Kenya, 2010 — Article 2 (constitutional supremacy)",
@@ -123,6 +124,7 @@ export default function GamesHub({
   const [trainingDrill, setTrainingDrill] = useState<{ title: string; level: string; lesson: string; question: string; success_criteria: string[]; hint: string } | null>(null);
   const [trainingAnswer, setTrainingAnswer] = useState("");
   const [trainingResult, setTrainingResult] = useState<Record<string, unknown> | null>(null);
+  const [trainingHistory, setTrainingHistory] = useState<TrainingHistoryItem[]>([]);
 
   const [room, setRoom] = useState<DebateRoom | null>(null);
   const [pvpMessages, setPvpMessages] = useState<DebateMessage[]>([]);
@@ -140,6 +142,14 @@ export default function GamesHub({
   const [choiceNode, setChoiceNode] = useState<ChoiceNode | null>(null);
   const [choicePath, setChoicePath] = useState<string[]>([]);
   const [choiceDebrief, setChoiceDebrief] = useState("");
+
+  useEffect(() => {
+    const key = `legal-arena-training:${userId ?? "guest"}`;
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(key) ?? "[]");
+      if (Array.isArray(saved)) setTrainingHistory(saved.slice(0, 30));
+    } catch { setTrainingHistory([]); }
+  }, [userId]);
 
   useEffect(() => {
     if (!computerActive || computerBusy || computerRemaining <= 0) return;
@@ -299,7 +309,14 @@ export default function GamesHub({
     setTrainingBusy(true);
     try {
       const response = await askAI({ feature: "arena_training", mode: "general", messages: [{ role: "user", content: `Grade this beginner advocacy exercise as a Kenyan-law judge. Library metadata: ${JSON.stringify({ title: source.title, topic: source.topic, source: source.source, url: source.url })}. Constitution foundation: Article 2 and constitutional supremacy. DRILL: ${JSON.stringify(trainingDrill)}. STUDENT ANSWER: ${trainingAnswer.trim()}. Award marks for every valid point actually made, including a relevant source, fact/evidence, inference, issue, response to opposition, and clear structure. Separate verified authority from reasoning. Return the grading JSON exactly.` }] });
-      setTrainingResult(parseJsonAnswer(response.answer));
+      const result = parseJsonAnswer(response.answer) as Record<string, unknown>;
+      setTrainingResult(result);
+      const historyItem: TrainingHistoryItem = { title: trainingDrill.title, score: Number(result.score ?? 0), maxScore: Number(result.max_score ?? 100), outcome: String(result.outcome ?? "needs_more_practice"), date: new Date().toISOString() };
+      setTrainingHistory((history) => {
+        const next = [historyItem, ...history].slice(0, 30);
+        try { window.localStorage.setItem(`legal-arena-training:${userId ?? "guest"}`, JSON.stringify(next)); } catch { /* storage is optional */ }
+        return next;
+      });
       setTrainingStep((step) => step + 1);
     } catch (error) { setNotice(error instanceof Error ? error.message : "The training judge is unavailable."); }
     finally { setTrainingBusy(false); }
@@ -523,6 +540,7 @@ export default function GamesHub({
         <div className="arena-rules-grid"><div className="arena-rule"><strong>Small steps</strong>Issue, fact, source, inference, rebuttal, then full advocacy—one skill at a time.</div><div className="arena-rule"><strong>Real marks</strong>The judge rewards a relevant Constitution or library point, evidence, reasoning, and clear structure.</div><div className="arena-rule"><strong>Honest feedback</strong>Missing authority is not invented; reasoning is assessed separately and the outcome is explained.</div></div>
         <div className="arena-invite-actions"><button className="primary-button" onClick={() => void startTrainingDrill()} disabled={!source || trainingBusy}>{trainingBusy ? "Preparing your next drill…" : trainingDrill ? "Try another small drill" : "Start beginner training"}</button>{trainingStep > 0 && <span className="chip">Step {trainingStep + 1}</span>}</div>
       </div>
+      <div className="card card-pad arena-training-dashboard"><div><div className="section-label">Your training progress</div><h3>{trainingHistory.length ? `${trainingHistory.length} drill${trainingHistory.length === 1 ? "" : "s"} completed` : "Your first drill is waiting"}</h3></div><div className="arena-progress-stats"><div><strong>{trainingHistory.length ? `${Math.round(trainingHistory.reduce((sum, item) => sum + (item.score / Math.max(1, item.maxScore)) * 100, 0) / trainingHistory.length)}%` : "—"}</strong><span>Average score</span></div><div><strong>{trainingHistory.length ? `${Math.max(...trainingHistory.map((item) => Math.round((item.score / Math.max(1, item.maxScore)) * 100)))}%` : "—"}</strong><span>Best score</span></div><div><strong>{trainingHistory.filter((item) => item.outcome !== "needs_more_practice").length}</strong><span>Successful outcomes</span></div></div>{trainingHistory.length > 0 && <div className="arena-history-list">{trainingHistory.slice(0, 5).map((item, index) => <div className="arena-history-row" key={`${item.date}-${index}`}><span><strong>{item.title}</strong><small>{new Date(item.date).toLocaleDateString("en-GB")}</small></span><b>{item.score}/{item.maxScore}</b><em>{item.outcome.replace(/_/g, " ")}</em></div>)}</div>}</div>
       {trainingDrill && <div className="card card-pad arena-training-card"><div className="section-label">{trainingDrill.level} · {trainingDrill.title}</div><h3>{trainingDrill.lesson}</h3><p><strong>Exercise:</strong> {trainingDrill.question}</p><p className="field-hint"><strong>What earns marks:</strong> {trainingDrill.success_criteria.join(" · ")}</p><p className="arena-training-hint"><strong>Hint:</strong> {trainingDrill.hint}</p><textarea rows={6} value={trainingAnswer} onChange={(event) => setTrainingAnswer(event.target.value)} placeholder="Write your answer in your own words. Try to name the issue, source, fact, and why it supports your side…" disabled={trainingBusy} /><button className="primary-button" onClick={() => void submitTrainingAnswer()} disabled={trainingBusy || !trainingAnswer.trim()}>{trainingBusy ? "Judge is marking your answer…" : "Submit for marks and judgment"}</button></div>}
       {trainingResult && <div className="card card-pad game-evaluation arena-training-result"><div className="section-label">Judge's outcome</div><div className="arena-training-score"><strong>{String(trainingResult.score ?? 0)} / {String(trainingResult.max_score ?? 100)}</strong><span>{String(trainingResult.outcome ?? "needs_more_practice")}</span></div><p>{String(trainingResult.judge_feedback ?? "Review the feedback and try the next drill.")}</p><div className="arena-marks-breakdown"><div className="section-label">Marks breakdown</div>{(Array.isArray(trainingResult.marks_earned) ? trainingResult.marks_earned : []).map((item, index) => { const mark = item as { point?: unknown; marks?: unknown; reason?: unknown }; return <div className="arena-mark-row" key={index}><div><strong>{String(mark.point ?? "Legal point")}</strong><span>{String(mark.reason ?? "")}</span></div><b>{String(mark.marks ?? 0)} marks</b></div>; })}</div><div className="arena-result-grid"><div><strong>What you did right</strong><ul>{(Array.isArray(trainingResult.what_you_did_right) ? trainingResult.what_you_did_right : []).map((item, index) => <li key={index}>{String(item)}</li>)}</ul></div><div><strong>What was missing</strong><ul>{(Array.isArray(trainingResult.what_was_missing) ? trainingResult.what_was_missing : []).map((item, index) => <li key={index}>{String(item)}</li>)}</ul></div></div><div className="arena-example-answer"><div className="section-label">What a stronger answer could look like</div><p>{String(trainingResult.example_answer ?? "The judge did not provide an example for this attempt. Try the next drill and focus on the missing points above.")}</p><small>This is a learning example, not the only correct answer.</small></div><p><strong>Legal accuracy:</strong> {String(trainingResult.legal_accuracy ?? "")}</p><p><strong>Next drill:</strong> {String(trainingResult.next_drill ?? "")}</p></div>}
       {notice && <div className="connection-error game-notice">{notice}</div>}

@@ -117,6 +117,7 @@ export default function TimetablePage({
     return () => { void client.removeChannel(channel); };
   }, []);
   const editAllowed = (lesson: Lesson) => {
+    if (schedule === "group") return isAdmin;
     if (canEdit) return canEdit(lesson);
     if (canDelete(lesson)) return true;
     if (!viewerName) return false;
@@ -127,6 +128,21 @@ export default function TimetablePage({
       lessonReps(lesson).includes(viewerName) ||
       unitRepresentatives.includes(viewerName)
     );
+  };
+
+  const planPreparation = async (lesson: Lesson) => {
+    const date = new Date(`${lesson.lesson_date}T00:00:00`);
+    date.setDate(date.getDate() - 1);
+    if (date.getDay() === 0) date.setDate(date.getDate() - 2);
+    if (date.getDay() === 6) date.setDate(date.getDate() - 1);
+    const prepDate = date.toISOString().slice(0, 10);
+    try {
+      const created = await repository.createPersonalLesson({ unit: lesson.unit, topic: `Prepare for ${lesson.topic}`, lesson_date: prepDate, start_time: "18:00", end_time: "19:00", representatives: [], representative: null, venue: "Personal study" });
+      setPersonalLessons((current) => [...current, created]);
+      await repository.createTodo({ title: `Prepare for ${lesson.topic}`, due: prepDate, completed: false, source: "manual" });
+      setSchedule("personal");
+      setNotice(`Preparation time added for ${lesson.topic} and placed on your to-do list.`);
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Could not plan preparation time."); }
   };
 
   const openEdit = (lesson: Lesson) => {
@@ -165,7 +181,10 @@ export default function TimetablePage({
         setNotice("Lesson updated.");
       } else {
         const created = schedule === "personal" ? await repository.createPersonalLesson(payload) : await repository.createLesson(payload);
-        if (schedule === "personal") setPersonalLessons((current) => [...current, created]); else onAdded(created);
+        if (schedule === "personal") {
+          setPersonalLessons((current) => [...current, created]);
+          await repository.createTodo({ title: `Prepare: ${created.topic}`, due: created.lesson_date, completed: false, source: "manual" });
+        } else onAdded(created);
         setNotice(schedule === "personal" ? "Personal event added." : "Lesson added to the group timetable.");
       }
       setOpen(false);
@@ -211,9 +230,9 @@ export default function TimetablePage({
           >
             {showPast ? "Hide past lessons" : "Show past lessons"}
           </button>
-          <button className="primary-button" onClick={() => { setEditing(null); setOpen(true); }}>
+          {(schedule === "personal" || isAdmin) && <button className="primary-button" onClick={() => { setEditing(null); setOpen(true); }}>
             <Plus size={14} /> {schedule === "personal" ? "Add personal event" : "Add group lesson"}
-          </button>
+          </button>}
         </div>
       </div>
       {schedule === "group" && latestUpload && (
@@ -260,6 +279,9 @@ export default function TimetablePage({
           </p>
         </div>
       )}
+      {schedule === "personal" && lessons.filter((lesson) => lesson.lesson_date >= today()).slice(0, 3).length > 0 && (
+        <div className="card card-pad personal-group-context"><div className="section-label">Plan around your group timetable</div><p className="field-hint">Your next group lessons are shown here. Add preparation time and it will also appear on your personal to-do list.</p><div className="row-list">{lessons.filter((lesson) => lesson.lesson_date >= today()).slice(0, 3).map((lesson) => <div className="row" key={`plan-${lesson.id}`}><div className="row-main"><div className="row-title">{lesson.topic}</div><div className="row-meta">{lesson.lesson_date} · {lesson.unit}</div></div><button className="secondary-button" onClick={() => void planPreparation(lesson)}>Plan prep</button></div>)}</div></div>
+      )}
       {days.map((d) => (
         <div className="card card-pad tt-day" key={d}>
           <div className="section-label">
@@ -292,9 +314,9 @@ export default function TimetablePage({
                       )}
                     </div>
                   </div>
-                  {(schedule === "personal" || editAllowed(l) || canDelete(l)) && (
+                  {(schedule === "personal" || isAdmin) && (
                     <div className="row-end lesson-actions">
-                      {(schedule === "personal" || editAllowed(l)) && (
+                      {(schedule === "personal" || isAdmin) && (
                         <button
                           className="icon-button"
                           aria-label="Edit lesson"
@@ -303,7 +325,7 @@ export default function TimetablePage({
                           <Pencil size={14} />
                         </button>
                       )}
-                      {(schedule === "personal" || canDelete(l)) && (
+                      {(schedule === "personal" || isAdmin) && (
                         <button
                           className="icon-button"
                           aria-label="Remove lesson"
