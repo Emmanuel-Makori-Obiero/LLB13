@@ -55,14 +55,14 @@ function decodeHtml(value: string) {
     .trim();
 }
 
-function officialCaseUrl(value: string) {
+function officialLawUrl(value: string) {
   try {
     const url = new URL(value, "https://www.google.com");
     const candidate = url.searchParams.get("q") || url.searchParams.get("url") || url.searchParams.get("uddg") || url.href;
     const clean = new URL(candidate);
     if (
       (clean.hostname === "new.kenyalaw.org" || clean.hostname === "kenyalaw.org") &&
-      /\/akn\/ke\/judgment\//.test(clean.pathname)
+      /\/akn\/ke\/(judgment|act|bill|legal_notice)\//.test(clean.pathname)
     ) {
       return clean.toString();
     }
@@ -77,7 +77,7 @@ function parseResults(html: string): CaseResult[] {
   const seen = new Set<string>();
   const anchorPattern = /<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
   for (const match of html.matchAll(anchorPattern)) {
-    const url = officialCaseUrl(match[1]);
+    const url = officialLawUrl(match[1]);
     if (!url || seen.has(url)) continue;
     const title = decodeHtml(match[2]);
     if (title.length < 8 || /cached|similar|translate/i.test(title)) continue;
@@ -119,6 +119,8 @@ async function discoverResults(query: string): Promise<{ results: CaseResult[]; 
     `site:new.kenyalaw.org/akn/ke/judgment ${query}`,
     `site:kenyalaw.org ${query} judgment`,
     `${query} Kenya Law judgment`,
+    `site:new.kenyalaw.org/akn/ke/act ${query}`,
+    `site:kenyalaw.org ${query} Act statute Kenya`,
   ];
   const sources = queryVariants.flatMap((variant, index) => [
     { name: index === 0 ? "Google" : "Google related", url: `https://www.google.com/search?gbv=1&num=10&q=${encodeURIComponent(variant)}` },
@@ -126,6 +128,8 @@ async function discoverResults(query: string): Promise<{ results: CaseResult[]; 
   ]);
   sources.push({ name: "Kenya Law", url: `https://new.kenyalaw.org/search/?q=${encodeURIComponent(query)}` });
   const providers: string[] = [];
+  const allResults: CaseResult[] = [];
+  const seen = new Set<string>();
   for (const source of sources) {
     try {
       const response = await fetch(source.url, {
@@ -138,12 +142,15 @@ async function discoverResults(query: string): Promise<{ results: CaseResult[]; 
       if (!response.ok) continue;
       providers.push(source.name);
       const results = parseResults(await response.text());
-      if (results.length) return { results, providers };
+      for (const result of results) {
+        if (!seen.has(result.url)) { seen.add(result.url); allResults.push(result); }
+      }
+      if (allResults.length >= 10) break;
     } catch {
       /* Try the next independent source. */
     }
   }
-  return { results: [], providers };
+  return { results: allResults.slice(0, 10), providers };
 }
 
 Deno.serve(async (request) => {
@@ -165,8 +172,8 @@ Deno.serve(async (request) => {
   } catch {
     return json({ error: "Send a JSON body containing a query." }, 400);
   }
-  const requestedUrl = body.url ? officialCaseUrl(String(body.url)) : null;
-  if (body.url && !requestedUrl) return json({ error: "Only official Kenya Law judgment links can be opened." }, 400);
+  const requestedUrl = body.url ? officialLawUrl(String(body.url)) : null;
+  if (body.url && !requestedUrl) return json({ error: "Only official Kenya Law legislation or judgment links can be opened." }, 400);
   if (requestedUrl) {
     const candidates = [
       requestedUrl,
@@ -217,8 +224,8 @@ Deno.serve(async (request) => {
     results: fallback,
     source: discovered.providers.length
       ? `Official Kenya Law links discovered using ${discovered.providers.join(" / ")}`
-      : fallback.length ? "Official Kenya Law judgment index fallback" : "No search provider responded; try the official Kenya Law advanced search.",
+      : fallback.length ? "Official Kenya Law authority index fallback" : "No search provider responded; try the official Kenya Law search.",
     degraded: discovered.providers.length === 0,
-    officialSearchUrl: `https://kenyalaw.org/search/?show-advanced-tab=1&nature=Judgment&q=${encodeURIComponent(query)}`,
+    officialSearchUrl: `https://kenyalaw.org/search/?show-advanced-tab=1&q=${encodeURIComponent(query)}`,
   });
 });
