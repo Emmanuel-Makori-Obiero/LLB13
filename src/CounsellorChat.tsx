@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Loader2, Send } from "lucide-react";
 import { askAI, type AIMessage } from "./lib/ai";
 import { Markdown } from "./Markdown";
+import StorytellButton from "./StorytellButton";
 import "./assistant.css";
 
 type Bubble = AIMessage & { failed?: boolean };
@@ -63,7 +64,7 @@ export function CounsellorChat() {
             ) : t.role === "user" ? (
               <p>{t.content}</p>
             ) : (
-              <Markdown text={t.content} />
+              <><Markdown text={t.content} /><StorytellButton title="Assistant explanation" source={t.content} /></>
             )}
           </div>
         ))}
