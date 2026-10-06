@@ -30,8 +30,8 @@ type ChoiceNode = { title: string; situation: string; choices: { label: string; 
 type TrainingHistoryItem = { title: string; score: number; maxScore: number; outcome: string; date: string };
 
 const CONSTITUTION_REFERENCE: KenyaLawCaseResult = {
-  title: "Constitution of Kenya, 2010 — Article 2 (constitutional supremacy)",
-  citation: "Article 2",
+  title: "Constitution of Kenya, 2010 — official library source",
+  citation: "Constitution of Kenya, 2010",
   url: "https://kenyalaw.org/akn/ke/act/2010/constitution",
 };
 
@@ -265,7 +265,7 @@ export default function GamesHub({
       const response = await askAI({
         feature: "explain",
         mode: "general",
-        messages: [{ role: "user", content: `You are a neutral Kenyan-law competition case setter. Create a balanced fictional civil-law moot problem for a claimant and a defendant. This is a study game, not advice.\n\nSelected library reference (metadata only; do not quote or invent its text):\n${JSON.stringify(libraryRecord)}\n\nOfficial Kenya Law authority results. Treat these as the only case names or links you may mention. If this list is empty, say that no case authority was verified and frame the case around careful reasoning and evidence instead:\n${officialAuthorityText}\n\nTopic: ${query}\nLevel: ${difficulty}\n\nReturn only a complete Markdown case packet using exactly these headings:\n## Question before the court\n## Agreed facts\n## Claimant's case\n## Defendant's case\n## Evidence packet\n## Authority boundaries\n\nGive both sides a fair path to win. The facts must be fictional; do not use real people. Do not invent statutes, constitutional articles, case names, citations, quotations, or book content. State that players may use the Constitution Article 2 foundation, the listed official links, and the selected library reference. When an authority is missing, tell players to distinguish legal authority from a reasoned factual inference.` }],
+        messages: [{ role: "user", content: `You are a neutral Kenyan-law competition case setter. Create a balanced fictional civil-law moot problem for a claimant and a defendant. This is a study game, not advice.\n\nSelected library reference (metadata only; do not quote or invent its text):\n${JSON.stringify(libraryRecord)}\n\nOfficial Kenya Law authority results. Treat these as the only case names or links you may mention. If this list is empty, say that no case authority was verified and frame the case around careful reasoning and evidence instead:\n${officialAuthorityText}\n\nTopic: ${query}\nLevel: ${difficulty}\n\nAuthority-selection rule: identify the actual legal issue first. Use the Constitution library source only when the issue is constitutional. Select the relevant constitutional provision or principle for that issue; do not default to Article 2 or Article 2(4). Article 2(4) is relevant only where the issue is whether a law, customary rule, act or omission is inconsistent with the Constitution. For ordinary contract, tort, evidence, procedure or statutory issues, use the relevant listed authority or explain that the packet lacks a verified provision. Never invent an article number.\n\nReturn only a complete Markdown case packet using exactly these headings:\n## Question before the court\n## Agreed facts\n## Claimant's case\n## Defendant's case\n## Evidence packet\n## Authority boundaries\n\nGive both sides a fair path to win. The facts must be fictional; do not use real people. Do not invent statutes, constitutional articles, case names, citations, quotations, or book content. State that the Constitution is available through the listed library source, and that players must distinguish verified authority from a reasoned factual inference.` }],
       });
       setCasePacket({
         title: `The ${query.replace(/\s+/g, " ").trim()} claim`,
@@ -273,7 +273,7 @@ export default function GamesHub({
         packet: response.answer,
         authorities,
         materials: [libraryRecord],
-        sourceBasis: authorities.length ? "Official Kenya Law results + selected library reference" : "Constitution Article 2 + selected library reference",
+        sourceBasis: authorities.length ? "Issue-specific official Kenya Law results + selected library reference" : "Selected library reference + issue-specific reasoning where authority is unavailable",
       });
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "The case setter is unavailable.");
@@ -297,7 +297,7 @@ export default function GamesHub({
     setTrainingBusy(true);
     setTrainingResult(null);
     try {
-      const response = await askAI({ feature: "arena_training", mode: "general", messages: [{ role: "user", content: `Create training step ${trainingStep + 1} for an extreme beginner in Kenyan legal advocacy. Selected library reference metadata: ${JSON.stringify({ title: source.title, topic: source.topic, source: source.source, url: source.url })}. Constitution foundation: Article 2 and constitutional supremacy. Start with one small skill only: issue, fact/evidence, source, inference, opposing point, or structure. Do not dump a full moot. Return the drill JSON.` }] });
+      const response = await askAI({ feature: "arena_training", mode: "general", messages: [{ role: "user", content: `Create training step ${trainingStep + 1} for an extreme beginner in Kenyan legal advocacy. Selected library reference metadata: ${JSON.stringify({ title: source.title, topic: source.topic, source: source.source, url: source.url })}. The Constitution is available through the library source. First identify the issue, then use the relevant constitutional provision or supplied authority; do not default to Article 2 or Article 2(4). Article 2(4) is only for inconsistency with the Constitution. Start with one small skill only: issue, fact/evidence, source, inference, opposing point, or structure. Do not dump a full moot. Return the drill JSON.` }] });
       setTrainingDrill(parseJsonAnswer(response.answer));
       setTrainingAnswer("");
     } catch (error) { setNotice(error instanceof Error ? error.message : "Training drill unavailable."); }
@@ -308,7 +308,7 @@ export default function GamesHub({
     if (!source || !trainingDrill || !trainingAnswer.trim() || trainingBusy) return;
     setTrainingBusy(true);
     try {
-      const response = await askAI({ feature: "arena_training", mode: "general", messages: [{ role: "user", content: `Grade this beginner advocacy exercise as a Kenyan-law judge. Library metadata: ${JSON.stringify({ title: source.title, topic: source.topic, source: source.source, url: source.url })}. Constitution foundation: Article 2 and constitutional supremacy. DRILL: ${JSON.stringify(trainingDrill)}. STUDENT ANSWER: ${trainingAnswer.trim()}. Award marks for every valid point actually made, including a relevant source, fact/evidence, inference, issue, response to opposition, and clear structure. Separate verified authority from reasoning. Return the grading JSON exactly.` }] });
+      const response = await askAI({ feature: "arena_training", mode: "general", messages: [{ role: "user", content: `Grade this beginner advocacy exercise as a Kenyan-law judge. Library metadata: ${JSON.stringify({ title: source.title, topic: source.topic, source: source.source, url: source.url })}. The Constitution is available through the library source. Identify the issue before selecting authority. Award constitutional authority marks only for a provision relevant to this issue; Article 2(4) must not receive credit unless the answer addresses inconsistency with the Constitution. DRILL: ${JSON.stringify(trainingDrill)}. STUDENT ANSWER: ${trainingAnswer.trim()}. Award marks for every valid point actually made, including a relevant source, fact/evidence, inference, issue, response to opposition, and clear structure. Separate verified authority from reasoning. Return the grading JSON exactly.` }] });
       const result = parseJsonAnswer(response.answer) as Record<string, unknown>;
       setTrainingResult(result);
       const historyItem: TrainingHistoryItem = { title: trainingDrill.title, score: Number(result.score ?? 0), maxScore: Number(result.max_score ?? 100), outcome: String(result.outcome ?? "needs_more_practice"), date: new Date().toISOString() };
