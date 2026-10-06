@@ -27,6 +27,7 @@ export type AIFeature =
   | "kaizen_check"
   | "timetable_proposal"
   | "personal_timetable_proposal"
+  | "personal_timetable_replan"
   | "moot"
   | "moot_judge"
   | "moot_guide"
