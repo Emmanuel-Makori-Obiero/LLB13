@@ -14,6 +14,12 @@
 .scheduled-hero h1 { max-width: 780px; margin: 18px 0 17px; color: var(--scheduled-forest); font: 500 clamp(48px, 8vw, 92px)/.96 Georgia, serif; letter-spacing: -.05em; }
 .scheduled-hero h1 em { color: var(--scheduled-clay); font-style: normal; }
 .scheduled-hero > p { max-width: 690px; margin: 0 0 29px; color: #58635b; font-size: 16px; line-height: 1.7; }
+.scheduled-date-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-bottom: 12px; color: #6a756e; font-size: 11px; }
+.scheduled-date-controls > span { margin-right: 3px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.scheduled-date-controls button { padding: 8px 11px; border: 1px solid var(--scheduled-line); background: #fff; color: #526057; font: inherit; cursor: pointer; }
+.scheduled-date-controls button.active, .scheduled-date-controls button:hover { border-color: var(--scheduled-forest); background: var(--scheduled-forest); color: #fff; }
+.scheduled-date-controls label { margin-left: 5px; font-weight: 700; }
+.scheduled-date-controls input { min-height: 31px; padding: 0 7px; border: 1px solid var(--scheduled-line); background: #fff; color: var(--scheduled-ink); font: inherit; font-size: 11px; }
 .scheduled-search { display: grid; grid-template-columns: auto 220px 1fr auto; align-items: center; gap: 10px; max-width: 990px; padding: 10px; border: 1px solid var(--scheduled-line); background: #fff; box-shadow: 0 12px 32px rgba(21,59,45,.06); }
 .scheduled-search label { padding-left: 8px; color: #6a756e; font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
 .scheduled-search .scheduled-query-label { display: none; }
@@ -58,6 +64,8 @@
   .scheduled-search label { padding: 4px 4px 0; }
   .scheduled-search .scheduled-query-label { display: block; }
   .scheduled-search button { margin-top: 4px; }
+  .scheduled-date-controls { align-items: flex-start; }
+  .scheduled-date-controls label { width: auto; margin-left: 0; }
   .scheduled-list { grid-template-columns: 1fr; }
   .scheduled-results-head { align-items: start; flex-direction: column; gap: 12px; }
   .scheduled-caveat { grid-template-columns: 1fr; gap: 10px; margin-top: 42px; }

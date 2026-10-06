@@ -3,12 +3,21 @@ import { ArrowLeft, ArrowUpRight, CalendarDays, ExternalLink, Loader2, Search } 
 import { searchKenyaCauseLists, type KenyaCauseListResult } from "./lib/kenyaLaw";
 import "./scheduled-cases.css";
 
-const initialQuery = "Nairobi Milimani Law Courts cause list";
-
 type CourtScope = "all" | "high-court" | "magistrates";
+type DateMode = "today" | "upcoming" | "custom";
+
+const localDate = (date = new Date()) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
 
 export default function ScheduledCourtCasesPage() {
   const [scope, setScope] = useState<CourtScope>("all");
+  const [dateMode, setDateMode] = useState<DateMode>("today");
+  const [fromDate, setFromDate] = useState(localDate());
+  const [toDate, setToDate] = useState(localDate());
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<KenyaCauseListResult[]>([]);
   const [portalUrl, setPortalUrl] = useState("https://causelist.court.go.ke/causelist");
@@ -25,8 +34,19 @@ export default function ScheduledCourtCasesPage() {
     setError("");
     const scopeText = scope === "high-court" ? "High Court" : scope === "magistrates" ? "Chief Magistrate" : "High Court Magistrate";
     const searchQuery = `${scopeText} Nairobi Milimani Law Courts cause list ${query.trim()}`.trim();
+    const today = localDate();
+    const dates = dateMode === "today"
+      ? { fromDate: today, toDate: today }
+      : dateMode === "upcoming"
+        ? { fromDate: today, toDate: localDate(new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)) }
+        : { fromDate, toDate };
+    if (dateMode === "custom" && (!fromDate || !toDate || fromDate > toDate)) {
+      setError("Choose a valid date range. The start date must be on or before the end date.");
+      setBusy(false);
+      return;
+    }
     try {
-      const response = await searchKenyaCauseLists(searchQuery);
+      const response = await searchKenyaCauseLists(searchQuery, dates);
       setResults(response.results);
       setPortalUrl(response.judiciaryPortalUrl);
       setArchiveUrl(response.officialSearchUrl);
@@ -59,6 +79,13 @@ export default function ScheduledCourtCasesPage() {
           <div className="scheduled-kicker"><CalendarDays size={15} /> COURT SCHEDULES</div>
           <h1 id="scheduled-title">View scheduled<br /><em>court cases.</em></h1>
           <p>Search public cause-list documents for Nairobi and Milimani Law Courts. Choose a court level, add a case name or division if you know it, and open the official schedule.</p>
+          <div className="scheduled-date-controls" aria-label="Date range">
+            <span>Show</span>
+            <button type="button" className={dateMode === "today" ? "active" : ""} onClick={() => setDateMode("today")}>Today</button>
+            <button type="button" className={dateMode === "upcoming" ? "active" : ""} onClick={() => setDateMode("upcoming")}>Upcoming · 14 days</button>
+            <button type="button" className={dateMode === "custom" ? "active" : ""} onClick={() => setDateMode("custom")}>Custom range</button>
+            {dateMode === "custom" && <><label htmlFor="scheduled-from">From</label><input id="scheduled-from" type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} /><label htmlFor="scheduled-to">To</label><input id="scheduled-to" type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} /></>}
+          </div>
           <form className="scheduled-search" onSubmit={(event) => void search(event)} role="search">
             <label htmlFor="scheduled-scope">Court</label>
             <select id="scheduled-scope" value={scope} onChange={(event) => setScope(event.target.value as CourtScope)}>
@@ -70,7 +97,7 @@ export default function ScheduledCourtCasesPage() {
             <input id="scheduled-query" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Optional: case name, Civil, Criminal…" />
             <button type="submit" disabled={busy}>{busy ? <><Loader2 className="scheduled-spin" size={16} /> Checking</> : <><Search size={16} /> View schedules</>}</button>
           </form>
-          <div className="scheduled-source-note"><span>Source</span> Official Kenya Law cause-list archive, with a direct link to the Judiciary Causelist Portal for live station, division and date filters.</div>
+          <div className="scheduled-source-note"><span>Source</span> Official Kenya Law cause-list archive filtered to the selected dates, with a direct link to the Judiciary Causelist Portal for live station, division and date filters.</div>
         </section>
 
         <section className="scheduled-results" aria-live="polite" aria-labelledby="scheduled-results-title">

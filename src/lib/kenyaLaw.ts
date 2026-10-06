@@ -99,14 +99,14 @@ export async function searchKenyaLaw(query: string): Promise<KenyaLawCaseResult[
   return Array.isArray(data?.results) ? (data.results as KenyaLawCaseResult[]) : [];
 }
 
-export async function searchKenyaCauseLists(query: string): Promise<{
+export async function searchKenyaCauseLists(query: string, dates?: { fromDate?: string; toDate?: string }): Promise<{
   results: KenyaCauseListResult[];
   judiciaryPortalUrl: string;
   officialSearchUrl: string;
   caveat: string;
 }> {
   if (!supabase) throw new Error("Supabase is not configured.");
-  const { data, error } = await supabase.functions.invoke("kenya-law-search", { body: { query } });
+  const { data, error } = await supabase.functions.invoke("kenya-law-search", { body: { query, ...dates } });
   if (error) {
     let message = "The official cause-list search is unavailable right now.";
     try {
