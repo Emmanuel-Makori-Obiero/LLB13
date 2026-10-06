@@ -27,7 +27,12 @@ function newThread(): AgentThread {
 function safeFilename(value: string) {
   return value.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "lawyer-agent-session";
 }
-
+function localDate(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 function LawyerAvatar({ small = false }: { small?: boolean }) {
   return <div className={`lawyer-avatar ${small ? "small" : ""}`} aria-hidden="true"><svg viewBox="0 0 96 96" role="presentation"><circle cx="48" cy="48" r="46" className="lawyer-avatar-bg" /><path d="M21 87c3-17 14-25 27-25s24 8 27 25" className="lawyer-robe" /><path d="M39 60l9 11 9-11" className="lawyer-collar" /><ellipse cx="48" cy="40" rx="21" ry="24" className="lawyer-face" /><path d="M27 37c3-19 11-27 22-27 12 0 20 8 21 27-6-6-13-9-21-9s-15 3-22 9Z" className="lawyer-hair" /><circle cx="40" cy="41" r="2.5" className="lawyer-eye" /><circle cx="56" cy="41" r="2.5" className="lawyer-eye" /><path d="M44 51c3 2 5 2 8 0" className="lawyer-mouth" /><path d="M69 22l9 9m-4-13-9 9" className="lawyer-gavel" /></svg></div>;
 }
@@ -97,11 +102,17 @@ export default function FloatingLawyerAgent({ currentPage, onOpenDictionary, his
       updateMessages([...next, { role: "assistant", text: `**${local.term}**\n\n${local.definition}${local.example ? `\n\n**Example:** ${local.example}` : ""}\n\n*Study definition from the Group 13 dictionary. Check the governing Kenyan authority for your question.*` }]);
       return;
     }
-    const wantsCauseList = /\b(cause\s*list|causelist|court\s+schedule|scheduled\s+(case|hearing)|milimani\s+law\s+courts)\b/i.test(question);
+    const wantsCauseList = /\b(cause\s*list|causelist|court\s+schedule|scheduled\s+(case|hearing)|milimani\s+(law\s+)?courts?|court\s+case(?:s)?\s+(today|tomorrow|upcoming)|case(?:s)?\s+(today|tomorrow|upcoming)\s+(at|in)\s+milimani)\b/i.test(question);
     if (wantsCauseList) {
       setBusy(true);
       try {
-        const response = await searchKenyaCauseLists(question);
+        const today = localDate();
+        const dates = /\btoday\b/i.test(question)
+          ? { fromDate: today, toDate: today }
+          : /\b(upcoming|tomorrow)\b/i.test(question)
+            ? { fromDate: today, toDate: localDate(new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)) }
+            : undefined;
+        const response = await searchKenyaCauseLists(`${question} cause list`, dates);
         const text = response.results.length
           ? `**Official Nairobi/Milimani cause-list results**\n\n${response.results.map((result) => `- [${result.title}](${result.url})${result.dateRange ? ` — ${result.dateRange}` : ""}`).join("\n")}\n\n[Open the Judiciary Causelist Portal](${response.judiciaryPortalUrl}) · [Open the Kenya Law cause-list search](${response.officialSearchUrl})\n\n*${response.caveat}*`
           : `I could not find a matching public Nairobi/Milimani cause-list document. [Open the Judiciary Causelist Portal](${response.judiciaryPortalUrl}) to check the live station, division and date filters.\n\n*${response.caveat}*`;

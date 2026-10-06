@@ -150,3 +150,5 @@
 :root[data-theme="dark"] .kl-study-note { border-color: #34483d; }
 :root[data-theme="dark"] .kl-study-note > p { color: #a8b9ad; }
 :root[data-theme="dark"] .kl-footer { border-color: #34483d; }
+
+.kl-page { background-image: linear-gradient(var(--wallpaper-overlay), var(--wallpaper-overlay)), var(--user-wallpaper); background-position: center center; background-repeat: no-repeat; background-size: cover; background-attachment: fixed; }

@@ -1035,3 +1035,8 @@ h2 {
 :root[data-theme="dark"] .empty, :root[data-theme="dark"] .empty-state { background: var(--white); color: var(--muted); border-color: var(--line); }
 :root[data-theme="dark"] .auth-page, :root[data-theme="dark"] .auth-panel { background: var(--paper); color: var(--ink); }
 .theme-toggle { display: inline-flex; align-items: center; justify-content: center; }
+
+:root { --user-wallpaper: none; }
+html, body { background-color: var(--paper); background-image: var(--user-wallpaper); background-position: center center; background-repeat: no-repeat; background-size: cover; background-attachment: fixed; }
+.app-shell { background: transparent; }
+:root[data-theme="dark"] html, :root[data-theme="dark"] body { background-color: var(--paper); }

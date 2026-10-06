@@ -251,6 +251,12 @@ function App() {
   const [musicIndex, setMusicIndex] = useState(0);
   const [musicPlaying, setMusicPlaying] = useState(false);
   const isAdmin = adminState === "yes";
+  useEffect(() => {
+    document.documentElement.style.setProperty(
+      "--user-wallpaper",
+      profile.wallpaperUrl ? `url(${JSON.stringify(profile.wallpaperUrl)})` : "none",
+    );
+  }, [profile.wallpaperUrl]);
 
   const playMusicQueue = (tracks: PlayerTrack[], index = 0) => {
     if (!tracks.length) return;

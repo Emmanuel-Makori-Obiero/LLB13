@@ -101,7 +101,7 @@ function parseCauseLists(html: string, query: string): CauseListResult[] {
   const results: CauseListResult[] = [];
   const seen = new Set<string>();
   const terms = query.toLowerCase().split(/\s+/).filter((term) =>
-    term.length >= 4 && !["find", "search", "look", "list", "case", "cases", "court", "courts", "cause", "causelists", "listings", "any", "there", "is"].includes(term)
+    term.length >= 4 && !["find", "search", "look", "list", "case", "cases", "court", "courts", "cause", "causelists", "listings", "any", "there", "is", "today", "tomorrow", "upcoming", "nairobi", "milimani"].includes(term)
   );
   const anchorPattern = /<a[^>]+href=["'](\/akn\/ke\/doc\/[^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
   for (const match of html.matchAll(anchorPattern)) {
@@ -301,7 +301,7 @@ Deno.serve(async (request) => {
   const query = String(body.query ?? "").trim().replace(/\s+/g, " ");
   if (query.length < 3) return json({ error: "Enter at least three characters to search." }, 400);
   if (query.length > 180) return json({ error: "Keep the case query under 180 characters." }, 400);
-  if (/\b(cause\s*list|causelist|court\s+schedule|scheduled\s+(case|hearing)|milimani\s+law\s+courts)\b/i.test(query)) {
+  if (/\b(cause\s*list|causelist|court\s+schedule|scheduled\s+(case|hearing)|milimani\b|court\s+case(?:s)?\s+(today|tomorrow|upcoming)|case(?:s)?\s+(today|tomorrow|upcoming)\s+(at|in)\s+milimani)\b/i.test(query)) {
     const fromDate = typeof body.fromDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.fromDate) ? body.fromDate : undefined;
     const toDate = typeof body.toDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.toDate) ? body.toDate : undefined;
     const discovered = await discoverCauseLists(query, fromDate, toDate);

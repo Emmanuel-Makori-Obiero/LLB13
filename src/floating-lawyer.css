@@ -55,3 +55,15 @@
 .floating-lawyer-form button { display: grid; place-items: center; width: 34px; border: 0; background: var(--forest); color: #fff; cursor: pointer; }
 .floating-lawyer-form button:disabled { opacity: .45; cursor: not-allowed; }
 @media(max-width:760px){.floating-lawyer{right:10px;bottom:calc(78px + env(safe-area-inset-bottom))}.floating-lawyer-panel{max-height:calc(100vh - 150px)}}
+
+:root[data-theme="dark"] .floating-lawyer-panel { background: #19231e; border-color: #6b927c; box-shadow: 0 18px 48px rgba(0,0,0,.55); color: #edf4ef; }
+:root[data-theme="dark"] .floating-lawyer-body, :root[data-theme="dark"] .floating-lawyer-history { background: #111815; color: #edf4ef; }
+:root[data-theme="dark"] .floating-lawyer-welcome, :root[data-theme="dark"] .floating-lawyer-message.assistant, :root[data-theme="dark"] .floating-lawyer-form { background: #19231e; color: #edf4ef; border-color: #40574a; }
+:root[data-theme="dark"] .floating-lawyer-message.user { background: #3b2a24; color: #fff1e8; }
+:root[data-theme="dark"] .floating-lawyer-message span, :root[data-theme="dark"] .floating-lawyer-history-head { color: #b9e0c8; }
+:root[data-theme="dark"] .floating-lawyer-history-row.active { background: #263b30; }
+:root[data-theme="dark"] .floating-lawyer-quick button, :root[data-theme="dark"] .floating-lawyer-history-head button { background: #202f27; color: #c7e2d0; border-color: #40574a; }
+:root[data-theme="dark"] .floating-lawyer-form input { background: #111815; color: #edf4ef; border-color: #526d5d; }
+:root[data-theme="dark"] .floating-lawyer-export { background: #263b30; color: #c7e2d0; }
+.floating-lawyer-message, .floating-lawyer-welcome, .floating-lawyer-form input { font-family: "DM Sans", system-ui, sans-serif; }
+.floating-lawyer-title strong { font: 700 16px "DM Sans", system-ui, sans-serif; }
