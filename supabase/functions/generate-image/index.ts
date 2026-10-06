@@ -17,7 +17,7 @@ function findImageData(value: unknown): string | null {
   for (const child of Object.values(record)) { const found = findImageData(child); if (found) return found; }
   return null;
 }
-function findText(value: unknown): string { if (Array.isArray(value)) return value.map(findText).filter(Boolean).join("\n"); if (!value || typeof value !== "object") return ""; const record = value as Record<string, unknown>; if (typeof record.text === "string") return record.text; return Object.values(record).map(findText).filter(Boolean).join("\n"); }
+function findText(value: unknown): string { if (Array.isArray(value)) return value.map(findText).filter(Boolean).join("\n"); if (!value || typeof value !== "object") return ""; const record = value as Record<string, unknown>; for (const key of ["text", "message", "detail", "status"]) if (typeof record[key] === "string") return String(record[key]); return Object.values(record).map(findText).filter(Boolean).join("\n"); }
 async function geminiImage(args: { prompt: string; keys: string[]; imageBase64?: string; imageMimeType?: string; model: string; aspectRatio: string; imageSize: string }) {
   const failures: string[] = [];
   const input = args.imageBase64 ? [{ type: "text", text: args.prompt }, { type: "image", data: imageData(args.imageBase64).data, mime_type: args.imageMimeType || imageData(args.imageBase64).mimeType }] : [{ type: "text", text: args.prompt }];
@@ -63,7 +63,9 @@ Deno.serve(async (req) => {
   if ((operation === "edit" || operation === "analyze") && !body.image_base64) return json({ error: "Upload an image before asking Image Studio to revise or analyze it." }, 400);
   try { const quota = await reserveAiQuota(admin, auth.user.id, "image"); if (!quota.allowed) return json({ error: `Hourly image limit reached (${quota.quota}). Try again later.`, retry_after_seconds: quota.retry_after_seconds }, 429); } catch (error) { return json({ error: error instanceof Error ? error.message : "AI quota service is unavailable." }, 503); }
   if (!geminiEnabled || !geminiKeys.length) return json({ error: "Gemini image tools are not configured. Add GEMINI_API_KEY_1 and set GEMINI_IMAGE_ENABLED=true in Supabase Edge Function secrets." }, 503);
-  const imageModel = body.model || Deno.env.get("GEMINI_IMAGE_MODEL") || "gemini-2.5-flash-image"; const visionModel = Deno.env.get("GEMINI_VISION_MODEL") || "gemini-2.5-flash";
+  // Gemini's current image-generation route is the Interactions API with Nano Banana 2.
+  // Keep the model override for administrators, but do not default to the older 2.5 image model here.
+  const imageModel = body.model || Deno.env.get("GEMINI_IMAGE_MODEL") || "gemini-3.1-flash-image"; const visionModel = Deno.env.get("GEMINI_VISION_MODEL") || "gemini-2.5-flash";
   try {
     if (operation === "analyze") return json({ analysis: await analyzeGemini({ prompt, keys: geminiKeys, imageBase64: body.image_base64!, imageMimeType: body.image_mime_type || "image/png", model: visionModel }), provider: "gemini-vision", model: visionModel });
     const width = Math.min(1536, Math.max(512, Number(body.width) || 1024)); const height = Math.min(1536, Math.max(512, Number(body.height) || 1024)); const ratio = width / height > 1.6 ? "16:9" : width / height < 0.7 ? "9:16" : "1:1";
