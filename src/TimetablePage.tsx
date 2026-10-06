@@ -289,6 +289,17 @@ export default function TimetablePage({
     finally { setPersonalAIbusy(false); }
   };
 
+  const applyReplanActions = async (actions: ReplanAction[]) => {
+    let next = [...personalLessons];
+    for (const action of actions) {
+      if (action.action === "cancel" && action.lesson_id) { await repository.deletePersonalLesson(action.lesson_id); next = next.filter((lesson) => lesson.id !== action.lesson_id); }
+      if (action.action === "update" && action.lesson_id && action.lesson) { const updated = await repository.updatePersonalLesson(action.lesson_id, action.lesson); next = next.map((lesson) => lesson.id === action.lesson_id ? updated : lesson); }
+      if (action.action === "add" && action.lesson) { const created = await repository.createPersonalLesson(action.lesson); await repository.createTodo({ title: `Prepare: ${created.topic}`, due: created.lesson_date, completed: false, source: "manual" }); next.push(created); }
+    }
+    setPersonalLessons(next);
+    return next;
+  };
+
   const generateReplanProposal = async () => {
     if (!replanInstruction.trim() || personalAIBusy) { if (!replanInstruction.trim()) setNotice("Describe what changed first, such as a missed day, urgent deadline, cancellation, or new commitment."); return; }
     setPersonalAIbusy(true);
@@ -310,8 +321,14 @@ export default function TimetablePage({
         if (item.action === "cancel") return Boolean(item.lesson_id && currentIds.has(item.lesson_id));
         return Boolean(item.lesson && /^\d{4}-\d{2}-\d{2}$/.test(item.lesson.lesson_date) && (item.action === "add" || (item.action === "update" && item.lesson_id && currentIds.has(item.lesson_id))));
       }) : [];
-      setReplanProposal({ title: String(raw.title ?? "Personal timetable update"), rationale: String(raw.rationale ?? "Your timetable was adapted around the change you described."), actions });
-      setNotice(actions.length ? "A timetable update is ready. Review each change before applying it." : "No timetable changes were needed for that description.");
+      const proposal = { title: String(raw.title ?? "Personal timetable update"), rationale: String(raw.rationale ?? "Your timetable was adapted around the change you described."), actions };
+      setReplanProposal(proposal);
+      if (actions.length) {
+        await applyReplanActions(actions);
+        setReplanProposal(null);
+        setReplanInstruction("");
+        setNotice(`${actions.length} timetable change${actions.length === 1 ? "" : "s"} automatically applied from your description.`);
+      } else setNotice("No timetable changes were needed for that description.");
     } catch (error) { setNotice(error instanceof Error ? error.message : "Could not adapt your personal timetable."); }
     finally { setPersonalAIbusy(false); }
   };
@@ -320,13 +337,7 @@ export default function TimetablePage({
     if (!replanProposal || personalAIBusy) return;
     setPersonalAIbusy(true);
     try {
-      let next = [...personalLessons];
-      for (const action of replanProposal.actions) {
-        if (action.action === "cancel" && action.lesson_id) { await repository.deletePersonalLesson(action.lesson_id); next = next.filter((lesson) => lesson.id !== action.lesson_id); }
-        if (action.action === "update" && action.lesson_id && action.lesson) { const updated = await repository.updatePersonalLesson(action.lesson_id, action.lesson); next = next.map((lesson) => lesson.id === action.lesson_id ? updated : lesson); }
-        if (action.action === "add" && action.lesson) { const created = await repository.createPersonalLesson(action.lesson); await repository.createTodo({ title: `Prepare: ${created.topic}`, due: created.lesson_date, completed: false, source: "manual" }); next.push(created); }
-      }
-      setPersonalLessons(next); setReplanProposal(null); setReplanInstruction("");
+      await applyReplanActions(replanProposal.actions); setReplanProposal(null); setReplanInstruction("");
       setNotice(`${replanProposal.actions.length} timetable change${replanProposal.actions.length === 1 ? "" : "s"} applied.`);
     } catch (error) { setNotice(error instanceof Error ? error.message : "Could not apply the timetable changes."); }
     finally { setPersonalAIbusy(false); }
@@ -393,8 +404,8 @@ export default function TimetablePage({
           ) : null}
         </div>
       )}
-      {schedule === "personal" && <div className="card card-pad personal-ai-builder"><div className="game-kicker"><Sparkles size={14} /> Personal AI timetable coach</div><h2>Describe your life. Get a plan.</h2><p>Tell the coach about your classes, sleep, work, family responsibilities, commute, goals and extracurricular activities. Uploading a timetable is optional. The coach checks the current group timetable automatically and proposes a plan for your approval.</p><label className="personal-ai-label">Your routine and goals<textarea rows={5} value={personalInstruction} onChange={(event) => setPersonalInstruction(event.target.value)} placeholder="Example: I work Monday to Friday until 5pm, sleep by 10:30pm, commute for an hour, want to revise Constitutional Law and play football on Saturday morning…" /></label><label className="personal-ai-upload"><FileUp size={15} /> Optional timetable upload<input type="file" accept=".pdf,.docx,.pptx,.txt,.md,.csv" onChange={(event) => void readPersonalTimetableFile(event.target.files?.[0])} />{personalUploadName && <span>{personalUploadName} ready</span>}</label><button className="primary-button" onClick={() => void generatePersonalProposal()} disabled={personalAIBusy || !personalInstruction.trim()}>{personalAIBusy ? "Building your personal plan…" : "Propose my timetable"}</button></div>}
-      {schedule === "personal" && <div className="card card-pad personal-ai-replanner"><div className="game-kicker"><Sparkles size={14} /> Adapt my current timetable</div><h2>Tell it what changed.</h2><p>Describe a missed day, an urgent deadline, a cancellation, or a new commitment. The coach will propose only the necessary additions, moves, and cancellations; nothing changes until you approve it.</p><textarea rows={3} value={replanInstruction} onChange={(event) => { setReplanInstruction(event.target.value); setReplanProposal(null); }} placeholder="Example: I could not study Constitutional Law today. The assignment is due tomorrow, so move tonight’s football block and put a two-hour assignment block tomorrow morning." /><button className="secondary-button" onClick={() => void generateReplanProposal()} disabled={personalAIBusy || !replanInstruction.trim()}>{personalAIBusy ? "Replanning…" : "Review timetable changes"}</button></div>}
+      {schedule === "personal" && <div className="card card-pad personal-ai-builder"><div className="game-kicker"><Sparkles size={14} /> Personal AI timetable coach</div><h2>Describe your life. Get a plan.</h2><p>Tell the coach about your classes, sleep, work, family responsibilities, commute, goals and extracurricular activities. Uploading a timetable is optional. The coach checks the current group timetable automatically and proposes a plan for your approval.</p><label className="personal-ai-label">Your routine and goals<textarea rows={5} value={personalInstruction} onChange={(event) => setPersonalInstruction(event.target.value)} placeholder="Example: I work Monday to Friday until 5pm, sleep by 10:30pm, commute for an hour, want to revise Constitutional Law and play football on Saturday morning…" /></label><label className="personal-ai-upload"><FileUp size={15} /> Optional timetable upload<input type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md,.rtf,.csv,.json,.html,application/*,text/*" onChange={(event) => void readPersonalTimetableFile(event.target.files?.[0])} />{personalUploadName && <span>{personalUploadName} ready</span>}</label><button className="primary-button" onClick={() => void generatePersonalProposal()} disabled={personalAIBusy || !personalInstruction.trim()}>{personalAIBusy ? "Building your personal plan…" : "Propose my timetable"}</button></div>}
+      {schedule === "personal" && <div className="card card-pad personal-ai-replanner"><div className="game-kicker"><Sparkles size={14} /> Adapt my current timetable</div><h2>Tell it what changed.</h2><p>Describe a missed day, an urgent deadline, a cancellation, or a new commitment. The coach will validate the necessary additions, moves, and cancellations, then apply them automatically.</p><textarea rows={3} value={replanInstruction} onChange={(event) => { setReplanInstruction(event.target.value); setReplanProposal(null); }} placeholder="Example: I could not study Constitutional Law today. The assignment is due tomorrow, so move tonight’s football block and put a two-hour assignment block tomorrow morning." /><button className="secondary-button" onClick={() => void generateReplanProposal()} disabled={personalAIBusy || !replanInstruction.trim()}>{personalAIBusy ? "Replanning…" : "Adapt my timetable"}</button></div>}
       {replanProposal && schedule === "personal" && <div className="card card-pad personal-ai-proposal"><div className="section-label">Review timetable changes</div><h2>{replanProposal.title}</h2><p>{replanProposal.rationale}</p><div className="row-list">{replanProposal.actions.map((action, index) => <div className="row" key={`${action.action}-${action.lesson_id ?? "new"}-${index}`}><div className="row-main"><div className="row-title">{action.action === "add" ? "Add" : action.action === "update" ? "Move / update" : "Cancel"}: {action.lesson?.topic ?? personalLessons.find((lesson) => lesson.id === action.lesson_id)?.topic ?? "personal event"}</div><div className="row-meta">{action.lesson ? `${action.lesson.lesson_date} · ${hm(action.lesson.start_time)}–${hm(action.lesson.end_time)}` : "Existing timetable event"} · {action.reason}</div></div></div>)}</div><div className="arena-invite-actions"><button className="primary-button" onClick={() => void applyReplanProposal()} disabled={personalAIBusy}>Apply these changes</button><button className="secondary-button" onClick={() => setReplanProposal(null)} disabled={personalAIBusy}>Discard proposal</button></div></div>}
       {personalProposal && schedule === "personal" && <div className="card card-pad personal-ai-proposal"><div className="section-label">Review before applying</div><h2>{personalProposal.title}</h2><p>{personalProposal.rationale}</p><div className="row-list">{personalProposal.lessons.map((lesson, index) => <div className="row" key={`${lesson.lesson_date}-${lesson.topic}-${index}`}><div className="row-main"><div className="row-title">{lesson.topic}</div><div className="row-meta">{lesson.lesson_date} · {hm(lesson.start_time)}–{hm(lesson.end_time)} · {lesson.venue || "Personal"}</div></div></div>)}</div><div className="arena-invite-actions"><button className="primary-button" onClick={() => void approvePersonalProposal()} disabled={personalAIBusy}>Approve and add to my timetable</button><button className="secondary-button" onClick={() => setPersonalProposal(null)} disabled={personalAIBusy}>Keep editing description</button></div></div>}
       {days.length === 0 && (

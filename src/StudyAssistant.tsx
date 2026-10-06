@@ -597,7 +597,7 @@ export function StudyAssistant() {
               type="file"
               hidden
               multiple
-              accept=".pdf,.docx,.txt,.md"
+              accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md,.rtf,.csv,.json,.html,application/*,text/*"
               onChange={(e) => void onUpload(e.target.files)}
             />
           </div>

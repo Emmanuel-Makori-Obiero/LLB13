@@ -237,8 +237,9 @@ export async function uploadMaterial(
   file: File,
   citation?: string,
 ): Promise<{ id: string; chunks: number }> {
+  if (!file.size) throw new Error("The selected file is empty. Choose a file with at least 1 byte.");
   const text = (await extractText(file)).trim();
-  if (text.length < 50)
+  if (!text.length)
     throw new Error(
       "No readable text found. Scanned PDFs need OCR before upload.",
     );
@@ -254,7 +255,7 @@ export async function importLibraryMaterial(source: { title: string; url?: strin
   const extension = (new URL(source.url).pathname.match(/\.([a-z0-9]+)$/i)?.[1] || "pdf").toLowerCase();
   const file = new File([blob], `${source.title.replace(/[^a-z0-9._-]+/gi, "-")}.${extension}`, { type: blob.type || "application/octet-stream" });
   const text = (await extractText(file)).trim();
-  if (text.length < 50) throw new Error(`${source.title} has no readable text. Scanned files need OCR first.`);
+  if (!text.length) throw new Error(`${source.title} has no readable text. Scanned files need OCR first.`);
   return saveTextMaterial(source.title, text, source.citation ?? undefined);
 }
 
@@ -268,7 +269,7 @@ export async function saveTextMaterial(
   const { data: u } = await db().auth.getUser();
   if (!u.user) throw new Error("Sign in first.");
   const clean = text.trim();
-  if (clean.length < 50)
+  if (!clean.length)
     throw new Error("There is not enough text to work with yet.");
   const { data: old } = await db()
     .from("ai_documents")

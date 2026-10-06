@@ -566,7 +566,7 @@ export default function LearningStudio() {
           </p>
           <label className="secondary-button studio-upload-source">
             <Upload size={14} /> {uploadingSource ? "Uploading…" : "Upload book"}
-            <input type="file" accept=".pdf,.doc,.docx,.txt,.md" disabled={uploadingSource} onChange={(event) => void uploadSourceBook(event.target.files?.[0])} />
+            <input type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md,.rtf,.csv,.json,.html,application/*,text/*" disabled={uploadingSource} onChange={(event) => void uploadSourceBook(event.target.files?.[0])} />
           </label>
           {docs.length === 0 ? (
             <div className="empty">No AI-ready sources yet. Upload a book or finish a transcript above.</div>
