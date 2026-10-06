@@ -5,7 +5,8 @@ export const AI_QUOTAS = {
   // Metadata extraction is a short, low-cost request and has its own allowance.
   book_metadata: 1000,
   podcast: 5,
-  image: 3,
+  // Multiple providers may be tried for one request; keep enough headroom for fallbacks.
+  image: 10,
   video: 1,
 } as const;
 
