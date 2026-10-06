@@ -67,3 +67,36 @@
 :root[data-theme="dark"] .floating-lawyer-export { background: #263b30; color: #c7e2d0; }
 .floating-lawyer-message, .floating-lawyer-welcome, .floating-lawyer-form input { font-family: "DM Sans", system-ui, sans-serif; }
 .floating-lawyer-title strong { font: 700 16px "DM Sans", system-ui, sans-serif; }
+
+.floating-lawyer-form .floating-lawyer-attach {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 32px;
+  width: 32px;
+  min-width: 32px;
+  padding: 0;
+  border: 0;
+  border-right: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.floating-lawyer-form .floating-lawyer-attach:hover:not(:disabled) { color: var(--forest); background: var(--soft); }
+.floating-lawyer-attachment-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+.floating-lawyer-attachment-note button {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: var(--oxblood);
+  font: inherit;
+  cursor: pointer;
+}
