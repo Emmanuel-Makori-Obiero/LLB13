@@ -307,7 +307,7 @@ const json = (b: unknown, status = 200) =>
 const MAX_MSG_CHARS = 20_000; // research drafts are long
 const MAX_HISTORY = 12;
 const JURISDICTION = Deno.env.get("AI_DEFAULT_JURISDICTION") ?? "Kenya";
-const CHUNKS_PER_QUERY = 8;
+const CHUNKS_PER_QUERY = 12;
 const CHUNKS_PART = 10; // sections per 'notes' call: the client walks through a transcript part by part
 const CHUNKS_DOC_WIDE = 24; // about 29k characters: enough to cover a long lecture in broad strokes
 
@@ -475,14 +475,27 @@ const STOP = new Set(
   ),
 );
 function toTsQuery(text: string): string {
-  const tokens = [
-    ...new Set(
-      (text.toLowerCase().match(/[a-z0-9]{3,}/g) ?? []).filter(
-        (t) => !STOP.has(t),
-      ),
-    ),
-  ].slice(0, 14);
-  return tokens.join(" | ");
+  // Turn natural questions into a useful legal search instead of searching
+  // filler such as "can you explain what is".
+  const expansions: Record<string, string[]> = {
+    contract: ["contract", "agreement", "offer", "acceptance", "consideration", "terms", "breach"],
+    agreement: ["agreement", "contract", "offer", "acceptance", "consideration"],
+    tort: ["tort", "negligence", "duty", "breach", "damage", "remedy"],
+    negligence: ["negligence", "duty", "breach", "damage", "causation", "remedy"],
+    constitution: ["constitution", "article", "rights", "principles", "government", "sovereignty"],
+    constitutional: ["constitutional", "constitution", "article", "rights", "principles"],
+    property: ["property", "land", "ownership", "title", "possession", "transfer"],
+    criminal: ["criminal", "offence", "actus", "reus", "mens", "rea", "defence", "sentence"],
+    evidence: ["evidence", "proof", "admissibility", "witness", "document", "burden"],
+    employment: ["employment", "labour", "worker", "employee", "employer", "contract", "termination"],
+  };
+  const raw = (text.toLowerCase().match(/[a-z0-9]{3,}/g) ?? []).filter((t) => !STOP.has(t));
+  const terms = new Set<string>();
+  for (const token of raw) {
+    terms.add(token);
+    for (const related of expansions[token] ?? []) terms.add(related);
+  }
+  return [...terms].slice(0, 24).join(" | ");
 }
 
 interface Source {
@@ -571,6 +584,28 @@ async function retrieve(
     });
     if (error) throw new Error("retrieval failed");
     rows = data ?? [];
+    // A single matching chunk can omit the definition or exception immediately
+    // before/after it. Pull a small amount of adjacent text for book-like reading.
+    const contextRows: typeof rows = [];
+    for (const row of rows.slice(0, 12)) {
+      const { data: nearby } = await db
+        .from("ai_chunks")
+        .select("document_id, idx, content, ai_documents(title, citation)")
+        .eq("document_id", row.document_id)
+        .gte("idx", Math.max(0, Number((row as { idx?: number }).idx ?? 0) - 1))
+        .lte("idx", Number((row as { idx?: number }).idx ?? 0) + 1)
+        .order("idx")
+        .limit(3);
+      for (const item of nearby ?? []) contextRows.push({
+        document_id: item.document_id,
+        title: item.ai_documents?.title,
+        citation: item.ai_documents?.citation,
+        content: item.content,
+      });
+    }
+    const unique = new Map<string, typeof rows[number]>();
+    for (const row of [...rows, ...contextRows]) unique.set(`${row.document_id}:${row.content}`, row);
+    rows = [...unique.values()].slice(0, 24);
   }
   return rows.map((r, i) => ({
     tag: `S${i + 1}`,
@@ -625,9 +660,9 @@ Use this foundation for constitutional hierarchy only. It does not supply the te
     return `${base}${task}\nGROUNDING (strict): Use ONLY the provided <sources>. Cite selected material inline as [S1], [S2] etc., using only the ids provided. If a requested case or provision is not in the selected sources, do not name a case from memory; add the KENYA_LAW_SEARCH marker required above with a neutral issue or statute phrase. Do not fill the gap from memory. If the sources do not answer the question, say that clearly instead of guessing.`;
   }
   if (hasSources) {
-    return `${base}${task}\nGROUNDING: Prefer the provided <sources> and cite them inline as [S1], [S2] (only provided ids). Use Article 2 above only for constitutional hierarchy. Do not introduce case citations or exact provisions from memory; if a requested authority is absent, add the KENYA_LAW_SEARCH marker with a neutral issue or statute phrase.`;
+    return `${base}${task}\nGROUNDING (source-first): First understand and use the provided <sources> as the primary book/document evidence. Answer natural questions in the student's wording, not only questions that repeat the book's exact headings. Cite the relevant passages as [S1], [S2] (only provided ids). If the sources do not contain a requested Kenyan authority or current legal detail, do not fill the gap from memory: add the KENYA_LAW_SEARCH marker with a neutral issue or statute phrase and clearly say that external verification is needed. General explanations may be given only when they do not assert an unsupported case, statute, article, quotation, or current legal position.`;
   }
-  return `${base}${task}\nNO SOURCES: Answer general legal study questions directly. Use only the verified Article 2 foundation above for exact constitutional claims; do not cite cases or exact provisions from memory. If the student asks for case authorities, use the KENYA_LAW_SEARCH marker for a neutral issue search rather than guessing a case name. Do not add a generic source disclaimer.`;
+  return `${base}${task}\nNO SOURCES: Answer general legal study questions in plain language, but do not invent authority. For Kenyan cases, statutes, exact articles, quotations, or current legal positions, use the KENYA_LAW_SEARCH marker for a neutral official-source search and say that the result needs verification. Do not pretend that a general explanation came from a selected book when no source text was retrieved.`;
 }
 
 function sanitizeMessages(
