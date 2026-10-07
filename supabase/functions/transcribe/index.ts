@@ -92,10 +92,11 @@ Deno.serve(async (request) => {
       413,
     );
 
-  const rawLanguage = String(form.get("language") ?? "")
-    .split("-")[0]
+  const requestedLanguage = String(form.get("language") ?? "")
+    .trim()
     .toLowerCase();
-  const language = /^[a-z]{2}$/.test(rawLanguage) ? rawLanguage : "";
+  const rawLanguage = requestedLanguage.split("-")[0];
+  const language = /^[a-z]{2}$/.test(rawLanguage) && rawLanguage !== "auto" ? rawLanguage : "";
   const transcriptId = String(form.get("transcript_id") ?? "");
   const idx = Number(form.get("idx") ?? 0);
   const offset = Number(form.get("offset") ?? 0) || 0;
@@ -151,7 +152,12 @@ Deno.serve(async (request) => {
   body.append("response_format", "verbose_json");
   body.append("temperature", "0");
   if (language) body.append("language", language);
-  if (language === "en") body.append("prompt", `${LAW_PROMPT}${continuation ? ` Continue naturally from the previous recording. Recent transcript context:\n${continuation}` : ""}`);
+  const languagePrompt = language === "sw"
+    ? "Transcribe Kenyan Kiswahili accurately. Preserve Kiswahili spelling, names, legal terms, code-switching, Sheng expressions and the speaker's exact wording; do not translate into English. Example wording to preserve exactly when heard: nataka tuendelee kusoma hii kitabu lec alisema."
+    : requestedLanguage === "auto"
+      ? "Detect Kenyan English, Kiswahili, and Sheng. Preserve code-switching and the exact words spoken; do not translate, clean up, or replace Sheng with standard English."
+      : "Transcribe Kenyan English accurately, preserving names and legal terminology.";
+  body.append("prompt", `${LAW_PROMPT} ${languagePrompt}${continuation ? ` Continue naturally from the previous recording. Recent transcript context:\n${continuation}` : ""}`);
 
   const result = await fetch(
     "https://api.groq.com/openai/v1/audio/transcriptions",

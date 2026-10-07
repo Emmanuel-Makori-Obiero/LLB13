@@ -503,8 +503,11 @@ async function retrieve(
   size = CHUNKS_PART,
 ): Promise<Source[]> {
   if (mode === "general") return [];
-  const scope =
-    mode === "materials" ? "user" : mode === "library" ? "library" : "any";
+  // An explicit document selection is authoritative. The mode may be "auto", but
+  // retrieval must still stay inside the selected document ids.
+  const scope = docIds?.length
+    ? "any"
+    : mode === "materials" ? "user" : mode === "library" ? "library" : "any";
   let rows: {
     document_id: string;
     title: string;
@@ -619,7 +622,7 @@ Use this foundation for constitutional hierarchy only. It does not supply the te
     return `${base}${task}\nGROUNDING (strict): Treat <sources> as the only evidence. The generated text in the student's request is the object being audited, not a source. Do not repair it silently, and do not introduce a case, statute, quotation, spelling or citation detail that is absent from <sources>. If the transcript/source itself is unclear or incomplete, mark review rather than guessing. Follow the JSON shape exactly.`;
   }
   if (hasSources && (mode === "materials" || mode === "library")) {
-    return `${base}${task}\nGROUNDING (strict): Use ONLY the provided <sources> and the Article 2 constitutional-hierarchy foundation above. Cite selected material inline as [S1], [S2] etc., using only the ids provided. If a requested case or provision is not in the selected sources, do not name a case from memory; add the KENYA_LAW_SEARCH marker required above with a neutral issue or statute phrase. Do not fill the gap from memory.`;
+    return `${base}${task}\nGROUNDING (strict): Use ONLY the provided <sources>. Cite selected material inline as [S1], [S2] etc., using only the ids provided. If a requested case or provision is not in the selected sources, do not name a case from memory; add the KENYA_LAW_SEARCH marker required above with a neutral issue or statute phrase. Do not fill the gap from memory. If the sources do not answer the question, say that clearly instead of guessing.`;
   }
   if (hasSources) {
     return `${base}${task}\nGROUNDING: Prefer the provided <sources> and cite them inline as [S1], [S2] (only provided ids). Use Article 2 above only for constitutional hierarchy. Do not introduce case citations or exact provisions from memory; if a requested authority is absent, add the KENYA_LAW_SEARCH marker with a neutral issue or statute phrase.`;
@@ -816,12 +819,13 @@ Deno.serve(async (req) => {
     return json({ error: "Could not search your materials. Try again." }, 500);
   }
 
-  const strict = mode === "materials" || mode === "library";
+  const hasExplicitDocuments = Boolean(docIds?.length);
+  const strict = hasExplicitDocuments || mode === "materials" || mode === "library";
   if (strict && sources.length === 0) {
     return json({
       answer:
-        mode === "materials"
-          ? "I couldn't find anything relevant in your uploaded materials. Upload the relevant notes or cases, pick different documents, or switch to Library or Any law mode."
+        mode === "materials" || hasExplicitDocuments
+          ? "I couldn't find anything relevant in the selected document(s). I will not guess from outside them. Try a phrase used in the document, select another source, or ask for a general-law search explicitly."
           : "I couldn't find anything relevant in the library. Try rephrasing, or switch to Any law mode.",
       basis: "none",
       grounded: false,
