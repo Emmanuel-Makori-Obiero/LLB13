@@ -23,9 +23,9 @@ function speechTurns(script: string): Turn[] {
   for (const rawLine of script.split(/\r?\n/)) {
     let line = rawLine.trim();
     if (!line || /^(SCENE\s*\d+\b|VISUAL:|SOURCE NOTE:)/i.test(line)) continue;
-    const speaker = line.match(/^(HOST|TUTOR|SPEAKER\s*1|SPEAKER\s*2)\s*:\s*(.*)$/i);
+    const speaker = line.match(/^(HOST|TUTOR|PRESENTER|LEGAL\s+GUIDE|SPEAKER\s*1|SPEAKER\s*2)\s*:\s*(.*)$/i);
     if (speaker) {
-      currentSpeaker = /^(TUTOR|SPEAKER\s*2)$/i.test(speaker[1].replace(/\s+/g, " ")) ? "TUTOR" : "HOST";
+      currentSpeaker = /^(TUTOR|LEGAL\s+GUIDE|SPEAKER\s*2)$/i.test(speaker[1].replace(/\s+/g, " ")) ? "TUTOR" : "HOST";
       line = speaker[2];
     }
     line = line
@@ -347,10 +347,11 @@ Deno.serve(async (req) => {
   if (!auth.user) return json({ error: "Sign in before creating audio." }, 401);
   const admin = createClient(url, service);
 
-  let body: { text?: string; title?: string; language?: "en" | "sw" };
+  let body: { text?: string; title?: string; language?: "en" | "sw" | "mix" | "sheng" };
   try { body = await req.json(); } catch { return json({ error: "Invalid JSON body." }, 400); }
   const text = String(body.text || "").trim();
-  const language: "en" | "sw" = body.language === "sw" ? "sw" : "en";
+  const language: "en" | "sw" | "mix" | "sheng" = body.language === "sw" ? "sw" : body.language === "mix" ? "mix" : body.language === "sheng" ? "sheng" : "en";
+  const providerLanguage: "en" | "sw" = language === "sw" ? "sw" : "en";
   if (text.length < 20) return json({ error: "The lesson or podcast script is too short." }, 400);
   if (text.length > 12000) return json({ error: "This script is too long for one audio request. Shorten the episode or generate it in parts." }, 400);
   const turns = speechTurns(text);
@@ -361,7 +362,7 @@ Deno.serve(async (req) => {
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : "AI quota service is unavailable." }, 503);
   }
-  if (!elevenLabsKeys.length && !(geminiEnabled && geminiKeys.length) && !(language === "en" && openAIEnabled && openAIKeys.length) && !(language === "en" && hfFallbackEnabled && hfTokens.length)) {
+  if (!elevenLabsKeys.length && !(geminiEnabled && geminiKeys.length) && !(providerLanguage === "en" && openAIEnabled && openAIKeys.length) && !(providerLanguage === "en" && hfFallbackEnabled && hfTokens.length)) {
     return json({ error: language === "sw" ? "Kiswahili audio needs ELEVENLABS_API_KEY_1 or GEMINI_API_KEY_1 in Supabase Edge Function secrets." : "No speech provider is configured. Add an ElevenLabs or Gemini API key; OpenAI TTS is also available when OPENAI_API_KEY_1 is configured." }, 503);
   }
   const hfModel = Deno.env.get("HF_TTS_MODEL") || "facebook/mms-tts-eng";
@@ -377,18 +378,18 @@ Deno.serve(async (req) => {
   let audio: AudioResult | null = null;
 
   if (elevenLabsKeys.length) {
-    try { audio = await generateElevenLabsAudio(text, elevenLabsKeys, language, elevenLabsModel, hostVoiceId, tutorVoiceId); }
+    try { audio = await generateElevenLabsAudio(text, elevenLabsKeys, providerLanguage, elevenLabsModel, hostVoiceId, tutorVoiceId); }
     catch (error) { failures.push(error instanceof Error ? error.message : String(error)); }
   }
   if (!audio && geminiEnabled && geminiKeys.length) {
     try { audio = await generateGeminiAudio(text, geminiKeys, geminiModel); }
     catch (error) { failures.push(error instanceof Error ? error.message : String(error)); }
   }
-  if (!audio && language === "en" && openAIEnabled && openAIKeys.length) {
+  if (!audio && providerLanguage === "en" && openAIEnabled && openAIKeys.length) {
     try { audio = await generateOpenAIAudio(text, openAIKeys, openAIModel, openAIHostVoice, openAITutorVoice); }
     catch (error) { failures.push(error instanceof Error ? error.message : String(error)); }
   }
-  if (!audio && language === "en" && hfFallbackEnabled && hfTokens.length) {
+  if (!audio && providerLanguage === "en" && hfFallbackEnabled && hfTokens.length) {
     try { audio = await generateHuggingFaceAudio(plainText, hfTokens, hfModel, hfEndpoint); }
     catch (error) { failures.push(error instanceof Error ? error.message : String(error)); }
   }

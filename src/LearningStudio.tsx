@@ -43,8 +43,9 @@ export default function LearningStudio() {
   const [error, setError] = useState("");
   const [panel, setPanel] = useState<string[]>([]);
   const [script, setScript] = useState("");
-  const [spokenLanguage, setSpokenLanguage] = useState<"en" | "sw">("en");
-  const [scriptLanguage, setScriptLanguage] = useState<"en" | "sw">("en");
+  const [spokenLanguage, setSpokenLanguage] = useState<"en" | "sw" | "mix" | "sheng">("en");
+  const [scriptLanguage, setScriptLanguage] = useState<"en" | "sw" | "mix" | "sheng">("en");
+  const [presenterStyle, setPresenterStyle] = useState("Kenyan legal newsroom: warm, confident and clear");
   const [slide, setSlide] = useState(0);
   const [rendering, setRendering] = useState(false);
   const [renderProgress, setRenderProgress] = useState(0);
@@ -340,7 +341,11 @@ export default function LearningStudio() {
       setAudioNote("");
       const languageInstruction = spokenLanguage === "sw"
         ? "Write in fluent, natural Kiswahili used in Kenya. Preserve case names, statute titles, citations and official legal terms in their original form."
-        : "Write in clear Kenyan English, with natural spoken phrasing. Preserve case names, statute titles and citations exactly.";
+        : spokenLanguage === "mix"
+          ? "Code-switch naturally between Kenyan English and Kiswahili (roughly 60/40). Explain difficult legal terms in both languages, keep authorities and citations exact, and never translate proper names."
+          : spokenLanguage === "sheng"
+            ? "Use respectful Kenyan English mixed naturally with accessible Sheng where it improves connection. Keep legal definitions, authorities and citations precise; do not force slang into every sentence and explain any uncommon Sheng phrase from context."
+            : "Write in clear Kenyan English, with natural spoken phrasing. Preserve case names, statute titles and citations exactly.";
       for (let index = 0; index < perspectives.length; index += 1) {
         setStage(`AI perspective ${index + 1} of ${perspectives.length}…`);
         setGenerationProgress(10 + index * 20);
@@ -371,18 +376,18 @@ export default function LearningStudio() {
         messages: [
           {
             role: "user",
-            content: `Topic: ${topic.trim()}\n${languageInstruction}\n\nIndependent research memos from the AI panel:\n${findings.map((item, i) => `MEMO ${i + 1}\n${item}`).join("\n\n")}\n\nCreate the final ${mode} now. Keep it faithful to the selected sources, cite source markers when available, and mark uncertain law for verification.`,
+            content: `Topic: ${topic.trim()}\n${languageInstruction}\nPresenter style: ${presenterStyle}. Use two fictional Kenyan legal presenters: PRESENTER and LEGAL GUIDE. Do not imitate or claim to be any real lawyer, politician, journalist or public figure. Do not use real people's names as speakers. PRESENTER should have the selected broad delivery qualities; LEGAL GUIDE should be a calm, precise Kenyan legal educator.\n\nIndependent research memos from the AI panel:\n${findings.map((item, i) => `MEMO ${i + 1}\n${item}`).join("\n\n")}\n\nCreate the final ${mode} now. Keep it faithful to the selected sources, cite source markers when available, and mark uncertain law for verification.`,
           },
         ],
       });
       let finalScript = editor.answer.trim();
       if (mode === "podcast") {
         finalScript = finalScript
-          .replace(/^Speaker\s*1\s*:/gim, "HOST:")
-          .replace(/^Speaker\s*2\s*:/gim, "TUTOR:")
-          .replace(/^Host\s*:/gim, "HOST:")
-          .replace(/^Tutor\s*:/gim, "TUTOR:");
-        if (!/HOST\s*:/i.test(finalScript) || !/TUTOR\s*:/i.test(finalScript)) {
+          .replace(/^Speaker\s*1\s*:/gim, "PRESENTER:")
+          .replace(/^Speaker\s*2\s*:/gim, "LEGAL GUIDE:")
+          .replace(/^Host\s*:/gim, "PRESENTER:")
+          .replace(/^Tutor\s*:/gim, "LEGAL GUIDE:");
+        if (!/PRESENTER\s*:/i.test(finalScript) || !/LEGAL GUIDE\s*:/i.test(finalScript)) {
           throw new Error("The podcast editor returned an invalid two-speaker script. Please try again.");
         }
       } else if (!/SCENE\s*\d+/i.test(finalScript) || !/NARRATION\s*:/i.test(finalScript)) {
@@ -444,12 +449,14 @@ export default function LearningStudio() {
           </div>
           <label className="studio-language-select">
             <span>Script &amp; narration language</span>
-            <select value={spokenLanguage} onChange={(event) => setSpokenLanguage(event.target.value as "en" | "sw")}>
-              <option value="en">English · natural conversational voice</option>
+            <select value={spokenLanguage} onChange={(event) => setSpokenLanguage(event.target.value as "en" | "sw" | "mix" | "sheng")}>
+              <option value="en">English · natural Kenyan conversational voice</option>
               <option value="sw">Kiswahili · sauti ya kawaida</option>
+              <option value="mix">Kiswahili + English · code-switching</option>
+              <option value="sheng">English + Sheng · respectful Kenyan tone</option>
             </select>
-            <small>New scripts follow this language. Existing scripts keep their original language until rebuilt.</small>
           </label>
+          <label className="studio-language-select"><span>Presenter tone</span><select value={presenterStyle} onChange={(event) => setPresenterStyle(event.target.value)}><option>Kenyan legal newsroom: warm, confident and clear</option><option>Formal constitutional advocate: measured, authoritative and structured</option><option>Parliamentary debate coach: energetic, analytical and concise</option><option>Senior courtroom educator: calm, deliberate and persuasive</option><option>Accessible campus law mentor: friendly, vivid and practical</option></select><small>These are fictional delivery profiles, not imitations of named lawyers.</small></label>
           {(working || stage) && (
             <div className="studio-progress" aria-live="polite">
               <div className="studio-progress-top">

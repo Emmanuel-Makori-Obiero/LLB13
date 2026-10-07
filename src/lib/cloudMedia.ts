@@ -310,7 +310,7 @@ export async function getVideoJobStatus(assetId: string) {
   return data as { asset: MediaAsset; status: "queued" | "processing" | "ready" | "failed" | "deleted"; signed_url?: string | null; provider_error?: string; retrying?: boolean; retry_after_seconds?: number };
 }
 
-export async function generateAudio(args: { text: string; title: string; language?: "en" | "sw" }) {
+export async function generateAudio(args: { text: string; title: string; language?: "en" | "sw" | "mix" | "sheng" }) {
   const { data, error } = await client().functions.invoke("generate-audio", { body: args });
   if (error) {
     let detail = error.message;
