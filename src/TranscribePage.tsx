@@ -34,6 +34,7 @@ type Chunk = {
   idx: number;
   start_seconds: number;
   text: string;
+  original_text?: string | null;
   segments: Segment[] | null;
 };
 type Progress = { phase: string; done: number; total: number };
@@ -59,13 +60,17 @@ const escapeRegExp = (value: string) =>
   value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // Turn the chunks of a transcript into readable paragraphs with a start time.
-function toParagraphs(chunks: Chunk[]) {
+function toParagraphs(chunks: Chunk[], field: "text" | "original_text" = "text") {
   const paragraphs: { t: number; text: string }[] = [];
   for (const chunk of chunks) {
+    const sourceText = field === "original_text" ? chunk.original_text || chunk.text : chunk.text;
+    if (field === "text" && chunk.original_text && chunk.original_text !== chunk.text) {
+      if (sourceText) paragraphs.push({ t: chunk.start_seconds, text: sourceText });
+      continue;
+    }
     const segments = chunk.segments ?? [];
     if (!segments.length) {
-      if (chunk.text)
-        paragraphs.push({ t: chunk.start_seconds, text: chunk.text });
+      if (sourceText) paragraphs.push({ t: chunk.start_seconds, text: sourceText });
       continue;
     }
     for (let i = 0; i < segments.length; i += 6) {
@@ -176,6 +181,7 @@ export default function TranscribePage({
   const [openId, setOpenId] = useState<string | null>(null);
   const [chunks, setChunks] = useState<Chunk[]>([]);
   const [query, setQuery] = useState("");
+  const [transcriptView, setTranscriptView] = useState<"corrected" | "original" | "compare">("corrected");
   const [resumeFor, setResumeFor] = useState<TranscriptRow | null>(null);
   const cancelRef = useRef(false);
   const resumeInput = useRef<HTMLInputElement>(null);
@@ -208,7 +214,7 @@ export default function TranscribePage({
     setChunks([]);
     const { data, error } = await supabase
       .from("transcript_chunks")
-      .select("idx,start_seconds,text,segments")
+      .select("idx,start_seconds,text,original_text,segments")
       .eq("transcript_id", id)
       .order("idx");
     if (error) {
@@ -455,7 +461,10 @@ export default function TranscribePage({
   };
 
   const opened = rows.find((row) => row.id === openId);
-  const paragraphs = useMemo(() => toParagraphs(chunks), [chunks]);
+  const paragraphs = useMemo(
+    () => toParagraphs(chunks, transcriptView === "original" ? "original_text" : "text"),
+    [chunks, transcriptView],
+  );
   const needle = query.trim().toLowerCase();
   const shown = needle
     ? paragraphs.filter((paragraph) =>
@@ -493,7 +502,7 @@ export default function TranscribePage({
     if (!supabase) return;
     const { data } = await supabase
       .from("transcript_chunks")
-      .select("idx,start_seconds,text,segments")
+      .select("idx,start_seconds,text,original_text,segments")
       .eq("transcript_id", row.id)
       .order("idx");
     const available = (data ?? []) as Chunk[];
@@ -775,6 +784,22 @@ export default function TranscribePage({
               placeholder="Search this transcript…"
             />
           </div>
+          <div className="tr-actions" aria-label="Transcript version">
+            <button className={transcriptView === "corrected" ? "primary-button" : "secondary-button"} onClick={() => setTranscriptView("corrected")}>Corrected</button>
+            <button className={transcriptView === "original" ? "primary-button" : "secondary-button"} onClick={() => setTranscriptView("original")}>Original</button>
+            <button className={transcriptView === "compare" ? "primary-button" : "secondary-button"} onClick={() => setTranscriptView("compare")}>Compare</button>
+          </div>
+          {transcriptView === "compare" && (
+            <div className="tr-compare" aria-label="Original and corrected transcript comparison">
+              {chunks.map((chunk) => (
+                <div className="tr-compare-row" key={chunk.idx}>
+                  <div><strong>Original · [{clock(chunk.start_seconds)}]</strong><p>{chunk.original_text || chunk.text || "No text"}</p></div>
+                  <div><strong>Corrected · [{clock(chunk.start_seconds)}]</strong><p>{chunk.text || "No text"}</p></div>
+                </div>
+              ))}
+              {!chunks.length && <p className="field-hint">No transcript chunks are available yet.</p>}
+            </div>
+          )}
           <div className="tr-actions">
             <button className="secondary-button" onClick={download}>
               <Download size={13} style={{ verticalAlign: "middle" }} />{" "}

@@ -35,6 +35,37 @@ const WHISPER_PROMPT_LIMIT = 896;
 
 type UsageRow = { seconds: number; created_at: string };
 
+async function correctWrittenTranscript(
+  raw: string,
+  groqKey: string,
+  mixedLanguage: boolean,
+): Promise<string> {
+  if (!raw.trim()) return raw;
+  if (raw.length > 24000) return raw;
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${groqKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "llama-3.1-8b-instant",
+      temperature: 0,
+      max_tokens: 4096,
+      messages: [
+        {
+          role: "system",
+          content: mixedLanguage
+            ? "Correct only obvious spelling and punctuation errors in this Kenyan English, Kiswahili and Sheng transcript. Preserve meaning, sentence order, names, legal terminology, code-switching and Sheng. Do not translate, summarise, add, remove or rewrite. Return only the corrected transcript."
+            : "Correct only obvious spelling and punctuation errors in this Kenyan lecture transcript. Preserve meaning, sentence order, names and legal terminology. Do not translate, summarise, add, remove or rewrite. Return only the corrected transcript.",
+        },
+        { role: "user", content: raw },
+      ],
+    }),
+  });
+  if (!response.ok) throw new Error("correction provider unavailable");
+  const data = (await response.json()) as { choices?: { message?: { content?: string } }[] };
+  const corrected = data.choices?.[0]?.message?.content?.trim() ?? "";
+  return corrected || raw;
+}
+
 // Seconds to wait until `add` more seconds fit inside `limit` for the rolling window.
 function waitSeconds(
   rows: UsageRow[],
@@ -219,7 +250,15 @@ Deno.serve(async (request) => {
       .from("transcription_usage")
       .update({ seconds: Math.ceil(data.duration) })
       .eq("id", reserved.id);
-  const text = (data.text ?? "").trim();
+  const originalText = (data.text ?? "").trim();
+  let text = originalText;
+  try {
+    text = await correctWrittenTranscript(originalText, groqKey, mixedLanguage);
+  } catch {
+    // Transcription must still succeed when the optional correction call is out
+    // of quota or unavailable; the raw provider text remains downloadable.
+    text = originalText;
+  }
   const segments = (data.segments ?? []).map((segment) => ({
     start: Number((segment.start + offset).toFixed(2)),
     end: Number((segment.end + offset).toFixed(2)),
@@ -232,6 +271,7 @@ Deno.serve(async (request) => {
       idx,
       start_seconds: offset,
       text,
+      original_text: originalText,
       segments,
     });
     if (error)
