@@ -383,7 +383,7 @@ export default function LearningStudio() {
         messages: [
           {
             role: "user",
-            content: `Topic: ${topic.trim()}\n${languageInstruction}\nPresenter style: ${presenterStyle}. Use two fictional Kenyan legal presenters. Their names are ${presenterName.trim() || "John"} (presenter) and ${guideName.trim() || "Amina"} (legal guide). Begin with a brief natural introduction in which each speaker says their name and role, for example: "Hi, my name is ${presenterName.trim() || "John"}, and I will be your host. Who am I with today?" followed by "My name is ${guideName.trim() || "Amina"}, and I will be your legal guide today." Use these names consistently as speaker labels. Do not imitate or claim to be any real lawyer, politician, journalist or public figure, and do not use a real public figure's name. The presenter should have the selected broad delivery qualities; the legal guide should be a calm, precise Kenyan legal educator.\n\nIndependent research memos from the AI panel:\n${findings.map((item, i) => `MEMO ${i + 1}\n${item}`).join("\n\n")}\n\nCreate the final ${mode} now. Keep it faithful to the selected sources, cite source markers when available, and mark uncertain law for verification.`,
+            content: `Topic: ${topic.trim()}\n${languageInstruction}\nPresenter style: ${presenterStyle}. Use two fictional Kenyan legal presenters. Their names are ${presenterName.trim() || "John"} (presenter) and ${guideName.trim() || "Amina"} (legal guide). Begin with a brief natural introduction in which each speaker says their name and role, for example: "Hi, my name is ${presenterName.trim() || "John"}, and I will be your host. Who am I with today?" followed by "My name is ${guideName.trim() || "Amina"}, and I will be your legal guide today." Use the exact internal line labels PRESENTER: and LEGAL GUIDE: so the audio mixer can separate the voices; the spoken introduction must use the names above. Do not imitate or claim to be any real lawyer, politician, journalist or public figure, and do not use a real public figure's name. The presenter should have the selected broad delivery qualities; the legal guide should be a calm, precise Kenyan legal educator.\n\nIndependent research memos from the AI panel:\n${findings.map((item, i) => `MEMO ${i + 1}\n${item}`).join("\n\n")}\n\nCreate the final ${mode} now. Keep it faithful to the selected sources, cite source markers when available, and mark uncertain law for verification.`,
           },
         ],
       });
@@ -393,14 +393,15 @@ export default function LearningStudio() {
         const presenterLabel = presenterName.trim() || "John";
         const guideLabel = guideName.trim() || "Amina";
         finalScript = finalScript
-          .replace(new RegExp(`^${escapeLabel(presenterLabel)}\\s*:`, "gim"), "PRESENTER:")
-          .replace(new RegExp(`^${escapeLabel(guideLabel)}\\s*:`, "gim"), "LEGAL GUIDE:")
-          .replace(/^Speaker\s*1\s*:/gim, "PRESENTER:")
-          .replace(/^Speaker\s*2\s*:/gim, "LEGAL GUIDE:")
-          .replace(/^Host\s*:/gim, "PRESENTER:")
-          .replace(/^Tutor\s*:/gim, "LEGAL GUIDE:");
+          .replace(/[*_`]/g, "")
+          .replace(new RegExp(`^\\s*${escapeLabel(presenterLabel)}\\s*[:：-]`, "gim"), "PRESENTER:")
+          .replace(new RegExp(`^\\s*${escapeLabel(guideLabel)}\\s*[:：-]`, "gim"), "LEGAL GUIDE:")
+          .replace(/^\\s*(?:Speaker\\s*1|Host|Presenter)\\s*[:：-]/gim, "PRESENTER:")
+          .replace(/^\\s*(?:Speaker\\s*2|Tutor|Legal Guide)\\s*[:：-]/gim, "LEGAL GUIDE:");
         if (!/PRESENTER\s*:/i.test(finalScript) || !/LEGAL GUIDE\s*:/i.test(finalScript)) {
-          throw new Error("The podcast editor returned an invalid two-speaker script. Please try again.");
+          const lines = finalScript.split(/\r?\n+/).map((line) => line.replace(/^#+\s*/, "").replace(/^[-–—]\s*/, "").trim()).filter(Boolean);
+          if (!lines.length) throw new Error("The podcast editor returned no speakable dialogue. Please try again.");
+          finalScript = `PRESENTER: Hi, my name is ${presenterLabel}, and I will be your host.\nLEGAL GUIDE: My name is ${guideLabel}, and I will be your legal guide today.\n${lines.map((line, index) => `${index % 2 === 0 ? "PRESENTER" : "LEGAL GUIDE"}: ${line}`).join("\n")}`;
         }
       } else if (!/SCENE\s*\d+/i.test(finalScript) || !/NARRATION\s*:/i.test(finalScript)) {
         throw new Error("The narration editor returned an incomplete scene script. Please try again.");
