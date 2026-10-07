@@ -83,7 +83,7 @@ import InstallButton from "./InstallButton";
 import { DeleteAccountCard } from "./AccountPage";
 import Home from "./Home";
 import TimetablePage from "./TimetablePage";
-import TranscribePage from "./TranscribePage";
+const TranscribePage = lazy(() => import("./TranscribePage"));
 import { CounsellorChat } from "./CounsellorChat";
 import { StudyAssistant } from "./StudyAssistant";
 import LegalDictionaryPage from "./LegalDictionaryPage";
@@ -96,9 +96,9 @@ import GrowthPage from "./GrowthPage";
 import PracticeRoom from "./PracticeRoom";
 import RealtimeJudgeRoom from "./RealtimeJudgeRoom";
 import BookReader from "./BookReader";
-import LearningStudio from "./LearningStudio";
-import GuidedStudyPage from "./GuidedStudyPage";
-import AssignmentHelperPage from "./AssignmentHelperPage";
+const LearningStudio = lazy(() => import("./LearningStudio"));
+const GuidedStudyPage = lazy(() => import("./GuidedStudyPage"));
+const AssignmentHelperPage = lazy(() => import("./AssignmentHelperPage"));
 import { addYouTubeItem, loadPublicYouTubePlaylist, loadYouTubePlaylist, removeYouTubeItem, updateYouTubePlaylist, youtubePlaylistExportJson, youtubePlaylistExportText, type YouTubePlaylist } from "./lib/youtubePlaylist";
 import { useTheme, type Theme } from "./theme";
 import GamesHub from "./GamesHub";
@@ -1033,16 +1033,18 @@ function App() {
             <GrowthPage userId={userId} onOpenArena={() => setPage("arena")} />
           )}
           {view === "transcribe" && (
-            <TranscribePage
-              units={units}
-              userId={userId}
-              isAdmin={isAdmin}
-              initialUnit={transcribeUnit}
-              displayName={
-                profile.displayName || userEmail?.split("@")[0] || "Member"
-              }
-              setNotice={setNotice}
-            />
+            <Suspense fallback={<div className="subheading">Opening transcripts…</div>}>
+              <TranscribePage
+                units={units}
+                userId={userId}
+                isAdmin={isAdmin}
+                initialUnit={transcribeUnit}
+                displayName={
+                  profile.displayName || userEmail?.split("@")[0] || "Member"
+                }
+                setNotice={setNotice}
+              />
+            </Suspense>
           )}
           {view === "scanner" && (
             <Suspense fallback={<div className="subheading">Opening your scan notes…</div>}>
@@ -1188,7 +1190,7 @@ function App() {
           {view === "members" && <SectionedMembersPage members={members} />}
           {view === "dictionary" && <LegalDictionaryPage />}
           {view === "assistant" && (
-            <>
+            <Suspense fallback={<div className="subheading">Opening the study assistant…</div>}>
               <PageHeading
                 eyebrow="Your guided study companion"
                 title="Study assistant."
@@ -1196,10 +1198,18 @@ function App() {
               />
               <StudyAssistant />
               <LearningStudio />
-            </>
+            </Suspense>
           )}
-          {view === "guide" && <GuidedStudyPage />}
-          {view === "assignment-helper" && <AssignmentHelperPage assignments={assignments} />}
+          {view === "guide" && (
+            <Suspense fallback={<div className="subheading">Opening guided study…</div>}>
+              <GuidedStudyPage />
+            </Suspense>
+          )}
+          {view === "assignment-helper" && (
+            <Suspense fallback={<div className="subheading">Opening assignment helper…</div>}>
+              <AssignmentHelperPage assignments={assignments} />
+            </Suspense>
+          )}
           {view === "research" && (
             <>
               <PageHeading
