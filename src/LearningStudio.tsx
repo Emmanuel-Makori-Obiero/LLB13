@@ -35,6 +35,7 @@ const perspectives = [
 export default function LearningStudio() {
   const [docs, setDocs] = useState<Doc[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
+  const [libraryImports, setLibraryImports] = useState<Record<string, string>>({});
   const [topic, setTopic] = useState("");
   const [mode, setMode] = useState<Mode>("podcast");
   const [working, setWorking] = useState(false);
@@ -86,12 +87,16 @@ export default function LearningStudio() {
   const toggleSource = async (doc: Doc) => {
     if (doc.kind !== "library") { toggle(doc.id); return; }
     if (!doc.url || importingSource) return;
+    const importedId = libraryImports[doc.id];
+    if (importedId) { toggle(importedId); return; }
+    setSelected((current) => current.includes(doc.id) ? current.filter((id) => id !== doc.id) : [...current, doc.id].slice(-6));
     setImportingSource(doc.id); setError("");
     try {
       const imported = await importLibraryMaterial({ title: doc.title, url: doc.url, citation: doc.citation });
+      setLibraryImports((current) => ({ ...current, [doc.id]: imported.id }));
       await loadSources();
       setSelected((current) => [...current.filter((id) => id !== doc.id), imported.id].slice(-6));
-    } catch (e) { setError(e instanceof Error ? e.message : "Could not prepare that Library book for AI."); }
+    } catch (e) { setSelected((current) => current.filter((id) => id !== doc.id)); setError(e instanceof Error ? e.message : "Could not prepare that Library book for AI."); }
     finally { setImportingSource(null); }
   };
   const download = () => {
@@ -480,7 +485,7 @@ export default function LearningStudio() {
           <button
             className="primary-button studio-generate"
             onClick={() => void generate()}
-            disabled={working || audioBusy || rendering || !topic.trim() || !selected.length}
+            disabled={working || audioBusy || rendering || Boolean(importingSource) || !topic.trim() || !selected.length}
           >
             {working ? (
               <>
@@ -594,7 +599,7 @@ export default function LearningStudio() {
                 >
                   <input
                     type="checkbox"
-                    checked={doc.kind !== "library" && selected.includes(doc.id)}
+                    checked={selected.includes(doc.id) || (doc.kind === "library" && Boolean(libraryImports[doc.id] && selected.includes(libraryImports[doc.id])))}
                     disabled={doc.kind === "library" && importingSource === doc.id}
                     onChange={() => void toggleSource(doc)}
                   />
