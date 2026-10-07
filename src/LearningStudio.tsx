@@ -384,7 +384,12 @@ export default function LearningStudio() {
       });
       let finalScript = editor.answer.trim();
       if (mode === "podcast") {
+        const escapeLabel = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const presenterLabel = presenterName.trim() || "John";
+        const guideLabel = guideName.trim() || "Amina";
         finalScript = finalScript
+          .replace(new RegExp(`^${escapeLabel(presenterLabel)}\\s*:`, "gim"), "PRESENTER:")
+          .replace(new RegExp(`^${escapeLabel(guideLabel)}\\s*:`, "gim"), "LEGAL GUIDE:")
           .replace(/^Speaker\s*1\s*:/gim, "PRESENTER:")
           .replace(/^Speaker\s*2\s*:/gim, "LEGAL GUIDE:")
           .replace(/^Host\s*:/gim, "PRESENTER:")
