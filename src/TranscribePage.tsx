@@ -567,7 +567,8 @@ export default function TranscribePage({
               >
                 <option value="en">English</option>
                 <option value="sw">Kiswahili · Kenyan accent</option>
-                <option value="sw-sheng">Kiswahili + English / Sheng</option>
+                <option value="en-sw">English + Kiswahili · code-switching</option>
+                <option value="sw-sheng">English + Kiswahili / Sheng · code-switching</option>
                 <option value="auto">Detect automatically · English, Kiswahili or Sheng</option>
               </select>
             </label>

@@ -99,8 +99,16 @@ Deno.serve(async (request) => {
   const requestedLanguage = String(form.get("language") ?? "")
     .trim()
     .toLowerCase();
+  const mixedLanguage =
+    requestedLanguage === "en-sw" ||
+    requestedLanguage === "sw-en" ||
+    requestedLanguage === "sw-sheng" ||
+    requestedLanguage === "auto";
   const rawLanguage = requestedLanguage.split("-")[0];
-  const language = /^[a-z]{2}$/.test(rawLanguage) && rawLanguage !== "auto" ? rawLanguage : "";
+  const language =
+    !mixedLanguage && /^[a-z]{2}$/.test(rawLanguage) && rawLanguage !== "auto"
+      ? rawLanguage
+      : "";
   const transcriptId = String(form.get("transcript_id") ?? "");
   const idx = Number(form.get("idx") ?? 0);
   const offset = Number(form.get("offset") ?? 0) || 0;
@@ -156,11 +164,13 @@ Deno.serve(async (request) => {
   body.append("response_format", "verbose_json");
   body.append("temperature", "0");
   if (language) body.append("language", language);
-  const languagePrompt = language === "sw"
+  const languagePrompt = mixedLanguage
+    ? requestedLanguage === "sw-sheng"
+      ? "Transcribe Kenyan English, Kiswahili and Sheng exactly as spoken. Preserve code-switching, names, legal terms and Sheng expressions; do not translate, standardise or replace Sheng with English."
+      : "Transcribe Kenyan English and Kiswahili exactly as spoken. Preserve code-switching, names and legal terms; do not translate Kiswahili into English or English into Kiswahili."
+    : language === "sw"
     ? "Transcribe Kenyan Kiswahili accurately. Preserve Kiswahili spelling, names, legal terms, code-switching, Sheng expressions and the speaker's exact wording; do not translate into English. Example wording to preserve exactly when heard: nataka tuendelee kusoma hii kitabu lec alisema."
-    : requestedLanguage === "auto"
-      ? "Detect Kenyan English, Kiswahili, and Sheng. Preserve code-switching and the exact words spoken; do not translate, clean up, or replace Sheng with standard English."
-      : "Transcribe Kenyan English accurately, preserving names and legal terminology.";
+    : "Transcribe Kenyan English accurately, preserving names and legal terminology.";
   const seed = `${LAW_PROMPT} ${languagePrompt}`;
   const continuationLabel = " Continue naturally. Recent transcript context: ";
   const continuationBudget = Math.max(
