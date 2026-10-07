@@ -530,6 +530,7 @@ async function retrieve(
   // only relevant chunks, so the model can use all constitutional Articles over
   // time without stuffing the entire text into every prompt.
   const selectedIds = [...(docIds ?? [])];
+  const constitutionIds: string[] = [];
   if (constitutionQuestion) {
     const { data: constitutionDocs } = await db
       .from("ai_documents")
@@ -539,7 +540,10 @@ async function retrieve(
       .limit(5);
     for (const row of constitutionDocs ?? []) {
       const id = String((row as { id?: string }).id ?? "");
-      if (id && !selectedIds.includes(id)) selectedIds.push(id);
+      if (id) {
+        constitutionIds.push(id);
+        if (!selectedIds.includes(id)) selectedIds.push(id);
+      }
     }
   }
 
@@ -611,6 +615,24 @@ async function retrieve(
     });
     if (error) throw new Error("retrieval failed");
     rows = data ?? [];
+    // Broad natural-language searches can rank a table of contents or a later
+    // cross-reference above the requested provision. When the student names
+    // Article numbers, run a second exact-number pass against the Constitution
+    // source and merge those hits before adding adjacent context.
+    if (constitutionQuestion && constitutionIds.length) {
+      const articleNumbers = [...query.matchAll(/\b\d{1,3}\b/g)]
+        .map((match) => Number(match[0]))
+        .filter((number) => number >= 1 && number <= 300);
+      for (const number of [...new Set(articleNumbers)].slice(0, 8)) {
+        const { data: exact } = await db.rpc("ai_search", {
+          q: `article | ${number}`,
+          p_scope: "any",
+          p_doc_ids: constitutionIds,
+          p_limit: 4,
+        });
+        rows.push(...(exact ?? []));
+      }
+    }
     // A single matching chunk can omit the definition or exception immediately
     // before/after it. Pull a small amount of adjacent text for book-like reading.
     const contextRows: typeof rows = [];
