@@ -46,6 +46,8 @@ export default function LearningStudio() {
   const [spokenLanguage, setSpokenLanguage] = useState<"en" | "sw" | "mix" | "sheng">("en");
   const [scriptLanguage, setScriptLanguage] = useState<"en" | "sw" | "mix" | "sheng">("en");
   const [presenterStyle, setPresenterStyle] = useState("Kenyan legal newsroom: warm, confident and clear");
+  const [presenterName, setPresenterName] = useState("John");
+  const [guideName, setGuideName] = useState("Amina");
   const [slide, setSlide] = useState(0);
   const [rendering, setRendering] = useState(false);
   const [renderProgress, setRenderProgress] = useState(0);
@@ -376,7 +378,7 @@ export default function LearningStudio() {
         messages: [
           {
             role: "user",
-            content: `Topic: ${topic.trim()}\n${languageInstruction}\nPresenter style: ${presenterStyle}. Use two fictional Kenyan legal presenters: PRESENTER and LEGAL GUIDE. Do not imitate or claim to be any real lawyer, politician, journalist or public figure. Do not use real people's names as speakers. PRESENTER should have the selected broad delivery qualities; LEGAL GUIDE should be a calm, precise Kenyan legal educator.\n\nIndependent research memos from the AI panel:\n${findings.map((item, i) => `MEMO ${i + 1}\n${item}`).join("\n\n")}\n\nCreate the final ${mode} now. Keep it faithful to the selected sources, cite source markers when available, and mark uncertain law for verification.`,
+            content: `Topic: ${topic.trim()}\n${languageInstruction}\nPresenter style: ${presenterStyle}. Use two fictional Kenyan legal presenters. Their names are ${presenterName.trim() || "John"} (presenter) and ${guideName.trim() || "Amina"} (legal guide). Begin with a brief natural introduction in which each speaker says their name and role, for example: "Hi, my name is ${presenterName.trim() || "John"}, and I will be your host. Who am I with today?" followed by "My name is ${guideName.trim() || "Amina"}, and I will be your legal guide today." Use these names consistently as speaker labels. Do not imitate or claim to be any real lawyer, politician, journalist or public figure, and do not use a real public figure's name. The presenter should have the selected broad delivery qualities; the legal guide should be a calm, precise Kenyan legal educator.\n\nIndependent research memos from the AI panel:\n${findings.map((item, i) => `MEMO ${i + 1}\n${item}`).join("\n\n")}\n\nCreate the final ${mode} now. Keep it faithful to the selected sources, cite source markers when available, and mark uncertain law for verification.`,
           },
         ],
       });
@@ -457,6 +459,7 @@ export default function LearningStudio() {
             </select>
           </label>
           <label className="studio-language-select"><span>Presenter tone</span><select value={presenterStyle} onChange={(event) => setPresenterStyle(event.target.value)}><option>Kenyan legal newsroom: warm, confident and clear</option><option>Formal constitutional advocate: measured, authoritative and structured</option><option>Parliamentary debate coach: energetic, analytical and concise</option><option>Senior courtroom educator: calm, deliberate and persuasive</option><option>Accessible campus law mentor: friendly, vivid and practical</option></select><small>These are fictional delivery profiles, not imitations of named lawyers.</small></label>
+          {mode === "podcast" && <label className="studio-language-select"><span>Speaker names</span><div className="studio-speaker-name-grid"><input value={presenterName} maxLength={40} onChange={(event) => setPresenterName(event.target.value.replace(/[^a-zA-ZÀ-ÿ' -]/g, ""))} placeholder="John" aria-label="Podcast presenter name" /><input value={guideName} maxLength={40} onChange={(event) => setGuideName(event.target.value.replace(/[^a-zA-ZÀ-ÿ' -]/g, ""))} placeholder="Amina" aria-label="Podcast legal guide name" /></div><small>Use fictional names. The episode will introduce both speakers naturally at the beginning.</small></label>}
           {(working || stage) && (
             <div className="studio-progress" aria-live="polite">
               <div className="studio-progress-top">
