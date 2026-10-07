@@ -154,8 +154,11 @@ export function TranscriptAI({
   });
 
   const download = () => {
+    const exportText = quality?.status === "pass"
+      ? generatedText
+      : `> DRAFT — HUMAN REVIEW REQUIRED\n> Check this output against the original transcript before relying on it.\n\n${generatedText}`;
     downloadBlob(
-      new Blob([`# ${title}\n\n${notesText || turn?.result?.answer || ""}`], {
+      new Blob([`# ${title}\n\n${exportText}`], {
         type: "text/markdown",
       }),
       `${title.replace(/[^\w\- ]+/g, "").trim() || "lecture"} - ${turn?.task.feature === "summarize" ? "summary" : "notes"}.md`,
@@ -163,16 +166,19 @@ export function TranscriptAI({
   };
   const generatedText = notesText || turn?.result?.answer || "";
   const reviewed = quality?.status === "pass";
+  const exportText = reviewed
+    ? generatedText
+    : `DRAFT — HUMAN REVIEW REQUIRED\n\n${quality?.summary ?? "This output has not passed the source audit."}\n\n${generatedText}`;
   const downloadNotesPdf = () =>
     downloadPdf(
       title,
-      generatedText,
+      exportText,
       `${title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "lecture"}-${turn?.task.feature === "summarize" ? "summary" : "notes"}.pdf`,
     );
   const downloadNotesWord = () =>
     downloadWord(
       title,
-      generatedText,
+      exportText,
       `${title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "lecture"}-${turn?.task.feature === "summarize" ? "summary" : "notes"}.doc`,
     );
 
@@ -248,7 +254,7 @@ export function TranscriptAI({
     });
   }, [assignmentKey]);
 
-  const run = async (action: Action) => {
+  const run = async (action: Action, repair?: QualityReport) => {
     if (busy) return;
     const task = mkTask(action);
     if (!ready) {
@@ -274,6 +280,14 @@ export function TranscriptAI({
         );
       }
       const doc = saved.current;
+      const generationPrompt = repair
+        ? `${action.prompt}\n\nREPAIR THE PREVIOUS OUTPUT USING THE ORIGINAL TRANSCRIPT. Reuse the already indexed transcript; do not create or ingest another copy. Copy names, case names and authorities exactly from the transcript, use no outside knowledge, preserve [unclear], and do not turn casual remarks into legal rules. Correct every finding below and re-check the complete result before returning it.\n\nAUDIT FINDINGS:\n${[
+            ...repair.spelling_issues.map((item) => `Spelling: ${item.text} -> ${item.suggestion} (${item.reason})`),
+            ...repair.meaning_issues.map((item) => `Meaning: ${item.text} — ${item.issue}; fix: ${item.suggested_fix}`),
+            ...repair.unsupported_claims.map((item) => `Unsupported: ${item.text} — ${item.reason}`),
+            ...repair.missing_points.map((item) => `Missing: ${item}`),
+          ].join("\n")}`
+        : action.prompt;
 
       if (action.feature === "notes") {
         const parts = Math.max(1, Math.ceil(doc.chunks / SECTIONS_PER_PART));
@@ -298,7 +312,7 @@ export function TranscriptAI({
                 got = await askAI({
                   feature: "notes",
                   mode: "materials",
-                  messages: [{ role: "user", content: action.prompt }],
+                  messages: [{ role: "user", content: generationPrompt }],
                   docIds: [doc.id],
                   part: i,
                   size: SECTIONS_PER_PART,
@@ -319,7 +333,7 @@ export function TranscriptAI({
             setTurn({
               id: 1,
               task,
-              prompt: action.prompt,
+              prompt: generationPrompt,
               error: `Notes stopped at part ${i + 1} of ${parts}: ${(e as Error).message} ${
                 done.length ? `Parts 1 to ${done.length} are shown below.` : ""
               } Press Make notes to try again.`,
@@ -337,7 +351,7 @@ export function TranscriptAI({
           setTurn({
             id: 1,
             task,
-            prompt: action.prompt,
+            prompt: generationPrompt,
             result: { ...last, answer: shown, warnings: [], sources: [] },
           });
         }
@@ -358,13 +372,13 @@ export function TranscriptAI({
         : await askAI({
             feature: action.feature,
             mode: "materials",
-            messages: [{ role: "user", content: action.prompt }],
+            messages: [{ role: "user", content: generationPrompt }],
             docIds: [doc.id],
           });
       if (action.feature === "extract_assignments") {
         applyAssignmentResult(result);
       }
-      setTurn({ id: 1, task, prompt: action.prompt, result });
+      setTurn({ id: 1, task, prompt: generationPrompt, result });
       if (action.feature === "summarize") await reviewOutput(result.answer);
     } catch (e) {
       setTurn({
@@ -582,7 +596,7 @@ export function TranscriptAI({
                       className="secondary-button"
                       onClick={() => {
                         const action = ACTIONS.find((item) => item.feature === turn?.task.feature);
-                        if (action) void run(action);
+                        if (action && quality) void run(action, quality);
                       }}
                     >
                       Re-run from original transcript
@@ -592,8 +606,9 @@ export function TranscriptAI({
               )}
             </div>
           )}
-          {textual && !busy && reviewed && (
+          {textual && !busy && generatedText && (
             <div className="ta-after">
+              {!reviewed && <span className="field-hint">Draft downloads are available for review; saving remains locked until the audit passes.</span>}
               <button
                 type="button"
                 className="secondary-button"
