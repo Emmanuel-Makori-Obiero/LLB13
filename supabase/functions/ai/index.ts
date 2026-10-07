@@ -489,7 +489,9 @@ function toTsQuery(text: string): string {
     evidence: ["evidence", "proof", "admissibility", "witness", "document", "burden"],
     employment: ["employment", "labour", "worker", "employee", "employer", "contract", "termination"],
   };
-  const raw = (text.toLowerCase().match(/[a-z0-9]{3,}/g) ?? []).filter((t) => !STOP.has(t));
+  // Keep short numeric tokens because questions often name provisions such as
+  // Article 2(4), Article 23, Article 24 and Article 37.
+  const raw = (text.toLowerCase().match(/[a-z]{3,}|\d{1,3}/g) ?? []).filter((t) => !STOP.has(t));
   const terms = new Set<string>();
   for (const token of raw) {
     terms.add(token);
@@ -637,6 +639,8 @@ NON-NEGOTIABLE RULES
 11. REPETITION FOR RETENTION: revisit important rules, definitions, cases and procedures with varied wording and examples; do not repeat filler. Label occasional Quick recall checks.
 12. HUMAN WORK FIRST: never encourage submitting unedited AI text as the student's own. AI-like style signals are not proof of authorship; explain them and suggest adding the student's own reasoning, class context, concrete examples, uncertainty and original transitions.
 
+VERIFIED CONSTITUTION ARTICLE CROSS-CHECK
+Before assigning an Article number, verify it against the retrieved Constitution text. Article 2(4) is constitutional supremacy; Article 23 concerns the authority of courts to uphold and enforce the Bill of Rights and remedies; Article 24 concerns limitation of rights; Article 37 protects peaceful assembly, demonstration, picketing and petition; Article 58 concerns a state of emergency; Article 165(3)(d) concerns the High Court's constitutional jurisdiction, not parliamentary authorisation for KDF deployment; Article 238 defines national security; Article 241 establishes the Kenya Defence Forces and includes the National Assembly approval safeguard for deployment to restore peace in unrest or instability. Do not attribute one Article's subject matter to another. If retrieved text and memory conflict, follow the retrieved text and state uncertainty rather than guessing.
 KENYAN CONSTITUTIONAL FOUNDATION (official Kenya Law text)
 Constitution of Kenya, 2010, Article 2(1): This Constitution is the supreme law of the Republic and binds all persons and all State organs at both levels of government.
 Article 2(4): Any law, including customary law, that is inconsistent with this Constitution is void to the extent of the inconsistency, and any act or omission in contravention of this Constitution is invalid.
@@ -658,7 +662,7 @@ Use this foundation for constitutional hierarchy only. It does not supply the te
     return `${base}${task}\nGROUNDING (strict): Treat <sources> as the only evidence. The generated text in the student's request is the object being audited, not a source. Do not repair it silently, and do not introduce a case, statute, quotation, spelling or citation detail that is absent from <sources>. If the transcript/source itself is unclear or incomplete, mark review rather than guessing. Follow the JSON shape exactly.`;
   }
   if (hasSources && (mode === "materials" || mode === "library")) {
-    return `${base}${task}\nGROUNDING (strict): Use ONLY the provided <sources>. Cite selected material inline as [S1], [S2] etc., using only the ids provided. If a requested case or provision is not in the selected sources, do not name a case from memory; add the KENYA_LAW_SEARCH marker required above with a neutral issue or statute phrase. Do not fill the gap from memory. If the sources do not answer the question, say that clearly instead of guessing.`;
+    return `${base}${task}\nGROUNDING (strict): Use ONLY the provided <sources>. Cite every material constitutional proposition inline as [S1], [S2] etc., using only the ids provided. For a question naming several Articles, verify each Article against the retrieved text before explaining its interaction; never rely on an assumed Article-number map. If a requested case or provision is not in the selected sources, do not name a case from memory; add the KENYA_LAW_SEARCH marker required above with a neutral issue or statute phrase. Do not fill the gap from memory. If the sources do not answer the question, say that clearly instead of guessing.`;
   }
   if (hasSources) {
     return `${base}${task}\nGROUNDING (source-first): First understand and use the provided <sources> as the primary book/document evidence. Answer natural questions in the student's wording, not only questions that repeat the book's exact headings. Cite the relevant passages as [S1], [S2] (only provided ids). If the sources do not contain a requested Kenyan authority or current legal detail, do not fill the gap from memory: add the KENYA_LAW_SEARCH marker with a neutral issue or statute phrase and clearly say that external verification is needed. General explanations may be given only when they do not assert an unsupported case, statute, article, quotation, or current legal position.`;
