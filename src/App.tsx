@@ -90,7 +90,7 @@ import LegalDictionaryPage from "./LegalDictionaryPage";
 import FloatingLawyerAgent from "./FloatingLawyerAgent";
 import { ResearchWriter } from "./ResearchWriter";
 import { TranscriptAI } from "./TranscriptAI";
-import { askAI, extractText, type AIFeature } from "./lib/ai";
+import { askAI, extractText, uploadLibraryMaterial, type AIFeature } from "./lib/ai";
 import { Markdown } from "./Markdown";
 import GrowthPage from "./GrowthPage";
 import PracticeRoom from "./PracticeRoom";
@@ -1297,7 +1297,19 @@ function App() {
               const created = await repository.createMaterial(material, file);
               setMaterials((current) => [created, ...current]);
               setMaterialFormOpen(false);
-              setNotice(file ? "Material uploaded." : "Material link added.");
+              if (file) {
+                try {
+                  const indexed = await uploadLibraryMaterial(
+                    file,
+                    `${created.type} · ${created.unit} · ${created.source}`,
+                  );
+                  setNotice(`Material uploaded and added to AI knowledge (${indexed.chunks} sections).`);
+                } catch (indexError) {
+                  setNotice(`Material uploaded, but AI indexing failed: ${indexError instanceof Error ? indexError.message : "try indexing it again from the AI document area."}`);
+                }
+              } else {
+                setNotice("Material link added. Upload the readable file if you want it indexed by the AI.");
+              }
             } catch (error) {
               setNotice(
                 error instanceof Error

@@ -246,6 +246,18 @@ export async function uploadMaterial(
   return storeText(file.name.replace(/\.[^.]+$/, ""), text, citation);
 }
 
+/** Extract and index a newly uploaded Library book as shared AI knowledge. */
+export async function uploadLibraryMaterial(
+  file: File,
+  citation?: string,
+): Promise<{ id: string; chunks: number }> {
+  if (!file.size) throw new Error("The selected file is empty. Choose a file with at least 1 byte.");
+  const text = (await extractText(file)).trim();
+  if (!text.length)
+    throw new Error("No readable text found. Scanned PDFs need OCR before indexing.");
+  return storeText(file.name.replace(/\.[^.]+$/, ""), text, citation, "library");
+}
+
 export async function importLibraryMaterial(source: { title: string; url?: string | null; citation?: string | null }) {
   if (!source.url) throw new Error("This Library item does not have a readable file attached.");
   const response = await fetch(source.url);
@@ -256,7 +268,7 @@ export async function importLibraryMaterial(source: { title: string; url?: strin
   const file = new File([blob], `${source.title.replace(/[^a-z0-9._-]+/gi, "-")}.${extension}`, { type: blob.type || "application/octet-stream" });
   const text = (await extractText(file)).trim();
   if (!text.length) throw new Error(`${source.title} has no readable text. Scanned files need OCR first.`);
-  return saveTextMaterial(source.title, text, source.citation ?? undefined);
+  return storeText(source.title, text, source.citation ?? undefined, "user");
 }
 
 /** Save plain text (e.g. a lecture transcript) as a document the AI can read.
@@ -278,13 +290,14 @@ export async function saveTextMaterial(
     .eq("scope", "user")
     .eq("title", title);
   for (const o of old ?? []) await deleteMaterial(o.id);
-  return storeText(title, clean, citation);
+  return storeText(title, clean, citation, "user");
 }
 
 async function storeText(
   title: string,
   text: string,
   citation?: string,
+  scope: "user" | "library" = "user",
 ): Promise<{ id: string; chunks: number }> {
   const { data: u } = await db().auth.getUser();
   if (!u.user) throw new Error("Sign in first.");
@@ -292,8 +305,8 @@ async function storeText(
   const { data: doc, error } = await db()
     .from("ai_documents")
     .insert({
-      owner: u.user.id,
-      scope: "user",
+      owner: scope === "user" ? u.user.id : null,
+      scope,
       title,
       citation: citation ?? null,
     })
@@ -303,8 +316,8 @@ async function storeText(
 
   const rows = chunkText(text).map((content, idx) => ({
     document_id: doc.id,
-    owner: u.user!.id,
-    scope: "user",
+    owner: scope === "user" ? u.user!.id : null,
+    scope,
     idx,
     content,
   }));
