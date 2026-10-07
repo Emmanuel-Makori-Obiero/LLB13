@@ -53,8 +53,8 @@ async function correctWrittenTranscript(
         {
           role: "system",
           content: mixedLanguage
-            ? "Correct only obvious spelling and punctuation errors in this Kenyan English, Kiswahili and Sheng transcript. Preserve meaning, sentence order, names, legal terminology, code-switching and Sheng. Do not translate, summarise, add, remove or rewrite. Return only the corrected transcript."
-            : "Correct only obvious spelling and punctuation errors in this Kenyan lecture transcript. Preserve meaning, sentence order, names and legal terminology. Do not translate, summarise, add, remove or rewrite. Return only the corrected transcript.",
+            ? "Correct only obvious spelling and punctuation errors in this Kenyan English, Kiswahili and Sheng transcript. Preserve meaning, sentence order, names, legal terminology, code-switching and Sheng. Never replace an uncertain name or case with a famous real-world name; keep it as heard or mark it [unclear]. Do not translate, summarise, add, remove or rewrite. Return only the corrected transcript."
+            : "Correct only obvious spelling and punctuation errors in this Kenyan lecture transcript. Preserve meaning, sentence order, names and legal terminology. Never replace an uncertain name or case with a famous real-world name; keep it as heard or mark it [unclear]. Do not translate, summarise, add, remove or rewrite. Return only the corrected transcript.",
         },
         { role: "user", content: raw },
       ],

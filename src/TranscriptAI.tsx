@@ -573,7 +573,23 @@ export function TranscriptAI({
                   {quality.missing_points.map((item, i) => <li key={`missing-${i}`}>Missing from output: {item}</li>)}
                 </ul>
               )}
-              {!reviewed && <small>Correct or re-run the output after checking the original transcript. Downloads and saving stay locked until the check passes.</small>}
+              {!reviewed && (
+                <>
+                  <small>Check the original transcript before relying on this output. Downloads and saving stay locked until the check passes.</small>
+                  {(turn?.task.feature === "notes" || turn?.task.feature === "summarize") && (
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => {
+                        const action = ACTIONS.find((item) => item.feature === turn?.task.feature);
+                        if (action) void run(action);
+                      }}
+                    >
+                      Re-run from original transcript
+                    </button>
+                  )}
+                </>
+              )}
             </div>
           )}
           {textual && !busy && reviewed && (
