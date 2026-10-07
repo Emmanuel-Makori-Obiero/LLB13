@@ -489,6 +489,25 @@ export default function TranscribePage({
     link.click();
     URL.revokeObjectURL(url);
   };
+  const downloadRow = async (row: TranscriptRow) => {
+    if (!supabase) return;
+    const { data } = await supabase
+      .from("transcript_chunks")
+      .select("idx,start_seconds,text,segments")
+      .eq("transcript_id", row.id)
+      .order("idx");
+    const available = (data ?? []) as Chunk[];
+    const body = toParagraphs(available)
+      .map((paragraph) => `[${clock(paragraph.t)}] ${paragraph.text}`)
+      .join("\n\n");
+    const content = `${row.title}\n${row.unit ?? ""}\n\n${body || "No transcript text is available yet. The recording may still be processing or produced no readable speech."}`;
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(new Blob([content], { type: "text/plain" }));
+    link.href = url;
+    link.download = `${row.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "transcript"}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
   const downloadTranscriptPdf = () => {
     const title = opened?.title ?? "Transcript";
     downloadPdf(
@@ -718,6 +737,17 @@ export default function TranscribePage({
                       <Trash2 size={14} />
                     </button>
                   )}
+                  <button
+                    className="icon-button"
+                    aria-label={`Download ${row.title}`}
+                    title="Download available transcript text"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void downloadRow(row);
+                    }}
+                  >
+                    <Download size={14} />
+                  </button>
                 </div>
               </div>
             );

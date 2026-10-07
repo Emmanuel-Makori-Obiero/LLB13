@@ -166,11 +166,11 @@ Deno.serve(async (request) => {
   if (language) body.append("language", language);
   const languagePrompt = mixedLanguage
     ? requestedLanguage === "sw-sheng"
-      ? "Transcribe Kenyan English, Kiswahili and Sheng exactly as spoken. Preserve code-switching, names, legal terms and Sheng expressions; do not translate, standardise or replace Sheng with English."
-      : "Transcribe Kenyan English and Kiswahili exactly as spoken. Preserve code-switching, names and legal terms; do not translate Kiswahili into English or English into Kiswahili."
+      ? "Transcribe Kenyan English, Kiswahili and Sheng. Correct obvious spelling errors in the written transcript, but preserve code-switching, names, legal terms and Sheng expressions; do not translate, standardise or replace Sheng with English."
+      : "Transcribe Kenyan English and Kiswahili. Correct obvious spelling errors in the written transcript, but preserve code-switching, names and legal terms; do not translate Kiswahili into English or English into Kiswahili."
     : language === "sw"
-    ? "Transcribe Kenyan Kiswahili accurately. Preserve Kiswahili spelling, names, legal terms, code-switching, Sheng expressions and the speaker's exact wording; do not translate into English. Example wording to preserve exactly when heard: nataka tuendelee kusoma hii kitabu lec alisema."
-    : "Transcribe Kenyan English accurately, preserving names and legal terminology.";
+    ? "Transcribe Kenyan Kiswahili accurately. Correct obvious spelling errors in the written transcript, but preserve Kiswahili wording, names, legal terms, code-switching and Sheng expressions; do not translate into English."
+    : "Transcribe Kenyan English accurately and correct obvious spelling errors in the written transcript, while preserving names and legal terminology.";
   const seed = `${LAW_PROMPT} ${languagePrompt}`;
   const continuationLabel = " Continue naturally. Recent transcript context: ";
   const continuationBudget = Math.max(
