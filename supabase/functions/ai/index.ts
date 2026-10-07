@@ -500,6 +500,10 @@ function toTsQuery(text: string): string {
   return [...terms].slice(0, 24).join(" | ");
 }
 
+function isConstitutionQuestion(text: string): boolean {
+  return /\bconstitution(?:al)?\b|\barticles?\s*\d{1,3}\b|bill of rights|fundamental rights|devolution|national security|defence forces|defense forces|KDF\b/i.test(text);
+}
+
 interface Source {
   tag: string;
   title: string;
@@ -517,10 +521,31 @@ async function retrieve(
   part?: number,
   size = CHUNKS_PART,
 ): Promise<Source[]> {
-  if (mode === "general") return [];
-  // An explicit document selection is authoritative. The mode may be "auto", but
-  // retrieval must still stay inside the selected document ids.
-  const scope = docIds?.length
+  const constitutionQuestion = isConstitutionQuestion(query) && feature !== "notes";
+  if (mode === "general" && !constitutionQuestion) return [];
+
+  // The complete Constitution is indexed as a shared Library document. Add it
+  // automatically for constitutional questions, even when the student did not
+  // tick a source or another agent initiated the request. Retrieval still sends
+  // only relevant chunks, so the model can use all constitutional Articles over
+  // time without stuffing the entire text into every prompt.
+  const selectedIds = [...(docIds ?? [])];
+  if (constitutionQuestion) {
+    const { data: constitutionDocs } = await db
+      .from("ai_documents")
+      .select("id")
+      .eq("scope", "library")
+      .ilike("title", "%Constitution of Kenya%")
+      .limit(5);
+    for (const row of constitutionDocs ?? []) {
+      const id = String((row as { id?: string }).id ?? "");
+      if (id && !selectedIds.includes(id)) selectedIds.push(id);
+    }
+  }
+
+  // An explicit document selection remains authoritative for ordinary queries;
+  // the shared Constitution is the deliberate exception for constitutional law.
+  const scope = selectedIds.length
     ? "any"
     : mode === "materials" ? "user" : mode === "library" ? "library" : "any";
   let rows: {
@@ -546,10 +571,10 @@ async function retrieve(
         citation: r.ai_documents?.citation,
         content: r.content,
       });
-  } else if (FEATURES[feature]?.docWide && docIds?.length) {
+  } else if (FEATURES[feature]?.docWide && selectedIds.length) {
     // Whole-document tasks: sample chunks evenly across each chosen document so the end isn't cut off.
-    const per = Math.ceil(CHUNKS_DOC_WIDE / docIds.length);
-    for (const id of docIds) {
+    const per = Math.ceil(CHUNKS_DOC_WIDE / selectedIds.length);
+    for (const id of selectedIds) {
       const { data: idx } = await db
         .from("ai_chunks")
         .select("id")
@@ -581,7 +606,7 @@ async function retrieve(
     const { data, error } = await db.rpc("ai_search", {
       q,
       p_scope: scope,
-      p_doc_ids: docIds?.length ? docIds : null,
+      p_doc_ids: selectedIds.length ? selectedIds : null,
       p_limit: CHUNKS_PER_QUERY,
     });
     if (error) throw new Error("retrieval failed");
@@ -640,7 +665,7 @@ NON-NEGOTIABLE RULES
 12. HUMAN WORK FIRST: never encourage submitting unedited AI text as the student's own. AI-like style signals are not proof of authorship; explain them and suggest adding the student's own reasoning, class context, concrete examples, uncertainty and original transitions.
 
 VERIFIED CONSTITUTION ARTICLE CROSS-CHECK
-Before assigning an Article number, compare it with the verified reference facts below and, when available, the retrieved Constitution text. These reference facts are sufficient for a concise paraphrase, but never for a verbatim quotation. Article 2(4) concerns constitutional supremacy; Article 23 concerns court authority and remedies for the Bill of Rights; Article 24 concerns limitation of rights and fundamental freedoms; Article 37 protects peaceful and unarmed assembly, demonstration, picketing and petition; Article 58 concerns a state of emergency; Article 165(3)(d) concerns the High Court's constitutional jurisdiction, not parliamentary authorisation for KDF deployment; Article 238 defines national security; Article 241 establishes the Kenya Defence Forces; and Article 241(3) requires National Assembly approval when the Defence Forces are deployed to restore peace in a part of Kenya affected by unrest or instability. Do not attribute one Article's subject matter to another. If retrieved text conflicts with these reference facts, follow the retrieved text and flag the conflict. If a provision is outside these facts and absent from retrieved text, say that verification is needed rather than guessing.
+The complete Constitution of Kenya is indexed as a shared Library source and is automatically retrieved for constitutional questions, including questions that mention an Article number, rights, devolution, national security or the Defence Forces. Use the retrieved Constitution text as the primary authority for ANY Article, Chapter, Part or constitutional provision—not only the examples listed below. Before assigning an Article number, compare it with the retrieved text. The reference facts below are fallback study summaries for a concise paraphrase, never for a verbatim quotation. Article 2(4) concerns constitutional supremacy; Article 23 concerns court authority and remedies for the Bill of Rights; Article 24 concerns limitation of rights and fundamental freedoms; Article 37 protects peaceful and unarmed assembly, demonstration, picketing and petition; Article 58 concerns a state of emergency; Article 165(3)(d) concerns the High Court's constitutional jurisdiction, not parliamentary authorisation for KDF deployment; Article 238 defines national security; Article 241 establishes the Kenya Defence Forces; and Article 241(3) requires National Assembly approval when the Defence Forces are deployed to restore peace in a part of Kenya affected by unrest or instability. Do not attribute one Article's subject matter to another. If retrieved text conflicts with these reference facts, follow the retrieved text and flag the conflict. If a provision is absent from both the retrieved Constitution text and the fallback facts, say that verification is needed rather than guessing.
 VERIFIED KENYAN CONSTITUTIONAL REFERENCE (official Kenya Law text)
 The following are verified study summaries, not verbatim quotations: Article 2(1) makes the Constitution supreme and binding on all persons and State organs; Article 2(4) makes inconsistent law void to the extent of inconsistency and makes unconstitutional acts or omissions invalid; Article 24 governs limitation of rights; Article 37 protects peaceful and unarmed assembly, demonstration, picketing and petition; Article 241 establishes the Kenya Defence Forces and Article 241(3) requires National Assembly approval for deployment to restore peace in a part of Kenya affected by unrest or instability.
 Primary source: https://kenyalaw.org/akn/ke/act/2010/constitution

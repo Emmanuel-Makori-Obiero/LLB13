@@ -26,8 +26,12 @@ const MODEL = "whisper-large-v3-turbo";
 const HOUR_LIMIT = 7000;
 const DAY_LIMIT = 28000;
 const MAX_BYTES = 24 * 1024 * 1024;
+// Groq/Whisper rejects prompts longer than 896 characters. Keep this seed short;
+// the continuation is useful for stitched recordings but must fit the provider
+// limit together with the language instruction.
 const LAW_PROMPT =
-  "A law lecture at a Kenyan university. Terms: statute, tort, mens rea, actus reus, locus standi, obiter dicta, ratio decidendi, Constitution of Kenya 2010, High Court, Court of Appeal, Supreme Court.";
+  "Kenyan university law lecture. Preserve names, legal terms, Kiswahili, Sheng and code-switching exactly. Common terms: statute, tort, mens rea, actus reus, locus standi, obiter dicta, ratio decidendi, Constitution of Kenya, High Court, Court of Appeal, Supreme Court.";
+const WHISPER_PROMPT_LIMIT = 896;
 
 type UsageRow = { seconds: number; created_at: string };
 
@@ -157,7 +161,16 @@ Deno.serve(async (request) => {
     : requestedLanguage === "auto"
       ? "Detect Kenyan English, Kiswahili, and Sheng. Preserve code-switching and the exact words spoken; do not translate, clean up, or replace Sheng with standard English."
       : "Transcribe Kenyan English accurately, preserving names and legal terminology.";
-  body.append("prompt", `${LAW_PROMPT} ${languagePrompt}${continuation ? ` Continue naturally from the previous recording. Recent transcript context:\n${continuation}` : ""}`);
+  const seed = `${LAW_PROMPT} ${languagePrompt}`;
+  const continuationLabel = " Continue naturally. Recent transcript context: ";
+  const continuationBudget = Math.max(
+    0,
+    WHISPER_PROMPT_LIMIT - seed.length - continuationLabel.length,
+  );
+  const prompt = continuation
+    ? `${seed}${continuationLabel}${continuation.slice(-continuationBudget)}`
+    : seed;
+  body.append("prompt", prompt.slice(0, WHISPER_PROMPT_LIMIT));
 
   const result = await fetch(
     "https://api.groq.com/openai/v1/audio/transcriptions",
