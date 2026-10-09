@@ -240,6 +240,15 @@ export async function extractText(file: File): Promise<string> {
   return await file.text(); // .txt, .md
 }
 
+/** Convert a DOCX blob into HTML for the in-app reading view. */
+export async function docxToHtml(file: Blob): Promise<string> {
+  try {
+    return (await mammoth.convertToHtml({ arrayBuffer: await file.arrayBuffer() })).value;
+  } catch {
+    throw new Error("This Word file could not be rendered. Save it as a current .docx file and upload it again.");
+  }
+}
+
 export async function uploadMaterial(
   file: File,
   citation?: string,

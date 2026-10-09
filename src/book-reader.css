@@ -109,6 +109,30 @@
   line-height: 1.4;
 }
 
+.docx-reader {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: clamp(22px, 4vw, 48px);
+  background: #fff;
+  color: #20231f;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 16px;
+  line-height: 1.7;
+}
+.docx-reader h1,
+.docx-reader h2,
+.docx-reader h3,
+.docx-reader h4 { margin: 1.2em 0 0.45em; color: var(--forest); line-height: 1.25; }
+.docx-reader p { margin: 0 0 0.85em; }
+.docx-reader ul,
+.docx-reader ol { padding-left: 1.5em; }
+.docx-reader table { width: 100%; margin: 1em 0; border-collapse: collapse; }
+.docx-reader td,
+.docx-reader th { padding: 7px 9px; border: 1px solid #d8d4ca; text-align: left; vertical-align: top; }
+.docx-reader th { background: #f3f0e8; }
+.docx-reader a { color: var(--forest); text-decoration: underline; }
+
 .book-ai-pane {
   display: flex;
   flex-direction: column;

@@ -1,7 +1,7 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { BookOpen, Check, Highlighter, Maximize2, Minimize2, Minus, Plus, Send, Sparkles, X } from "lucide-react";
 import { downloadInfo, readerUrl, safeUrl } from "./links";
-import { askAI, type AIResult } from "./lib/ai";
+import { askAI, docxToHtml, type AIResult } from "./lib/ai";
 import { Markdown } from "./Markdown";
 import StorytellButton from "./StorytellButton";
 import type { Material } from "./data/types";
@@ -37,10 +37,42 @@ export default function BookReader({ material, onClose }: Props) {
   const [readerHeight, setReaderHeight] = useState(560);
   const [chatInput, setChatInput] = useState("");
   const [chat, setChat] = useState<ChatLine[]>([]);
+  const [docxHtml, setDocxHtml] = useState("");
+  const [docxLoading, setDocxLoading] = useState(false);
 
   const link = safeUrl(material.url);
   const frame = readerUrl(material);
   const info = downloadInfo(material);
+  const sourceUrl = info?.href || link;
+  const isDocx = /\.docx(?:[?#]|$)/i.test(`${material.storage_path ?? ""} ${material.url ?? ""}`);
+
+  useEffect(() => {
+    if (!isDocx || !sourceUrl) return;
+    let active = true;
+    setDocxLoading(true);
+    setDocxHtml("");
+    void (async () => {
+      try {
+        const response = await fetch(sourceUrl);
+        if (!response.ok) throw new Error(`Could not load the Word document (${response.status}).`);
+        const raw = await docxToHtml(await response.blob());
+        const parsed = new DOMParser().parseFromString(raw, "text/html");
+        parsed.querySelectorAll("script,style,iframe,object,embed,form").forEach((node) => node.remove());
+        parsed.querySelectorAll("*").forEach((node) => {
+          [...node.attributes].forEach((attribute) => {
+            if (attribute.name !== "href" || node.tagName !== "A") node.removeAttribute(attribute.name);
+            else if (!/^https?:/i.test(attribute.value)) node.removeAttribute(attribute.name);
+          });
+        });
+        if (active) setDocxHtml(parsed.body.innerHTML);
+      } catch (loadError) {
+        if (active) setError(loadError instanceof Error ? loadError.message : "Could not render this Word document.");
+      } finally {
+        if (active) setDocxLoading(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [isDocx, sourceUrl]);
 
   const persist = (next: Highlight[]) => {
     setHighlights(next);
@@ -122,7 +154,12 @@ export default function BookReader({ material, onClose }: Props) {
       <div className="book-reader-grid">
           <section className="book-reading-pane" style={{ height: `${readerHeight + 84}px` }}>
           <div className="book-pane-head"><div><span className="section-label">Preview</span><p className="field-hint">The source opens directly here. Copy any passage you want to study.</p></div><div className="reader-zoom-controls" aria-label="Preview size controls"><button className="secondary-button" onClick={() => setZoom((value) => Math.max(60, value - 10))} title="Zoom out"><Minus size={13} /></button><strong>{zoom}%</strong><button className="secondary-button" onClick={() => setZoom((value) => Math.min(200, value + 10))} title="Zoom in"><Plus size={13} /></button><label className="reader-height-control">Height <input type="range" min="360" max="900" step="20" value={readerHeight} onChange={(event) => setReaderHeight(Number(event.target.value))} /> <strong>{readerHeight}px</strong></label></div><BookOpen size={18} /></div>
-          {frame ? (
+          {isDocx ? (
+            <div className="book-preview-wrap" style={{ height: `${readerHeight}px` }}>
+              {docxLoading ? <div className="empty">Converting the Word document for in-app reading…</div> : docxHtml ? <article className="docx-reader" onMouseUp={captureSelection} dangerouslySetInnerHTML={{ __html: docxHtml }} /> : <div className="empty">The Word document could not be rendered. Use Open source or Download to try another copy.</div>}
+              <p className="reader-hint">Word document converted for in-app reading. Select text to explain or save a highlight.</p>
+            </div>
+          ) : frame ? (
             <div className="book-preview-wrap" style={{ height: `${readerHeight}px` }}>
               {isPdf ? <object data={previewFrame} type="application/pdf" aria-label={`Preview ${material.title}`}><iframe src={previewFrame} title={`Preview ${material.title}`} /></object> : <iframe src={previewFrame} title={`Preview ${material.title}`} referrerPolicy="no-referrer" />}
               <p className="reader-hint">Preview only — no background extraction or loading wait. Copy a passage and paste it into the AI reading desk.</p>
