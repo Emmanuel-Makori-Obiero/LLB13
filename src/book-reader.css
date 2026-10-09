@@ -78,6 +78,7 @@
   flex: 1 1 auto;
   flex-direction: column;
   min-height: 0;
+  overflow: hidden;
   padding: 10px;
   background: #e8e5de;
 }
@@ -111,8 +112,12 @@
 
 .docx-reader {
   flex: 1 1 auto;
+  height: 0;
   min-height: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: scroll;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   padding: clamp(22px, 4vw, 48px);
   background: #fff;
   color: #20231f;
