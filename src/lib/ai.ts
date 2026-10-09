@@ -3,7 +3,7 @@ import { supabase as client } from "../data/repository";
 import { useCallback, useState } from "react";
 import * as pdfjs from "pdfjs-dist";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-import mammoth from "mammoth";
+import * as mammoth from "mammoth";
 
 function db() {
   if (!client) throw new Error("Supabase is not configured.");
@@ -188,6 +188,8 @@ function chunkText(text: string, size = 1200, overlap = 200): string[] {
 
 export async function extractText(file: File): Promise<string> {
   const name = file.name.toLowerCase();
+  const isDocx = name.endsWith(".docx") || file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  const isLegacyDoc = name.endsWith(".doc") || file.type === "application/msword";
   if (name.endsWith(".pdf")) {
     pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
     const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() })
@@ -201,10 +203,15 @@ export async function extractText(file: File): Promise<string> {
     }
     return out;
   }
-  if (name.endsWith(".docx")) {
-    return (
-      await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() })
-    ).value;
+  if (isDocx) {
+    try {
+      return (await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() })).value;
+    } catch {
+      throw new Error("This Word file could not be read. Save it as a current .docx file in Microsoft Word or Google Docs and upload it again.");
+    }
+  }
+  if (isLegacyDoc) {
+    throw new Error("Legacy .doc files are not readable in the browser. Open the file in Word or Google Docs, save/export it as .docx, then upload the .docx file.");
   }
   if (name.endsWith(".pptx")) {
     const JSZip = (await import("jszip")).default;
@@ -241,7 +248,7 @@ export async function uploadMaterial(
   const text = (await extractText(file)).trim();
   if (!text.length)
     throw new Error(
-      "No readable text found. Scanned PDFs need OCR before upload.",
+      "No readable text found. Scanned PDFs need OCR, and Word files must be saved as .docx before upload.",
     );
   return storeText(file.name.replace(/\.[^.]+$/, ""), text, citation);
 }
@@ -254,7 +261,7 @@ export async function uploadLibraryMaterial(
   if (!file.size) throw new Error("The selected file is empty. Choose a file with at least 1 byte.");
   const text = (await extractText(file)).trim();
   if (!text.length)
-    throw new Error("No readable text found. Scanned PDFs need OCR before indexing.");
+    throw new Error("No readable text found. Scanned PDFs need OCR, and Word files must be saved as .docx before indexing.");
   return storeText(file.name.replace(/\.[^.]+$/, ""), text, citation, "library");
 }
 

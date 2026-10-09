@@ -4095,13 +4095,13 @@ function MaterialForm({
         </label>
         <label>
           Upload file{" "}
-          <span className="field-hint">Optional PDF, DOCX, PPTX, TXT, or image</span>
+          <span className="field-hint">Optional PDF, Word DOCX, PPTX, TXT, or image</span>
           <span className={`material-dropzone ${dragActive ? "active" : ""} ${file ? "has-file" : ""}`}>
             <strong>{file ? file.name : "Drag and drop a book here"}</strong>
-            <small>{file ? "AI details are ready to review below." : "or choose a PDF, DOCX, PPTX, TXT, PNG, or JPG"}</small>
+            <small>{file ? "AI details are ready to review below." : "or choose a PDF, Word DOCX, PPTX, TXT, PNG, or JPG"}</small>
             <input
               type="file"
-              accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg"
+              accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
               onChange={(event) => chooseFile(event.target.files?.[0])}
             />
           </span>
