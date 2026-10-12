@@ -4,7 +4,11 @@
   align-items: end;
   flex-wrap: wrap;
   gap: 8px;
+  width: 100%;
+  padding: 10px 0;
 }
+.library-filters[hidden] { display: none; }
+.library-filter-toggle { display: inline-flex; align-items: center; gap: 6px; }
 .library-filters label {
   display: grid;
   gap: 4px;

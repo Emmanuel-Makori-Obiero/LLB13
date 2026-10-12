@@ -18,6 +18,7 @@ import {
   Clock3,
   Download,
   FileText,
+  Filter,
   Film,
   FolderOpen,
   Image as ImageIcon,
@@ -3688,6 +3689,7 @@ function LibraryPageReal({
   const [unitFilter, setUnitFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [sortBy, setSortBy] = useState("date-desc");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const units = [...new Set(materials.map((material) => material.unit).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   const types = [...new Set(materials.map((material) => material.type).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   const visibleMaterials = [...materials]
@@ -3715,7 +3717,16 @@ function LibraryPageReal({
             placeholder="Search title, topic, unit…"
           />
         </div>
-        <div className="library-filters" aria-label="Filter library materials">
+        <button
+          className="secondary-button library-filter-toggle"
+          type="button"
+          onClick={() => setFiltersOpen((open) => !open)}
+          aria-expanded={filtersOpen}
+          aria-controls="library-filter-controls"
+        >
+          <Filter size={14} /> Filters
+        </button>
+        <div id="library-filter-controls" className="library-filters" aria-label="Filter library materials" hidden={!filtersOpen}>
           <label>
             <span>Unit</span>
             <select value={unitFilter} onChange={(event) => setUnitFilter(event.target.value)}>
