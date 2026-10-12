@@ -26,6 +26,7 @@ import {
   GraduationCap,
   Grip,
   LayoutDashboard,
+  Workflow,
   Library,
   LogOut,
   Maximize2,
@@ -88,6 +89,7 @@ const TranscribePage = lazy(() => import("./TranscribePage"));
 import { CounsellorChat } from "./CounsellorChat";
 import { StudyAssistant } from "./StudyAssistant";
 import LegalDictionaryPage from "./LegalDictionaryPage";
+import LegalProcessPage from "./LegalProcessPage";
 import FloatingLawyerAgent from "./FloatingLawyerAgent";
 import { ResearchWriter } from "./ResearchWriter";
 import { TranscriptAI } from "./TranscriptAI";
@@ -132,6 +134,7 @@ const nav = [
   { id: "assignments", label: "Assignments", icon: FileText },
   { id: "library", label: "Library", icon: Library },
   { id: "dictionary", label: "Law dictionary", icon: BookOpen },
+  { id: "legal-process", label: "Legal what-ifs", icon: Workflow },
   { id: "scanner", label: "Scan & notes", icon: ScanLine },
   { id: "guide", label: "Guided study", icon: GraduationCap },
   { id: "music", label: "Music & media", icon: Music2 },
@@ -1197,6 +1200,16 @@ function App() {
           {view === "arena" && <GamesHub materials={materials} userId={userId} displayName={profile.displayName || userEmail?.split("@")[0] || "Player"} isAdmin={isAdmin} inviteCode={new URLSearchParams(window.location.search).get("join")} />}
           {view === "members" && <SectionedMembersPage members={members} />}
           {view === "dictionary" && <LegalDictionaryPage />}
+          {view === "legal-process" && (
+            <>
+              <PageHeading
+                eyebrow="Law in real life"
+                title="Legal what-ifs."
+                subtitle="Turn a real-life situation into an ordered process, with requirements, reasons, and the legal foundation to verify."
+              />
+              <LegalProcessPage />
+            </>
+          )}
           {view === "assistant" && (
             <Suspense fallback={<div className="subheading">Opening the study assistant…</div>}>
               <PageHeading

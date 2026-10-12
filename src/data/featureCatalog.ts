@@ -470,6 +470,20 @@ export const featureCatalog: FeatureEntry[] = [
     benefit: "Turns paper handouts and photographed readings into searchable, editable notes while keeping the original images private to your account.",
   },
   {
+    id: "legal_process_guides",
+    title: "Legal What-If process guides",
+    category: "AI study & practice",
+    availability: "new",
+    access: "Sign in with an approved Group 13 account. Treat current licences, fees, forms and deadlines as items to verify with the official authority.",
+    capabilities: [
+      "Turn a real-life legal question into connected process cards with arrows.",
+      "Show what to do, why it matters, likely requirements, the next step, and the constitutional or official-law foundation.",
+      "Separate constitutional support from current-law details that need official verification.",
+    ],
+    howToUse: "Open Legal what-ifs and describe the situation in plain language, such as opening a business, buying land, or responding to an arrest. Read the cards in order, check the assumptions, and follow each official-source verification lead before relying on it.",
+    benefit: "Builds practical legal reasoning by connecting a real-life goal to a lawful sequence instead of giving an isolated definition or unsupported list.",
+  },
+  {
     id: "kenya_law_case_finder",
     title: "Kenya Law case finder",
     category: "Library, reading & notes",

@@ -344,6 +344,11 @@ const FEATURES: Record<
     docWide: true,
     task: "Write a short narrated video lesson grounded in the provided sources. Structure it as 6 to 10 scenes. For every scene use this format: SCENE N — TITLE; VISUAL: one simple slide or on-screen idea; NARRATION: natural spoken explanation; SOURCE NOTE: relevant source marker or 'verify'. Use plain language, one concrete example, a counterargument or limitation, and a final quick-recall question. Do not invent authorities or pretend a quotation is verified.",
   },
+  legal_process: {
+    json: true,
+    docWide: true,
+    task: `Turn the student's Kenyan-law what-if into a practical, ordered legal process for a law student. Return ONLY valid JSON in this shape: {"title":"","shortAnswer":"","assumptions":[""],"steps":[{"number":1,"title":"","action":"","why":"","requirements":[""],"authority":[""],"next":"","status":"verified|check"}],"warnings":[""],"studyQuestions":[""]}. Create 4 to 9 connected steps. Each step must say what to do, why it matters, what documents/conditions/people may be required, and what comes next. Use the Constitution of Kenya foundation when genuinely relevant and label those points verified only when supported by the supplied Constitution source. For current licences, registrations, fees, forms, deadlines, agencies, sector rules, or statutes not present in the supplied sources, do not invent details: write a neutral official-search lead such as [[KENYA_LAW_SEARCH: business registration requirements Kenya]] inside authority and set status to check. Distinguish a legal requirement from practical advice. Include assumptions when the answer depends on business type, county, immigration status, land category, employment facts, or other missing facts. Include a short warning that this is study orientation and that current official requirements should be checked. Never claim that the whole Constitution was placed in the prompt: the system may retrieve relevant constitutional sections automatically from the shared Constitution library.`
+  },
   book_metadata: {
     json: true,
     task: 'Extract only metadata supported by the uploaded book text and the available-units list in the user message. Return ONLY JSON: {"title":"","author":"","type":"Textbook|Lecture notes|Case brief|Statute|Past paper|Guide","unit":"","topics":[""],"source":"","date":""}. Extract the author, lecturer, editor, or institution exactly as supported by the source; use an empty string when it is not stated. Choose unit only from the supplied available-units list. Do not invent a publisher, date, author, or topics; use empty strings or an empty array when not supported.',
@@ -523,7 +528,7 @@ async function retrieve(
   part?: number,
   size = CHUNKS_PART,
 ): Promise<Source[]> {
-  const constitutionQuestion = isConstitutionQuestion(query) && feature !== "notes";
+  const constitutionQuestion = (isConstitutionQuestion(query) || feature === "legal_process") && feature !== "notes";
   if (mode === "general" && !constitutionQuestion) return [];
 
   // The complete Constitution is indexed as a shared Library document. Add it
