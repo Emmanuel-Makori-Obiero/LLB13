@@ -52,7 +52,8 @@ export type AIFeature =
   | "rw_bookends"
   | "podcast_script"
   | "video_script"
-  | "legal_process";
+  | "legal_process"
+  | "legal_explain";
 
 export const AI_MODES: { value: AIMode; label: string; hint: string }[] = [
   {

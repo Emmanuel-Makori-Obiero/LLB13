@@ -344,6 +344,10 @@ const FEATURES: Record<
     docWide: true,
     task: "Write a short narrated video lesson grounded in the provided sources. Structure it as 6 to 10 scenes. For every scene use this format: SCENE N — TITLE; VISUAL: one simple slide or on-screen idea; NARRATION: natural spoken explanation; SOURCE NOTE: relevant source marker or 'verify'. Use plain language, one concrete example, a counterargument or limitation, and a final quick-recall question. Do not invent authorities or pretend a quotation is verified.",
   },
+  legal_explain: {
+    docWide: true,
+    task: "Answer the student's Kenyan-law what-if in a clear, normal written explanation. Start with a direct answer, then explain the legal reasoning in short sections: what the person should do, why it matters, requirements or missing facts, legal foundation, and what must be verified under current law. Use plain language, distinguish legal requirements from practical suggestions, and never invent current licences, fees, forms, deadlines, statutes, or citations. Use [[KENYA_LAW_SEARCH: neutral legal issue or statute phrase]] for missing current authorities.",
+  },
   legal_process: {
     json: true,
     docWide: true,
