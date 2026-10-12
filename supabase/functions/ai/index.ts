@@ -346,12 +346,12 @@ const FEATURES: Record<
   },
   legal_explain: {
     docWide: true,
-    task: "Answer the student's Kenyan-law what-if in a clear, normal written explanation. Start with a direct answer, then explain the legal reasoning in short sections: what the person should do, why it matters, requirements or missing facts, legal foundation, and what must be verified under current law. Use plain language, distinguish legal requirements from practical suggestions, and never invent current licences, fees, forms, deadlines, statutes, or citations. Use [[KENYA_LAW_SEARCH: neutral legal issue or statute phrase]] for missing current authorities.",
+    task: "Answer the student's Kenyan-law what-if in a clear, normal written explanation. Start with a direct answer, then explain the legal reasoning in short sections: what the person should do, why it matters, requirements or missing facts, legal foundation, and what must be verified under current law. Use plain language, distinguish legal requirements from practical suggestions, and never invent current licences, fees, forms, deadlines, statutes, or citations. PARAPHRASE ONLY: do not use quotation marks or present any wording as an exact quotation, even if you remember it. Use [[KENYA_LAW_SEARCH: neutral legal issue or statute phrase]] for missing current authorities.",
   },
   legal_process: {
     json: true,
     docWide: true,
-    task: `Turn the student's Kenyan-law what-if into a very easy, practical, ordered legal process for a law student. Return ONLY valid JSON in this shape: {"title":"","shortAnswer":"","assumptions":[""],"steps":[{"number":1,"title":"","action":"","why":"","requirements":[""],"authority":[""],"next":"","status":"verified|check"}],"warnings":[""],"studyQuestions":[""]}. Create 4 to 8 connected steps. The interface displays each step as a small card with an arrow to the next card, so keep every card short: title 3 to 8 words; action and why no more than 25 plain-language words each; no more than 4 short requirements; next no more than 12 words; authority no more than 2 short items. Use simple words and explain legal terms in brackets. Start with the first practical action, not background theory. Use the Constitution of Kenya foundation when genuinely relevant and label those points verified only when supported by the supplied Constitution source. For current licences, registrations, fees, forms, deadlines, agencies, sector rules, or statutes not present in the supplied sources, do not invent details: write a neutral official-search lead such as [[KENYA_LAW_SEARCH: business registration requirements Kenya]] inside authority and set status to check. Distinguish a legal requirement from practical advice. Include assumptions when the answer depends on business type, county, immigration status, land category, employment facts, or other missing facts. Include a short warning that this is study orientation and that current official requirements should be checked. Never claim that the whole Constitution was placed in the prompt: the system may retrieve relevant constitutional sections automatically from the shared Constitution library.`
+    task: `Turn the student's Kenyan-law what-if into a very easy, practical, ordered legal process for a law student. Return ONLY valid JSON in this shape: {"title":"","shortAnswer":"","assumptions":[""],"steps":[{"number":1,"title":"","action":"","why":"","requirements":[""],"authority":[""],"next":"","status":"verified|check"}],"warnings":[""],"studyQuestions":[""]}. Create 4 to 8 connected steps. The interface displays each step as a small card with an arrow to the next card, so keep every card short: title 3 to 8 words; action and why no more than 25 plain-language words each; no more than 4 short requirements; next no more than 12 words; authority no more than 2 short items. Use simple words and explain legal terms in brackets. Start with the first practical action, not background theory. Use the Constitution of Kenya foundation when genuinely relevant and label those points verified only when supported by the supplied Constitution source. For current licences, registrations, fees, forms, deadlines, agencies, sector rules, or statutes not present in the supplied sources, do not invent details: write a neutral official-search lead such as [[KENYA_LAW_SEARCH: business registration requirements Kenya]] inside authority and set status to check. Distinguish a legal requirement from practical advice. Include assumptions when the answer depends on business type, county, immigration status, land category, employment facts, or other missing facts. Include a short warning that this is study orientation and that current official requirements should be checked. NEVER use quotation marks or exact quotations in any JSON field; paraphrase everything. Never claim that the whole Constitution was placed in the prompt: the system may retrieve relevant constitutional sections automatically from the shared Constitution library.`
   },
   book_metadata: {
     json: true,
@@ -1020,9 +1020,12 @@ Deno.serve(async (req) => {
         /\u201c([^\u201d]{60,})\u201d|"([^"\n]{60,})"/g,
         (m, a, b) => {
           const q = norm(a ?? b);
-          if (q.split(" ").length < 10 || srcText.includes(q.slice(0, 80)))
+          if (srcText.includes(q.slice(0, 80)))
             return m;
+          if (q.split(" ").length < 10 && feature !== "legal_explain") return m;
           flagged = true;
+          if (feature === "legal_explain")
+            return "[Exact wording removed because it was not verified in the supplied source.]";
           return `${m} *(unverified quotation)*`;
         },
       );
@@ -1036,6 +1039,17 @@ Deno.serve(async (req) => {
     if (FEATURES[feature].json) {
       data = parseJsonObject(answer);
       if (data !== null) {
+        if (feature === "legal_process") {
+          const stripQuoteMarks = (value: unknown): unknown => {
+            if (typeof value === "string") return value.replace(/[\u201c\u201d\"]/g, "");
+            if (Array.isArray(value)) return value.map(stripQuoteMarks);
+            if (value && typeof value === "object")
+              return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, stripQuoteMarks(item)]));
+            return value;
+          };
+          data = stripQuoteMarks(data);
+          warnings.push("Card wording is paraphrased; exact quotations are not shown without source verification.");
+        }
         answer = JSON.stringify(data);
       } else {
         warnings.push("Couldn't parse structured output. Try again.");
