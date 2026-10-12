@@ -122,10 +122,12 @@ const FeaturesGuidePage = lazy(() => import("./FeaturesGuidePage"));
 const ScannerNotesPage = lazy(() => import("./ScannerNotesPage"));
 const KenyaLawCasesPage = lazy(() => import("./KenyaLawCasesPage"));
 const ScheduledCourtCasesPage = lazy(() => import("./ScheduledCourtCasesPage"));
+const AttendancePage = lazy(() => import("./AttendancePage"));
 
 const nav = [
   { id: "dashboard", label: "Home", icon: LayoutDashboard },
   { id: "timetable", label: "Timetable", icon: CalendarDays },
+  { id: "attendance", label: "Attendance", icon: Check },
   { id: "todos", label: "My to-do", icon: CheckSquare },
   { id: "assignments", label: "Assignments", icon: FileText },
   { id: "library", label: "Library", icon: Library },
@@ -385,6 +387,10 @@ function App() {
       active = false;
     };
   }, [userEmail]);
+  useEffect(() => {
+    if (!userId || !supabase || ["login", "signup"].includes(view)) return;
+    void supabase.from("platform_activity_events").insert({ user_id: userId, event_type: "page_view", page: view, details: {} });
+  }, [userId, view]);
   useEffect(() => {
     const onPopState = () => {
       setView(viewFromPath());
@@ -1076,6 +1082,7 @@ function App() {
               }
             />
           )}
+          {view === "attendance" && <Suspense fallback={<div className="subheading">Opening attendance…</div>}><AttendancePage lessons={lessons} userId={userId} /></Suspense>}
           {view === "units" && (
             <UnitsPage
               units={units}

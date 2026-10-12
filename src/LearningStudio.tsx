@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { askAI, importLibraryMaterial, listMyMaterials, uploadMaterial } from "./lib/ai";
 import { generateAudio } from "./lib/cloudMedia";
+import { supabase } from "./data/repository";
 import { Markdown } from "./Markdown";
 import "./learning-studio.css";
 
@@ -408,6 +409,10 @@ export default function LearningStudio() {
       }
       setScript(finalScript);
       setScriptLanguage(spokenLanguage);
+      if (mode === "podcast" && supabase) {
+        const { data: session } = await supabase.auth.getSession();
+        if (session.session?.user) void supabase.from("platform_activity_events").insert({ user_id: session.session.user.id, event_type: "podcast_script_generated", page: "assistant", details: {} });
+      }
       setGenerationProgress(100);
       setStage("Complete — your episode is ready.");
     } catch (e) {
@@ -536,7 +541,7 @@ export default function LearningStudio() {
                   )}
                 </div>
               </div>
-                <p className="field-hint">Build learning episode creates the script; generate audio to make a playable file. The server tries ElevenLabs, then Google Gemini TTS, then English-only OpenAI TTS when configured. An optional English-only Hugging Face fallback can also be enabled. Provider use may consume quota or incur charges, so avoid confidential material.</p>
+                <p className="field-hint">Build learning episode creates the script; generate audio to make a playable file. Members use Google Gemini TTS and, if configured, Hugging Face; only the administrator can use ElevenLabs or OpenAI TTS. Provider quotas and pricing depend on the configured account, so audio may still use paid quota.</p>
                 {audioNote && <p className="field-hint">{audioNote}</p>}
                 {audioUrl && <div className="studio-audio-download"><audio controls preload="metadata" src={audioUrl} aria-label="Generated podcast audio player" onError={() => setAudioNote("The player could not load this audio. Regenerate it to create a fresh playback link.")} /><button className="secondary-button" onClick={() => void downloadGeneratedAudio()}><Download size={13} /> Download audio</button><span className="field-hint">Voice: {audioProviderLabel(audioProvider)}</span></div>}
               {mode === "video" && (

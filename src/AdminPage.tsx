@@ -5,6 +5,7 @@ import type { AdminAccount, Member, Unit } from "./data/types";
 import { unitReps } from "./data/types";
 import type { Lesson } from "./data/types";
 import AdminTimetablePlanner from "./AdminTimetablePlanner";
+import AdminOversight from "./AdminOversight";
 import "./admin.css";
 
 type Props = {
@@ -228,6 +229,7 @@ export default function AdminPage({
       </div>
 
       <div className="admin-stack">
+        <AdminOversight />
         <AdminTimetablePlanner
           lessons={lessons}
           units={units}
