@@ -14,6 +14,7 @@ create table if not exists public.units (
 create table if not exists public.materials (
   id text primary key,
   title text not null,
+  author text,
   type text not null,
   unit text not null,
   topic text not null,

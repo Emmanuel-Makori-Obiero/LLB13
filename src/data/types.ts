@@ -11,6 +11,7 @@ export type Unit = {
 export type Material = {
   id: string;
   title: string;
+  author?: string | null;
   type: string;
   unit: string;
   topic: string;

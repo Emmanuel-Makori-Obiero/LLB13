@@ -1,7 +1,7 @@
 import { supabase } from "../data/repository";
 import { askAI, saveTextMaterial, type AIResult } from "./ai";
 
-export type SourceChoice = { id: string; title: string; kind: "document" | "transcript" | "material"; citation?: string | null; scope?: "user" | "library"; url?: string | null };
+export type SourceChoice = { id: string; title: string; author?: string | null; kind: "document" | "transcript" | "material"; citation?: string | null; scope?: "user" | "library"; url?: string | null };
 export type GuideLesson = {
   title: string;
   objective: string;
@@ -233,17 +233,17 @@ async function buildSourceDigest(sources: SourceChoice[], docIds: string[], onPr
 
 export async function listGuideSources(): Promise<SourceChoice[]> {
   const [docs, transcripts, materials] = await Promise.all([
-    db().from("ai_documents").select("id,title,citation,scope").order("created_at", { ascending: false }).limit(200),
+    db().from("ai_documents").select("id,title,author,citation,scope").order("created_at", { ascending: false }).limit(200),
     db().from("transcripts").select("id,title,unit,status,created_at").eq("status", "done").order("created_at", { ascending: false }).limit(200),
-    db().from("materials").select("id,title,type,unit,topic,date,source,url").order("date", { ascending: false }).limit(500),
+    db().from("materials").select("id,title,author,type,unit,topic,date,source,url").order("date", { ascending: false }).limit(500),
   ]);
   if (docs.error) throw new Error("Could not load saved AI documents.");
   if (transcripts.error) throw new Error("Could not load saved transcripts.");
   if (materials.error) throw new Error("Could not load Library materials.");
   return [
-    ...(docs.data ?? []).map((d) => ({ id: d.id, title: d.title, kind: "document" as const, citation: d.citation, scope: d.scope === "library" ? "library" as const : "user" as const })),
+    ...(docs.data ?? []).map((d) => ({ id: d.id, title: d.title, author: d.author, kind: "document" as const, citation: d.citation, scope: d.scope === "library" ? "library" as const : "user" as const })),
     ...(transcripts.data ?? []).map((t) => ({ id: t.id, title: t.title, kind: "transcript" as const, citation: t.unit ? `Transcript · ${t.unit}` : "Saved transcript", scope: "user" as const })),
-    ...(materials.data ?? []).map((m) => ({ id: m.id, title: m.title, kind: "material" as const, citation: [m.type, m.unit, m.topic, m.source].filter(Boolean).join(" · "), scope: "library" as const, url: m.url ?? null })),
+    ...(materials.data ?? []).map((m) => ({ id: m.id, title: m.title, author: m.author, kind: "material" as const, citation: [m.type, m.unit, m.topic, m.source].filter(Boolean).join(" · "), scope: "library" as const, url: m.url ?? null })),
   ];
 }
 

@@ -127,7 +127,7 @@ export async function uploadUserAsset(
 }
 
 const MATERIAL_COLUMNS =
-  "id,title,type,unit,topic,date,source,url,storage_path,owner_id";
+  "id,title,author,type,unit,topic,date,source,url,storage_path,owner_id";
 const DISCUSSION_COLUMNS =
   "id,title,day,time,leader,status,prep,topics,instant,created_by";
 
@@ -493,6 +493,7 @@ const supabaseRepository: Group13Repository = {
       .from("materials")
       .update({
         title: material.title,
+        author: material.author || null,
         type: material.type,
         unit: material.unit,
         topic: material.topic,

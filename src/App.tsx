@@ -1312,6 +1312,7 @@ function App() {
                   const indexed = await uploadLibraryMaterial(
                     file,
                     `${created.type} · ${created.unit} · ${created.source}`,
+                    created.author ?? undefined,
                   );
                   setNotice(`Material uploaded and added to AI knowledge (${indexed.chunks} sections).`);
                 } catch (indexError) {
@@ -3721,7 +3722,7 @@ function LibraryPageReal({
               <tr key={material.id}>
                 <td>
                   <span className="material-title">{material.title}</span>
-                  <span className="material-sub">{material.topic}</span>
+                  <span className="material-sub">{material.author ? `By ${material.author} · ` : ""}{material.topic}</span>
                 </td>
                 <td>
                   <span className="chip">
@@ -3916,8 +3917,9 @@ function MaterialForm({
   const [extractNote, setExtractNote] = useState("");
   const [form, setForm] = useState<Omit<Material, "id">>(() =>
     initial
-      ? {
+        ? {
           title: initial.title,
+          author: initial.author ?? "",
           type: initial.type,
           unit: initial.unit,
           topic: initial.topic,
@@ -3927,8 +3929,9 @@ function MaterialForm({
           storage_path: initial.storage_path,
           owner_id: initial.owner_id,
         }
-      : {
+        : {
           title: "",
+          author: "",
           type: "Lecture notes",
           unit: units[0]?.name ?? "",
           topic: "",
@@ -3967,6 +3970,7 @@ function MaterialForm({
       });
       const metadata = result.data as {
         title?: string;
+        author?: string;
         type?: string;
         unit?: string;
         topics?: string[];
@@ -3988,6 +3992,7 @@ function MaterialForm({
           ? metadata.topics.filter(Boolean).join(", ")
           : current.topic,
         source: metadata?.source?.trim() || current.source,
+        author: metadata?.author?.trim() || current.author,
         date: metadata?.date?.trim() || current.date,
       }));
       setExtractNote("Details extracted. Review them before saving.");
@@ -4050,6 +4055,15 @@ function MaterialForm({
             <option>Past paper</option>
             <option>Guide</option>
           </select>
+        </label>
+        <label>
+          Author
+          <span className="field-hint">Author, lecturer, editor, or institution named in the source</span>
+          <input
+            value={form.author ?? ""}
+            onChange={(event) => change("author", event.target.value)}
+            placeholder="e.g. Prof. W. J. Kamba"
+          />
         </label>
         <label>
           Unit

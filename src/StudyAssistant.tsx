@@ -17,6 +17,7 @@ import "./assistant.css";
 type Doc = {
   id: string;
   title: string;
+  author?: string | null;
   citation: string | null;
   scope: string;
   created_at: string;
@@ -337,6 +338,7 @@ export function Answer({ turn }: { turn: Turn }) {
               ) : (
                 <span>
                   {s.title}
+                  {s.author ? ` — ${s.author}` : ""}
                   {s.ref ? `, ${s.ref}` : ""}
                 </span>
               )}
@@ -597,7 +599,7 @@ export function StudyAssistant() {
               type="file"
               hidden
               multiple
-              accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md,.rtf,.csv,.json,.html,application/*,text/*"
+              accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md,.rtf,.csv,.json,.html,.png,.jpg,.jpeg,.webp,image/*,application/*,text/*"
               onChange={(e) => void onUpload(e.target.files)}
             />
           </div>

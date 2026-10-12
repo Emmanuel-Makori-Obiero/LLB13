@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import * as pdfjs from "pdfjs-dist";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import * as mammoth from "mammoth";
+import { ocrImage, ocrPdfPages } from "./ocr";
 
 function db() {
   if (!client) throw new Error("Supabase is not configured.");
@@ -85,7 +86,7 @@ export interface AIResult {
   basis: "materials" | "library" | "mixed" | "general" | "none";
   grounded: boolean;
   warnings: string[];
-  sources: { tag: string; title: string; ref: string | null }[];
+  sources: { tag: string; title: string; author?: string | null; ref: string | null }[];
   provider: string | null;
   model: string | null;
 }
@@ -201,7 +202,11 @@ export async function extractText(file: File): Promise<string> {
       out +=
         tc.items.map((it) => ("str" in it ? it.str : "")).join(" ") + "\n\n";
     }
-    return out;
+    if (out.trim().length >= 40) return out;
+    return ocrPdfPages(pdf);
+  }
+  if (file.type.startsWith("image/") || /\.(png|jpe?g|webp|bmp|tiff?)$/i.test(name)) {
+    return ocrImage(file);
   }
   if (isDocx) {
     try {
@@ -252,29 +257,31 @@ export async function docxToHtml(file: Blob): Promise<string> {
 export async function uploadMaterial(
   file: File,
   citation?: string,
+  author?: string,
 ): Promise<{ id: string; chunks: number }> {
   if (!file.size) throw new Error("The selected file is empty. Choose a file with at least 1 byte.");
   const text = (await extractText(file)).trim();
   if (!text.length)
     throw new Error(
-      "No readable text found. Scanned PDFs need OCR, and Word files must be saved as .docx before upload.",
+      "No readable text found after OCR. Try a clearer scan, or save the Word file as .docx before upload.",
     );
-  return storeText(file.name.replace(/\.[^.]+$/, ""), text, citation);
+  return storeText(file.name.replace(/\.[^.]+$/, ""), text, citation, "user", author);
 }
 
 /** Extract and index a newly uploaded Library book as shared AI knowledge. */
 export async function uploadLibraryMaterial(
   file: File,
   citation?: string,
+  author?: string,
 ): Promise<{ id: string; chunks: number }> {
   if (!file.size) throw new Error("The selected file is empty. Choose a file with at least 1 byte.");
   const text = (await extractText(file)).trim();
   if (!text.length)
-    throw new Error("No readable text found. Scanned PDFs need OCR, and Word files must be saved as .docx before indexing.");
-  return storeText(file.name.replace(/\.[^.]+$/, ""), text, citation, "library");
+    throw new Error("No readable text found after OCR. Try a clearer scan, or save the Word file as .docx before indexing.");
+  return storeText(file.name.replace(/\.[^.]+$/, ""), text, citation, "library", author);
 }
 
-export async function importLibraryMaterial(source: { title: string; url?: string | null; citation?: string | null }) {
+export async function importLibraryMaterial(source: { title: string; url?: string | null; citation?: string | null; author?: string | null }) {
   if (!source.url) throw new Error("This Library item does not have a readable file attached.");
   const response = await fetch(source.url);
   if (!response.ok) throw new Error(`Could not open ${source.title} (${response.status}).`);
@@ -283,8 +290,8 @@ export async function importLibraryMaterial(source: { title: string; url?: strin
   const extension = (new URL(source.url).pathname.match(/\.([a-z0-9]+)$/i)?.[1] || "pdf").toLowerCase();
   const file = new File([blob], `${source.title.replace(/[^a-z0-9._-]+/gi, "-")}.${extension}`, { type: blob.type || "application/octet-stream" });
   const text = (await extractText(file)).trim();
-  if (!text.length) throw new Error(`${source.title} has no readable text. Scanned files need OCR first.`);
-  return storeText(source.title, text, source.citation ?? undefined, "user");
+  if (!text.length) throw new Error(`${source.title} has no readable text after OCR. Try a clearer scan.`);
+  return storeText(source.title, text, source.citation ?? undefined, "user", source.author ?? undefined);
 }
 
 /** Save plain text (e.g. a lecture transcript) as a document the AI can read.
@@ -293,6 +300,7 @@ export async function saveTextMaterial(
   title: string,
   text: string,
   citation?: string,
+  author?: string,
 ): Promise<{ id: string; chunks: number }> {
   const { data: u } = await db().auth.getUser();
   if (!u.user) throw new Error("Sign in first.");
@@ -306,7 +314,7 @@ export async function saveTextMaterial(
     .eq("scope", "user")
     .eq("title", title);
   for (const o of old ?? []) await deleteMaterial(o.id);
-  return storeText(title, clean, citation, "user");
+  return storeText(title, clean, citation, "user", author);
 }
 
 async function storeText(
@@ -314,6 +322,7 @@ async function storeText(
   text: string,
   citation?: string,
   scope: "user" | "library" = "user",
+  author?: string,
 ): Promise<{ id: string; chunks: number }> {
   const { data: u } = await db().auth.getUser();
   if (!u.user) throw new Error("Sign in first.");
@@ -325,6 +334,7 @@ async function storeText(
       scope,
       title,
       citation: citation ?? null,
+      author: author?.trim() || null,
     })
     .select("id")
     .single();
@@ -352,7 +362,7 @@ async function storeText(
 export async function listMyMaterials() {
   const { data, error } = await db()
     .from("ai_documents")
-    .select("id,title,citation,scope,created_at")
+    .select("id,title,author,citation,scope,created_at")
     .order("created_at", { ascending: false });
   if (error) throw new Error("Could not load AI documents.");
   return data ?? [];
