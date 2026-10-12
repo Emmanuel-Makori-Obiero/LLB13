@@ -42,6 +42,7 @@ function ProcessCards({ process }: { process: ProcessData }) {
     <div className="legal-process-result-head"><div><span className="section-label"><ClipboardList size={15} /> Process map</span><h2>{process.title}</h2></div><span className="legal-process-badge"><Scale size={14} /> Study guide</span></div>
     {process.shortAnswer && <p className="legal-process-lead">{process.shortAnswer}</p>}
     {process.assumptions.length > 0 && <div className="legal-process-assumptions"><strong>Assumptions to confirm</strong><ul>{process.assumptions.map((item) => <li key={item}>{item}</li>)}</ul></div>}
+    <div className="legal-process-flow-label"><span>Read from left to right</span><ArrowRight size={15} /><span>each arrow means “then do this”</span></div>
     <div className="legal-process-flow">{process.steps.map((step, index) => <div className="legal-process-node" key={`${step.number}-${step.title}`}>
       <article className="legal-process-card">
         <div className="legal-process-card-top"><span className="legal-process-number">{String(step.number).padStart(2, "0")}</span><span className={`legal-process-status ${step.status === "verified" ? "verified" : "check"}`}>{step.status === "verified" ? <><CheckCircle2 size={12} /> Constitution/source</> : <><ShieldAlert size={12} /> Verify current law</>}</span></div>
