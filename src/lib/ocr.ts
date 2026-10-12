@@ -1,12 +1,7 @@
 import { createWorker } from "tesseract.js";
 
-const MAX_OCR_PAGES = 30;
-
 async function recognizeImages(images: (Blob | File)[], label: string): Promise<string> {
   if (!images.length) return "";
-  if (images.length > MAX_OCR_PAGES) {
-    throw new Error(`${label} has more than ${MAX_OCR_PAGES} pages. Split it into smaller uploads for OCR.`);
-  }
   const worker = await createWorker("eng", 1);
   try {
     const pages: string[] = [];
