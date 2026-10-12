@@ -14,6 +14,7 @@ function json(body: unknown, status = 200) {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 type Speaker = "HOST" | "TUTOR";
+type VoiceGender = "male" | "female";
 type Turn = { speaker: Speaker; text: string };
 type AudioResult = { bytes: Uint8Array; mimeType: string; provider: string; model: string; voices: number };
 
@@ -98,6 +99,8 @@ async function generateElevenLabsAudio(
   model: string,
   hostVoiceId: string,
   tutorVoiceId: string,
+  hostGender: VoiceGender,
+  tutorGender: VoiceGender,
 ): Promise<AudioResult> {
   const turns = speechTurns(text);
   if (!turns.length) throw new Error("The script contains no speakable text.");
@@ -111,7 +114,9 @@ async function generateElevenLabsAudio(
       apply_text_normalization: "auto",
       inputs: chunk.map((turn) => ({
         text: turn.text,
-        voice_id: turn.speaker === "TUTOR" ? tutorVoiceId : hostVoiceId,
+        voice_id: (turn.speaker === "TUTOR" ? tutorGender : hostGender) === "female"
+          ? Deno.env.get("ELEVENLABS_FEMALE_VOICE_ID") || hostVoiceId
+          : Deno.env.get("ELEVENLABS_MALE_VOICE_ID") || tutorVoiceId,
       })),
     };
     let generated: Response | null = null;
@@ -176,7 +181,7 @@ function decodeBase64(encoded: string): Uint8Array {
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 }
 
-async function generateGeminiAudio(text: string, keys: string[], model: string): Promise<AudioResult> {
+async function generateGeminiAudio(text: string, keys: string[], model: string, hostGender: VoiceGender, tutorGender: VoiceGender): Promise<AudioResult> {
   const turns = speechTurns(text);
   if (!turns.length) throw new Error("The podcast script contains no speakable text.");
   const multiSpeaker = turns.some((turn) => turn.speaker === "TUTOR");
@@ -187,7 +192,7 @@ async function generateGeminiAudio(text: string, keys: string[], model: string):
       annotations: [{
         type: "speech_metadata",
         speaker: turn.speaker,
-        style: turn.speaker === "HOST" ? "Warm, clear, conversational podcast host." : "Thoughtful, clear law tutor; measured and friendly.",
+        style: turn.speaker === "HOST" ? "Warm, clear, conversational class presenter." : "Thoughtful, clear law tutor; measured and friendly.",
       }],
     } : {}),
   }));
@@ -198,7 +203,7 @@ async function generateGeminiAudio(text: string, keys: string[], model: string):
     response_format: { type: "audio" },
     generation_config: {
       speech_config: multiSpeaker
-        ? { mode: "conversational", speakers: [{ speaker: "HOST", voice: "Puck" }, { speaker: "TUTOR", voice: "Kore" }] }
+        ? { mode: "conversational", speakers: [{ speaker: "HOST", voice: hostGender === "female" ? "Kore" : "Puck" }, { speaker: "TUTOR", voice: tutorGender === "female" ? "Kore" : "Puck" }] }
         : [{ voice: "Kore" }],
     },
   };
@@ -241,6 +246,8 @@ async function generateOpenAIAudio(
   model: string,
   hostVoice: string,
   tutorVoice: string,
+  hostGender: VoiceGender,
+  tutorGender: VoiceGender,
 ): Promise<AudioResult> {
   const turns = speechTurns(text);
   if (!turns.length) throw new Error("The podcast script contains no speakable text.");
@@ -259,7 +266,7 @@ async function generateOpenAIAudio(
           body: JSON.stringify({
             model,
             input: chunk.text,
-            voice: chunk.speaker === "TUTOR" ? tutorVoice : hostVoice,
+            voice: (chunk.speaker === "TUTOR" ? tutorGender : hostGender) === "female" ? hostVoice : tutorVoice,
             response_format: "mp3",
             instructions: chunk.speaker === "TUTOR"
               ? "Speak as a thoughtful, clear Kenyan law tutor: natural, warm, precise, and conversational."
@@ -349,10 +356,12 @@ Deno.serve(async (req) => {
   const adminMayUsePremiumVoice = isAdmin === true;
   const admin = createClient(url, service);
 
-  let body: { text?: string; title?: string; language?: "en" | "sw" | "mix" | "sheng" };
+  let body: { text?: string; title?: string; language?: "en" | "sw" | "mix" | "sheng"; presenter_gender?: VoiceGender; guide_gender?: VoiceGender };
   try { body = await req.json(); } catch { return json({ error: "Invalid JSON body." }, 400); }
   const text = String(body.text || "").trim();
   const language: "en" | "sw" | "mix" | "sheng" = body.language === "sw" ? "sw" : body.language === "mix" ? "mix" : body.language === "sheng" ? "sheng" : "en";
+  const hostGender: VoiceGender = body.presenter_gender === "female" ? "female" : "male";
+  const tutorGender: VoiceGender = body.guide_gender === "male" ? "male" : "female";
   const providerLanguage: "en" | "sw" = language === "sw" ? "sw" : "en";
   if (text.length < 20) return json({ error: "The lesson or podcast script is too short." }, 400);
   if (text.length > 12000) return json({ error: "This script is too long for one audio request. Shorten the episode or generate it in parts." }, 400);
@@ -380,15 +389,15 @@ Deno.serve(async (req) => {
   let audio: AudioResult | null = null;
 
   if (adminMayUsePremiumVoice && elevenLabsKeys.length) {
-    try { audio = await generateElevenLabsAudio(text, elevenLabsKeys, providerLanguage, elevenLabsModel, hostVoiceId, tutorVoiceId); }
+    try { audio = await generateElevenLabsAudio(text, elevenLabsKeys, providerLanguage, elevenLabsModel, hostVoiceId, tutorVoiceId, hostGender, tutorGender); }
     catch (error) { failures.push(error instanceof Error ? error.message : String(error)); }
   }
   if (!audio && geminiEnabled && geminiKeys.length) {
-    try { audio = await generateGeminiAudio(text, geminiKeys, geminiModel); }
+    try { audio = await generateGeminiAudio(text, geminiKeys, geminiModel, hostGender, tutorGender); }
     catch (error) { failures.push(error instanceof Error ? error.message : String(error)); }
   }
   if (!audio && adminMayUsePremiumVoice && providerLanguage === "en" && openAIEnabled && openAIKeys.length) {
-    try { audio = await generateOpenAIAudio(text, openAIKeys, openAIModel, openAIHostVoice, openAITutorVoice); }
+    try { audio = await generateOpenAIAudio(text, openAIKeys, openAIModel, openAIHostVoice, openAITutorVoice, hostGender, tutorGender); }
     catch (error) { failures.push(error instanceof Error ? error.message : String(error)); }
   }
   if (!audio && providerLanguage === "en" && hfFallbackEnabled && hfTokens.length) {

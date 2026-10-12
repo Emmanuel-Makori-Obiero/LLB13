@@ -30,7 +30,7 @@ function audioProviderLabel(provider: string | null) {
 const perspectives = [
   "Act as a careful Kenyan law lecturer. Identify the governing rule, authorities, reasoning, and any uncertainty in the selected source.",
   "Act as a plain-language tutor. Explain the selected topic with a concrete everyday example, likely confusion, and a quick recall question.",
-  "Act as a demanding moot coach. Test the strongest argument, counterargument, application, exam traps, and what a student must verify before relying on it.",
+  "Act as a Kenyan legal case researcher and demanding moot coach. Identify the most relevant real reported case supported by the selected sources; give the correct case name, court, year/citation only if source-supported, material facts, issue, each side's strongest argument, holding and reasoning. Explain exactly how it illuminates the requested topic. Do not invent a case or citation; if the source set does not verify one, clearly flag that a citation must be checked. Also test application, counterargument and exam traps.",
 ];
 
 export default function LearningStudio() {
@@ -50,6 +50,8 @@ export default function LearningStudio() {
   const [presenterStyle, setPresenterStyle] = useState("Kenyan legal newsroom: warm, confident and clear");
   const [presenterName, setPresenterName] = useState("John");
   const [guideName, setGuideName] = useState("Amina");
+  const [presenterGender, setPresenterGender] = useState<"male" | "female">("male");
+  const [guideGender, setGuideGender] = useState<"male" | "female">("female");
   const [slide, setSlide] = useState(0);
   const [rendering, setRendering] = useState(false);
   const [renderProgress, setRenderProgress] = useState(0);
@@ -133,7 +135,7 @@ export default function LearningStudio() {
     setAudioProvider(null);
     setAudioNote("Creating fluent voice audio…");
     try {
-      const result = await generateAudio({ text: scriptSnapshot, title: topic || "Podcast episode", language: languageSnapshot });
+      const result = await generateAudio({ text: scriptSnapshot, title: topic || "Podcast episode", language: languageSnapshot, presenter_gender: presenterGender, guide_gender: guideGender });
       if (requestId !== audioRequestId.current) return;
       setAudioUrl(result.signed_url);
       setAudioMimeType(result.mime_type || "audio/mpeg");
@@ -178,6 +180,8 @@ export default function LearningStudio() {
             text: script,
             title: topic || "Narrated law lesson",
             language: scriptLanguage || spokenLanguage,
+            presenter_gender: presenterGender,
+            guide_gender: guideGender,
           });
       setAudioUrl(narration.signed_url);
       setAudioMimeType(narration.mime_type || "audio/mpeg");
@@ -384,7 +388,9 @@ export default function LearningStudio() {
         messages: [
           {
             role: "user",
-            content: `Topic: ${topic.trim()}\n${languageInstruction}\nPresenter style: ${presenterStyle}. Use two fictional Kenyan legal presenters. Their names are ${presenterName.trim() || "John"} (presenter) and ${guideName.trim() || "Amina"} (legal guide). Begin with a brief natural introduction in which each speaker says their name and role, for example: "Hi, my name is ${presenterName.trim() || "John"}, and I will be your host. Who am I with today?" followed by "My name is ${guideName.trim() || "Amina"}, and I will be your legal guide today." Use the exact internal line labels PRESENTER: and LEGAL GUIDE: so the audio mixer can separate the voices; the spoken introduction must use the names above. Do not imitate or claim to be any real lawyer, politician, journalist or public figure, and do not use a real public figure's name. The presenter should have the selected broad delivery qualities; the legal guide should be a calm, precise Kenyan legal educator.\n\nIndependent research memos from the AI panel:\n${findings.map((item, i) => `MEMO ${i + 1}\n${item}`).join("\n\n")}\n\nCreate the final ${mode} now. Keep it faithful to the selected sources, cite source markers when available, and mark uncertain law for verification.`,
+            content: mode === "podcast"
+              ? `Create a complete, natural classroom-style Kenyan law lesson as a two-person audio dialogue.\nTOPIC: ${topic.trim()}\nLANGUAGE: ${languageInstruction}\nPRESENTER DELIVERY: ${presenterStyle}.\nSPEAKER 1: ${presenterName.trim() || "John"}, a ${presenterGender} voice, is the class presenter.\nSPEAKER 2: ${guideName.trim() || "Amina"}, a ${guideGender} voice, is the law tutor. Keep each voice and name consistent: never give a feminine voice a clearly masculine name or vice versa. Speak as teacher and engaged student/class presenter in a real class, not as a podcast announcer, news broadcast, or promo. Start with a short classroom welcome and introductions, then teach progressively: learning objectives, key doctrine, plain-language explanation, statutory/legal framework, application, misconceptions, short questions and answers, recap, and a clear closing. Make the treatment rigorous and vivid, with serious stakes and an intense but accurate case discussion.\n\nCASE REQUIREMENT (essential): Find and teach ONE real, named case directly related to the topic. Prefer a case identified in the selected source material or the research memos below. Explain the facts, legal issue, each side's strongest argument, the court's reasoning/holding, why it matters to this lesson, and a short hypothetical application for the class. Give the court and citation/year only when supported. Do not invent case names, citations, facts, holdings, quotations, statutes or authorities. If a case cannot be verified from the available material, say in the dialogue that its citation needs verification rather than fabricating details, and use only facts supported by the source. The case must be integrated into the teaching, not bolted on.\n\nLENGTH: Aim for about 1,300–1,450 spoken words (roughly ten minutes at a clear classroom pace). Do not give me a short summary. Use complete spoken sentences, substantive explanation, examples, and meaningful teacher/student exchange.\n\nOUTPUT FORMAT: Use only these exact structural speaker tags on their own lines: PRESENTER: and LEGAL GUIDE:. They are internal routing labels and must NOT be spoken aloud. Do not write or say S1, S2, SS, Speaker 1, Speaker 2, scene numbers, production notes, sound cues, or stage directions. Mention the two people's names naturally in the introduction; after that use their names sparingly and let the lesson flow like a class. Keep the dialogue polished and fully speakable.\n\nDo not imitate or claim to be any real lawyer, politician, journalist or public figure. Keep the script faithful to selected sources and these research memos; distinguish established law from uncertainty.\n\nResearch memos and selected-source findings:\n${findings.map((item, i) => `MEMO ${i + 1}\n${item}`).join("\n\n")}`
+              : `Topic: ${topic.trim()}\n${languageInstruction}\nPresenter style: ${presenterStyle}. Create the final narrated video lesson, keeping it faithful to selected sources, citing source markers when available, and marking uncertain law for verification.\n\nIndependent research memos from the AI panel:\n${findings.map((item, i) => `MEMO ${i + 1}\n${item}`).join("\n\n")}`,
           },
         ],
       });
@@ -397,8 +403,8 @@ export default function LearningStudio() {
           .replace(/[*_`]/g, "")
           .replace(new RegExp(`^\\s*${escapeLabel(presenterLabel)}\\s*[:：-]`, "gim"), "PRESENTER:")
           .replace(new RegExp(`^\\s*${escapeLabel(guideLabel)}\\s*[:：-]`, "gim"), "LEGAL GUIDE:")
-          .replace(/^\\s*(?:Speaker\\s*1|Host|Presenter)\\s*[:：-]/gim, "PRESENTER:")
-          .replace(/^\\s*(?:Speaker\\s*2|Tutor|Legal Guide)\\s*[:：-]/gim, "LEGAL GUIDE:");
+          .replace(/^\\s*(?:S\\s*1|SS\\s*1|Speaker\\s*1|Host|Presenter)\\s*[:：-]/gim, "PRESENTER:")
+          .replace(/^\\s*(?:S\\s*2|SS\\s*2|Speaker\\s*2|Tutor|Legal Guide)\\s*[:：-]/gim, "LEGAL GUIDE:");
         if (!/PRESENTER\s*:/i.test(finalScript) || !/LEGAL GUIDE\s*:/i.test(finalScript)) {
           const lines = finalScript.split(/\r?\n+/).map((line) => line.replace(/^#+\s*/, "").replace(/^[-–—]\s*/, "").trim()).filter(Boolean);
           if (!lines.length) throw new Error("The podcast editor returned no speakable dialogue. Please try again.");
@@ -475,7 +481,7 @@ export default function LearningStudio() {
             </select>
           </label>
           <label className="studio-language-select"><span>Presenter tone</span><select value={presenterStyle} onChange={(event) => setPresenterStyle(event.target.value)}><option>Kenyan legal newsroom: warm, confident and clear</option><option>Formal constitutional advocate: measured, authoritative and structured</option><option>Parliamentary debate coach: energetic, analytical and concise</option><option>Senior courtroom educator: calm, deliberate and persuasive</option><option>Accessible campus law mentor: friendly, vivid and practical</option></select><small>These are fictional delivery profiles, not imitations of named lawyers.</small></label>
-          {mode === "podcast" && <label className="studio-language-select"><span>Speaker names</span><div className="studio-speaker-name-grid"><input value={presenterName} maxLength={40} onChange={(event) => setPresenterName(event.target.value.replace(/[^a-zA-ZÀ-ÿ' -]/g, ""))} placeholder="John" aria-label="Podcast presenter name" /><input value={guideName} maxLength={40} onChange={(event) => setGuideName(event.target.value.replace(/[^a-zA-ZÀ-ÿ' -]/g, ""))} placeholder="Amina" aria-label="Podcast legal guide name" /></div><small>Use fictional names. The episode will introduce both speakers naturally at the beginning.</small></label>}
+          {mode === "podcast" && <label className="studio-language-select"><span>Class speakers · names and voice gender</span><div className="studio-speaker-name-grid"><input value={presenterName} maxLength={40} onChange={(event) => setPresenterName(event.target.value.replace(/[^a-zA-ZÀ-ÿ' -]/g, ""))} placeholder="John" aria-label="Class presenter name" /><select value={presenterGender} onChange={(event) => setPresenterGender(event.target.value as "male" | "female")} aria-label="Class presenter voice gender"><option value="male">Masculine voice</option><option value="female">Feminine voice</option></select><input value={guideName} maxLength={40} onChange={(event) => setGuideName(event.target.value.replace(/[^a-zA-ZÀ-ÿ' -]/g, ""))} placeholder="Amina" aria-label="Law tutor name" /><select value={guideGender} onChange={(event) => setGuideGender(event.target.value as "male" | "female")} aria-label="Law tutor voice gender"><option value="male">Masculine voice</option><option value="female">Feminine voice</option></select></div><small>Pick the gender presentation that matches each chosen name. The generated lesson keeps names and synthesized voices aligned.</small></label>}
           {(working || stage) && (
             <div className="studio-progress" aria-live="polite">
               <div className="studio-progress-top">
