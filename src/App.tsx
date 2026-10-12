@@ -3685,6 +3685,20 @@ function LibraryPageReal({
   canDelete: (material: Material) => boolean;
   onDelete: (material: Material) => void;
 }) {
+  const [unitFilter, setUnitFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("date-desc");
+  const units = [...new Set(materials.map((material) => material.unit).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const types = [...new Set(materials.map((material) => material.type).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const visibleMaterials = [...materials]
+    .filter((material) => unitFilter === "all" || material.unit === unitFilter)
+    .filter((material) => typeFilter === "all" || material.type === typeFilter)
+    .sort((a, b) => {
+      if (sortBy === "date-asc") return (Date.parse(a.date) || 0) - (Date.parse(b.date) || 0);
+      if (sortBy === "title-asc") return a.title.localeCompare(b.title);
+      if (sortBy === "title-desc") return b.title.localeCompare(a.title);
+      return (Date.parse(b.date) || 0) - (Date.parse(a.date) || 0);
+    });
   return (
     <>
       <PageHeading
@@ -3701,6 +3715,31 @@ function LibraryPageReal({
             placeholder="Search title, topic, unit…"
           />
         </div>
+        <div className="library-filters" aria-label="Filter library materials">
+          <label>
+            <span>Unit</span>
+            <select value={unitFilter} onChange={(event) => setUnitFilter(event.target.value)}>
+              <option value="all">All units</option>
+              {units.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>Category</span>
+            <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
+              <option value="all">All categories</option>
+              {types.map((type) => <option key={type} value={type}>{type}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>Sort by</span>
+            <select value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
+              <option value="date-desc">Date · newest</option>
+              <option value="date-asc">Date · oldest</option>
+              <option value="title-asc">Title · A–Z</option>
+              <option value="title-desc">Title · Z–A</option>
+            </select>
+          </label>
+        </div>
         <button className="primary-button" onClick={openCreate}>
           <Plus size={14} style={{ verticalAlign: "middle" }} /> Add material
         </button>
@@ -3712,13 +3751,13 @@ function LibraryPageReal({
               <th style={{ width: "40%" }}>Material</th>
               <th>Type</th>
               <th>Unit</th>
-              <th>Added</th>
+              <th>Date</th>
               <th>Resource</th>
               <th />
             </tr>
           </thead>
           <tbody>
-            {materials.map((material) => (
+            {visibleMaterials.map((material) => (
               <tr key={material.id}>
                 <td>
                   <span className="material-title">{material.title}</span>
@@ -3771,9 +3810,9 @@ function LibraryPageReal({
             ))}
           </tbody>
         </table>
-        {!materials.length && (
+        {!visibleMaterials.length && (
           <div className="empty">
-            No materials match “{search}”. Add one using the button above.
+            No materials match these search and filter choices. Adjust the filters or add a material.
           </div>
         )}
       </div>
