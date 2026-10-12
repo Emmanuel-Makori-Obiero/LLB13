@@ -604,7 +604,7 @@ export function StudyAssistant() {
             />
           </div>
           <p className="field-hint">
-            PDF, Word, text or markdown. Scanned PDFs need OCR first.
+            PDF, Word, text, markdown, or scanned images. OCR runs automatically.
           </p>
           {mine.length === 0 ? (
             <p className="empty sa-none">No uploads yet.</p>

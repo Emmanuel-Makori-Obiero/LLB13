@@ -3949,14 +3949,18 @@ function MaterialForm({
   const inspectBook = async (selectedFile: File | undefined) => {
     setFile(selectedFile);
     if (!selectedFile || initial) return;
-    setExtracting(true);
-    setExtractNote("Reading the book and extracting details…");
-    try {
-      const text = (await extractText(selectedFile)).trim();
-      if (text.length < 60)
+      setExtracting(true);
+      setExtractNote("Reading the book and extracting details…");
+      try {
+        const text = (await extractText(selectedFile)).trim();
+      if (!text) {
         throw new Error(
-          "The file has too little readable text. Scanned PDFs need OCR first.",
+          "OCR could not find readable text in this file. Try a clearer scan or enter the details manually.",
         );
+      }
+      if (text.length < 60) {
+        setExtractNote("OCR found only a small amount of text. AI will still try to identify the details; review them carefully.");
+      }
       const availableUnits = units.map((unit) => unit.name).join("; ");
       const result = await askAI({
         feature: "book_metadata",
