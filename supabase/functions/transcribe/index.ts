@@ -4,6 +4,7 @@
 // Secrets needed:  supabase secrets set GROQ_API_KEY=gsk_...
 // Deploy:          supabase functions deploy transcribe
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { recordProviderUsage } from "../_shared/usage.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -250,6 +251,7 @@ Deno.serve(async (request) => {
       .from("transcription_usage")
       .update({ seconds: Math.ceil(data.duration) })
       .eq("id", reserved.id);
+  await recordProviderUsage(admin, { userId: user.id, category: "transcription", provider: "groq", model: MODEL, inputUnits: Math.ceil(data.duration || estimate), unitLabel: "audio_seconds", details: { language: language || null } });
   const originalText = (data.text ?? "").trim();
   let text = originalText;
   try {

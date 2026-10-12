@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { secretKeys } from "../_shared/keys.ts";
 import { reserveAiQuota } from "../_shared/quotas.ts";
+import { recordProviderUsage } from "../_shared/usage.ts";
 
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 function json(body: unknown, status = 200) { return new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } }); }
@@ -84,7 +85,11 @@ Deno.serve(async (req) => {
   const configuredModels = (() => { try { const value = JSON.parse(Deno.env.get("GEMINI_IMAGE_MODELS_JSON") || "[]"); return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim()).map((item) => item.trim()) : []; } catch { return []; } })();
   const imageModels = body.model ? [body.model] : [...configuredModels, Deno.env.get("GEMINI_IMAGE_MODEL") || "gemini-3.1-flash-image", "gemini-2.5-flash-image"].filter((model, index, all) => all.indexOf(model) === index); const visionModel = Deno.env.get("GEMINI_VISION_MODEL") || "gemini-2.5-flash";
   try {
-    if (operation === "analyze") return json({ analysis: await analyzeGemini({ prompt, keys: geminiKeys, imageBase64: body.image_base64!, imageMimeType: body.image_mime_type || "image/png", model: visionModel }), provider: "gemini-vision", model: visionModel });
+    if (operation === "analyze") {
+      const analysis = await analyzeGemini({ prompt, keys: geminiKeys, imageBase64: body.image_base64!, imageMimeType: body.image_mime_type || "image/png", model: visionModel });
+      await recordProviderUsage(admin, { userId: auth.user.id, category: "image", provider: "gemini-vision", model: visionModel, inputUnits: prompt.length, outputUnits: analysis.length, unitLabel: "characters", details: { operation } });
+      return json({ analysis, provider: "gemini-vision", model: visionModel });
+    }
     const width = Math.min(1536, Math.max(512, Number(body.width) || 1024)); const height = Math.min(1536, Math.max(512, Number(body.height) || 1024)); const ratio = width / height > 1.6 ? "16:9" : width / height < 0.7 ? "9:16" : "1:1";
     let generated: { bytes: Uint8Array; model: string; mimeType: string };
     try {
@@ -97,6 +102,7 @@ Deno.serve(async (req) => {
     if (upload.error) return json({ error: `Could not store generated image: ${upload.error.message}` }, 500);
     const { data: asset, error: insertError } = await admin.from("media_assets").insert({ id: assetId, owner_id: auth.user.id, title: prompt.slice(0, 90), kind: "other", storage_path: storagePath, mime_type: generated.mimeType, public_url: admin.storage.from("media").getPublicUrl(storagePath).data.publicUrl, status: "ready", provider: "gemini", metadata: { model: generated.model, operation, prompt, width, height } }).select("id,title,kind,storage_path,mime_type,status,provider,created_at").single();
     if (insertError) { await admin.storage.from("media").remove([storagePath]); return json({ error: `Could not record generated image: ${insertError.message}` }, 500); }
+    await recordProviderUsage(admin, { userId: auth.user.id, category: "image", provider: generated.model.includes("flux") ? "huggingface" : "gemini", model: generated.model, inputUnits: prompt.length, unitLabel: "characters", details: { operation, width, height } });
     const signed = await admin.storage.from("media").createSignedUrl(storagePath, 3600); return json({ asset, signed_url: signed.data?.signedUrl ?? null, provider: "gemini", model: generated.model });
   } catch (error) { return json({ error: "Gemini image request failed.", detail: error instanceof Error ? error.message : String(error) }, 502); }
 });

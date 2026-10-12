@@ -227,3 +227,19 @@
     justify-content: center;
   }
 }
+.usage-quota-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+  margin: 14px 0;
+}
+.usage-quota {
+  display: grid;
+  gap: 4px;
+  padding: 11px;
+  border: 1px solid var(--line);
+  background: #fafbf7;
+}
+.usage-quota span { color: var(--muted); font-size: 11px; }
+.usage-quota strong { color: var(--forest); font-size: 17px; }
+.usage-quota small { color: var(--muted); font-size: 10px; }

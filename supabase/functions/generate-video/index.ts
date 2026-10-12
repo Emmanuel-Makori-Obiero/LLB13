@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { providerChain, submitVideo } from "./video-providers.ts";
 import { secretKeyEntries } from "../_shared/keys.ts";
 import { reserveAiQuota } from "../_shared/quotas.ts";
+import { recordProviderUsage } from "../_shared/usage.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -79,6 +80,7 @@ Deno.serve(async (req) => {
     return response({ asset: queued, provider: null, fallback_attempts: attempts, retry_after_seconds: 30, status_url: `${url}/functions/v1/video-status?asset_id=${queued.id}` }, 202);
   }
 
+  await recordProviderUsage(admin, { userId: auth.user.id, category: "video", provider: selected.provider.id, model: selected.provider.apiName, inputUnits: prompt.length, unitLabel: "characters", details: { shot_index: body.shot_index ?? null, fallback_attempts: attempts.length } });
   const asset = {
     owner_id: auth.user.id,
     title: prompt.slice(0, 90),

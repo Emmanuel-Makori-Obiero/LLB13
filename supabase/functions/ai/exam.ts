@@ -1,5 +1,6 @@
 // Exam practice + in-app guide features for the `ai` edge function.
 // index.ts hands these three features to handleExtra() so they stay out of the study-assistant pipeline.
+import { recordProviderUsage } from "../_shared/usage.ts";
 
 export type Msg = { role: "system" | "user" | "assistant"; content: string };
 type Result = {
@@ -113,6 +114,10 @@ async function logUse(c: Ctx, feature: string, r: Result) {
     feature,
     provider: r.provider,
     model: r.model,
+  });
+  await recordProviderUsage(c.admin, {
+    userId: c.userId, category: "text", provider: r.provider, model: r.model,
+    outputUnits: r.text.length, unitLabel: "characters", details: { feature },
   });
 }
 

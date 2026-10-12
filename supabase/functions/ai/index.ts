@@ -2,6 +2,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { EXTRA_FEATURES, handleExtra } from "./exam.ts";
 import { secretKeys } from "../_shared/keys.ts";
 import { reserveAiQuota } from "../_shared/quotas.ts";
+import { recordProviderUsage } from "../_shared/usage.ts";
 
 // ===== providers (fallback chain) =====
 // Free-tier fallback chain. Every provider speaks the OpenAI chat-completions format.
@@ -865,6 +866,11 @@ Deno.serve(async (req) => {
         feature,
         provider: r.provider,
         model: r.model,
+      });
+      await recordProviderUsage(admin, {
+        userId: u.user.id, category: feature === "book_metadata" ? "book_metadata" : "text",
+        provider: r.provider, model: r.model, inputUnits: talk.reduce((n, m) => n + m.content.length, 0),
+        outputUnits: r.text.length, unitLabel: "characters", details: { feature },
       });
       let answer = r.text.trim();
       if (CRISIS_RE.test(last.content) && !answer.includes("1199"))

@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { secretKeys } from "../_shared/keys.ts";
 import { reserveAiQuota } from "../_shared/quotas.ts";
+import { recordProviderUsage } from "../_shared/usage.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -16,7 +17,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 type Speaker = "HOST" | "TUTOR";
 type VoiceGender = "male" | "female";
 type Turn = { speaker: Speaker; text: string };
-type AudioResult = { bytes: Uint8Array; mimeType: string; provider: string; model: string; voices: number };
+type AudioResult = { bytes: Uint8Array; mimeType: string; provider: string; model: string; voices: number; requestUnits: number };
 
 function speechTurns(script: string): Turn[] {
   const turns: Turn[] = [];
@@ -145,14 +146,14 @@ async function generateElevenLabsAudio(
     outputs.push(bytes);
   }
   if (outputs.length === 1) {
-    return { bytes: outputs[0], mimeType: "audio/mpeg", provider: "elevenlabs", model, voices: new Set(turns.map((turn) => turn.speaker)).size };
+    return { bytes: outputs[0], mimeType: "audio/mpeg", provider: "elevenlabs", model, requestUnits: chunks.length, voices: new Set(turns.map((turn) => turn.speaker)).size };
   }
   const frames = outputs.map(stripMp3Metadata);
   const total = frames.reduce((sum, bytes) => sum + bytes.length, 0);
   const combined = new Uint8Array(total);
   let offset = 0;
   for (const part of frames) { combined.set(part, offset); offset += part.length; }
-  return { bytes: combined, mimeType: "audio/mpeg", provider: "elevenlabs-chunked", model, voices: new Set(turns.map((turn) => turn.speaker)).size };
+  return { bytes: combined, mimeType: "audio/mpeg", provider: "elevenlabs-chunked", model, requestUnits: chunks.length, voices: new Set(turns.map((turn) => turn.speaker)).size };
 }
 
 function extractAudioBase64(value: unknown, inAudioBlock = false): string | null {
@@ -232,7 +233,7 @@ async function generateGeminiAudio(text: string, keys: string[], model: string, 
       if (bytes.length < 44 || String.fromCharCode(...bytes.slice(0, 4)) !== "RIFF" || String.fromCharCode(...bytes.slice(8, 12)) !== "WAVE") {
         throw new Error("Gemini returned audio without a valid WAV header.");
       }
-      return { bytes, mimeType: "audio/wav", provider: "gemini-tts", model, voices: multiSpeaker ? 2 : 1 };
+      return { bytes, mimeType: "audio/wav", provider: "gemini-tts", model, requestUnits: 1, voices: multiSpeaker ? 2 : 1 };
     } catch (error) {
       failures.push(error instanceof Error ? error.message : String(error));
     }
@@ -296,7 +297,7 @@ async function generateOpenAIAudio(
   const combined = new Uint8Array(total);
   let offset = 0;
   for (const part of outputs) { combined.set(part, offset); offset += part.length; }
-  return { bytes: combined, mimeType: "audio/mpeg", provider: "openai-tts", model, voices: new Set(turns.map((turn) => turn.speaker)).size };
+  return { bytes: combined, mimeType: "audio/mpeg", provider: "openai-tts", model, requestUnits: chunks.length, voices: new Set(turns.map((turn) => turn.speaker)).size };
 }
 
 async function generateHuggingFaceAudio(text: string, tokens: string[], model: string, endpoint: string): Promise<AudioResult> {
@@ -331,7 +332,7 @@ async function generateHuggingFaceAudio(text: string, tokens: string[], model: s
     throw new Error(`Hugging Face returned a non-audio response: ${new TextDecoder().decode(bytes).slice(0, 500)}`);
   }
   const mimeType = looksLikeOgg || contentType.includes("ogg") ? "audio/ogg" : "audio/wav";
-  return { bytes, mimeType, provider: "huggingface-tts", model, voices: 1 };
+  return { bytes, mimeType, provider: "huggingface-tts", model, requestUnits: attempts, voices: 1 };
 }
 
 Deno.serve(async (req) => {
@@ -431,6 +432,11 @@ Deno.serve(async (req) => {
     return json({ error: `Could not record generated audio: ${error.message}` }, 500);
   }
   await admin.from("platform_activity_events").insert({ user_id: auth.user.id, event_type: "podcast_audio_generated", details: { provider: audio.provider } });
+  await recordProviderUsage(admin, {
+    userId: auth.user.id, category: "podcast", provider: audio.provider, model: audio.model,
+    requestUnits: audio.requestUnits, inputUnits: text.length, unitLabel: "characters",
+    details: { language, voices: audio.voices },
+  });
   const signed = await admin.storage.from("media").createSignedUrl(storagePath, 3600);
   return json({ asset, signed_url: signed.data?.signedUrl ?? null, mime_type: audio.mimeType });
 });
