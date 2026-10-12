@@ -345,6 +345,8 @@ Deno.serve(async (req) => {
   const userClient = createClient(url, anon, { global: { headers: { Authorization: authHeader } } });
   const { data: auth } = await userClient.auth.getUser();
   if (!auth.user) return json({ error: "Sign in before creating audio." }, 401);
+  const { data: isAdmin } = await userClient.rpc("is_super_admin");
+  const adminMayUsePremiumVoice = isAdmin === true;
   const admin = createClient(url, service);
 
   let body: { text?: string; title?: string; language?: "en" | "sw" | "mix" | "sheng" };
@@ -362,7 +364,7 @@ Deno.serve(async (req) => {
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : "AI quota service is unavailable." }, 503);
   }
-  if (!elevenLabsKeys.length && !(geminiEnabled && geminiKeys.length) && !(providerLanguage === "en" && openAIEnabled && openAIKeys.length) && !(providerLanguage === "en" && hfFallbackEnabled && hfTokens.length)) {
+  if (!(adminMayUsePremiumVoice && elevenLabsKeys.length) && !(geminiEnabled && geminiKeys.length) && (adminMayUsePremiumVoice && providerLanguage === "en" && openAIEnabled && openAIKeys.length) === false && !(providerLanguage === "en" && hfFallbackEnabled && hfTokens.length)) {
     return json({ error: language === "sw" ? "Kiswahili audio needs ELEVENLABS_API_KEY_1 or GEMINI_API_KEY_1 in Supabase Edge Function secrets." : "No speech provider is configured. Add an ElevenLabs or Gemini API key; OpenAI TTS is also available when OPENAI_API_KEY_1 is configured." }, 503);
   }
   const hfModel = Deno.env.get("HF_TTS_MODEL") || "facebook/mms-tts-eng";
@@ -377,7 +379,7 @@ Deno.serve(async (req) => {
   const failures: string[] = [];
   let audio: AudioResult | null = null;
 
-  if (elevenLabsKeys.length) {
+  if (adminMayUsePremiumVoice && elevenLabsKeys.length) {
     try { audio = await generateElevenLabsAudio(text, elevenLabsKeys, providerLanguage, elevenLabsModel, hostVoiceId, tutorVoiceId); }
     catch (error) { failures.push(error instanceof Error ? error.message : String(error)); }
   }
@@ -385,7 +387,7 @@ Deno.serve(async (req) => {
     try { audio = await generateGeminiAudio(text, geminiKeys, geminiModel); }
     catch (error) { failures.push(error instanceof Error ? error.message : String(error)); }
   }
-  if (!audio && providerLanguage === "en" && openAIEnabled && openAIKeys.length) {
+  if (!audio && adminMayUsePremiumVoice && providerLanguage === "en" && openAIEnabled && openAIKeys.length) {
     try { audio = await generateOpenAIAudio(text, openAIKeys, openAIModel, openAIHostVoice, openAITutorVoice); }
     catch (error) { failures.push(error instanceof Error ? error.message : String(error)); }
   }
@@ -394,7 +396,8 @@ Deno.serve(async (req) => {
     catch (error) { failures.push(error instanceof Error ? error.message : String(error)); }
   }
   if (!audio) {
-    const configuredProvider = elevenLabsKeys.length || (geminiEnabled && geminiKeys.length) || (openAIEnabled && openAIKeys.length) || (hfFallbackEnabled && hfTokens.length);
+    await admin.from("platform_activity_events").insert({ user_id: auth.user.id, event_type: "podcast_audio_failed", details: {} });
+    const configuredProvider = (adminMayUsePremiumVoice && elevenLabsKeys.length) || (geminiEnabled && geminiKeys.length) || (adminMayUsePremiumVoice && openAIEnabled && openAIKeys.length) || (hfFallbackEnabled && hfTokens.length);
     return json({ error: "No configured speech provider completed this request.", detail: failures.join("; ") || "Check the configured provider keys, model IDs, and voice IDs in Supabase Edge Function secrets." }, configuredProvider ? 502 : 503);
   }
 
@@ -418,6 +421,7 @@ Deno.serve(async (req) => {
     await admin.storage.from("media").remove([storagePath]);
     return json({ error: `Could not record generated audio: ${error.message}` }, 500);
   }
+  await admin.from("platform_activity_events").insert({ user_id: auth.user.id, event_type: "podcast_audio_generated", details: { provider: audio.provider } });
   const signed = await admin.storage.from("media").createSignedUrl(storagePath, 3600);
   return json({ asset, signed_url: signed.data?.signedUrl ?? null, mime_type: audio.mimeType });
 });
