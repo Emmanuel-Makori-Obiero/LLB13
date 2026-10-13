@@ -380,7 +380,7 @@ const FEATURES: Record<
   },
   study_plan: {
     json: true,
-    task: "Create a source-grounded guided law-study syllabus. Return ONLY valid JSON matching the shape requested by the student; no markdown fences, no introductory prose, and no trailing commentary outside the JSON object.",
+    task: "Create a source-grounded guided law-study syllabus. Return ONLY valid JSON matching the shape requested by the student; no markdown fences, no introductory prose, and no trailing commentary outside the JSON object. Use only claims supported by the supplied SOURCE DIGEST. If a point is missing or unclear, say so in the lesson instead of filling it from memory. Do not create exact quotations. Keep the output compact enough to complete reliably: 8 to 12 lessons, two quiz questions for an ordinary lesson, and four for a checkpoint. Preserve the order and coverage of the digest; never claim that an authority, rule, page or chapter was read if it is not represented in the digest.",
   },
   kaizen_check: {
     json: true,
