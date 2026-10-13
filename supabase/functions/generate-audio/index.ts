@@ -47,7 +47,7 @@ function speechTurns(script: string): Turn[] {
   return turns;
 }
 
-function chunkSpeechTurns(turns: Turn[], maxCharacters = 1600): Turn[][] {
+function chunkSpeechTurns(turns: Turn[], maxCharacters = 4200): Turn[][] {
   const chunks: Turn[][] = [];
   let current: Turn[] = [];
   let length = 0;
@@ -106,9 +106,13 @@ async function generateElevenLabsAudio(
   const turns = speechTurns(text);
   if (!turns.length) throw new Error("The script contains no speakable text.");
   const chunks = chunkSpeechTurns(turns);
-  const outputs: Uint8Array[] = [];
-  for (let index = 0; index < chunks.length; index += 1) {
-    const chunk = chunks[index];
+  const outputs = new Array<Uint8Array>(chunks.length);
+  let nextChunk = 0;
+  const worker = async () => {
+    while (true) {
+      const index = nextChunk++;
+      if (index >= chunks.length) return;
+      const chunk = chunks[index];
     const body = {
       model_id: model,
       language_code: language,
@@ -143,8 +147,12 @@ async function generateElevenLabsAudio(
     if (!contentType.toLowerCase().includes("audio") || bytes.length < 100) {
       throw new Error("ElevenLabs returned an empty or non-audio response.");
     }
-    outputs.push(bytes);
-  }
+      outputs[index] = bytes;
+    }
+  };
+  // Four concurrent ordered chunks keep long narration inside the Edge runtime
+  // while preserving the original script order in the final MP3.
+  await Promise.all(Array.from({ length: Math.min(4, chunks.length) }, () => worker()));
   if (outputs.length === 1) {
     return { bytes: outputs[0], mimeType: "audio/mpeg", provider: "elevenlabs", model, requestUnits: chunks.length, voices: new Set(turns.map((turn) => turn.speaker)).size };
   }
@@ -365,7 +373,7 @@ Deno.serve(async (req) => {
   const tutorGender: VoiceGender = body.guide_gender === "male" ? "male" : "female";
   const providerLanguage: "en" | "sw" = language === "sw" ? "sw" : "en";
   if (text.length < 20) return json({ error: "The lesson or podcast script is too short." }, 400);
-  if (text.length > 12000) return json({ error: "This script is too long for one audio request. Shorten the episode or generate it in parts." }, 400);
+  if (text.length > 100000) return json({ error: "This script is over the supported limit of about 70 minutes. Shorten it or generate it as separate episodes." }, 400);
   const turns = speechTurns(text);
   const plainText = turns.map((turn) => turn.text).join("\n");
   try {

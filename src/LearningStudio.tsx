@@ -16,6 +16,11 @@ import "./learning-studio.css";
 
 type Doc = { id: string; title: string; scope: "user" | "library"; citation?: string | null; kind?: "document" | "library"; url?: string | null };
 type Mode = "podcast" | "video";
+const STUDIO_STORAGE_KEY = "group13-learning-studio-draft-v2";
+type StudioDraft = { topic: string; selected: string[]; mode: Mode; spokenLanguage: "en" | "sw" | "mix" | "sheng"; scriptLanguage: "en" | "sw" | "mix" | "sheng"; presenterStyle: string; presenterName: string; guideName: string; presenterGender: "male" | "female"; guideGender: "male" | "female"; script: string; slide: number; audioUrl: string | null; audioMimeType: string; audioProvider: string | null };
+function savedStudioDraft(): Partial<StudioDraft> {
+  try { return JSON.parse(window.localStorage.getItem(STUDIO_STORAGE_KEY) ?? "{}"); } catch { return {}; }
+}
 const isBookSource = (_doc: Doc) => true;
 
 function audioProviderLabel(provider: string | null) {
@@ -34,35 +39,41 @@ const perspectives = [
 ];
 
 export default function LearningStudio() {
+  const saved = useMemo(savedStudioDraft, []);
   const [docs, setDocs] = useState<Doc[]>([]);
-  const [selected, setSelected] = useState<string[]>([]);
+  const [selected, setSelected] = useState<string[]>(saved.selected ?? []);
   const [libraryImports, setLibraryImports] = useState<Record<string, string>>({});
-  const [topic, setTopic] = useState("");
-  const [mode, setMode] = useState<Mode>("podcast");
+  const [topic, setTopic] = useState(saved.topic ?? "");
+  const [mode, setMode] = useState<Mode>(saved.mode ?? "podcast");
   const [working, setWorking] = useState(false);
   const [stage, setStage] = useState("");
   const [generationProgress, setGenerationProgress] = useState(0);
   const [error, setError] = useState("");
   const [panel, setPanel] = useState<string[]>([]);
-  const [script, setScript] = useState("");
-  const [spokenLanguage, setSpokenLanguage] = useState<"en" | "sw" | "mix" | "sheng">("en");
-  const [scriptLanguage, setScriptLanguage] = useState<"en" | "sw" | "mix" | "sheng">("en");
-  const [presenterStyle, setPresenterStyle] = useState("Kenyan legal newsroom: warm, confident and clear");
-  const [presenterName, setPresenterName] = useState("John");
-  const [guideName, setGuideName] = useState("Amina");
-  const [presenterGender, setPresenterGender] = useState<"male" | "female">("male");
-  const [guideGender, setGuideGender] = useState<"male" | "female">("female");
-  const [slide, setSlide] = useState(0);
+  const [script, setScript] = useState(saved.script ?? "");
+  const [spokenLanguage, setSpokenLanguage] = useState<"en" | "sw" | "mix" | "sheng">(saved.spokenLanguage ?? "en");
+  const [scriptLanguage, setScriptLanguage] = useState<"en" | "sw" | "mix" | "sheng">(saved.scriptLanguage ?? "en");
+  const [presenterStyle, setPresenterStyle] = useState(saved.presenterStyle ?? "Kenyan legal newsroom: warm, confident and clear");
+  const [presenterName, setPresenterName] = useState(saved.presenterName ?? "John");
+  const [guideName, setGuideName] = useState(saved.guideName ?? "Amina");
+  const [presenterGender, setPresenterGender] = useState<"male" | "female">(saved.presenterGender ?? "male");
+  const [guideGender, setGuideGender] = useState<"male" | "female">(saved.guideGender ?? "female");
+  const [slide, setSlide] = useState(saved.slide ?? 0);
   const [rendering, setRendering] = useState(false);
   const [renderProgress, setRenderProgress] = useState(0);
   const [uploadingSource, setUploadingSource] = useState(false);
   const [importingSource, setImportingSource] = useState<string | null>(null);
   const [audioBusy, setAudioBusy] = useState(false);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [audioMimeType, setAudioMimeType] = useState("audio/mpeg");
-  const [audioProvider, setAudioProvider] = useState<string | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(saved.audioUrl ?? null);
+  const [audioMimeType, setAudioMimeType] = useState(saved.audioMimeType ?? "audio/mpeg");
+  const [audioProvider, setAudioProvider] = useState<string | null>(saved.audioProvider ?? null);
   const [audioNote, setAudioNote] = useState("");
   const audioRequestId = useRef(0);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(STUDIO_STORAGE_KEY, JSON.stringify({ topic, selected, mode, spokenLanguage, scriptLanguage, presenterStyle, presenterName, guideName, presenterGender, guideGender, script, slide, audioUrl, audioMimeType, audioProvider } satisfies StudioDraft));
+    } catch { /* browser storage is optional */ }
+  }, [topic, selected, mode, spokenLanguage, scriptLanguage, presenterStyle, presenterName, guideName, presenterGender, guideGender, script, slide, audioUrl, audioMimeType, audioProvider]);
 
   const loadSources = async () => {
     const [items, library] = await Promise.all([listMyMaterials(), import("./lib/guidedStudy").then(({ listGuideSources }) => listGuideSources())]);
