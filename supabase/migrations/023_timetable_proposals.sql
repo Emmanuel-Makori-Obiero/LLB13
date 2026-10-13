@@ -74,7 +74,9 @@ begin
     auth.uid()
   from public.timetable t;
 
-  truncate table public.timetable;
+  -- Attendance rows reference timetable lessons, so TRUNCATE is rejected by
+  -- PostgreSQL. DELETE respects the existing ON DELETE CASCADE relationship.
+  delete from public.timetable;
 
   insert into public.timetable (
     unit, topic, lesson_date, start_time, end_time,
@@ -128,7 +130,7 @@ begin
   select * into snapshot from public.timetable_snapshots s where s.proposal_id = proposal.id;
   if not found then raise exception 'No previous timetable snapshot exists for this approval'; end if;
 
-  truncate table public.timetable;
+  delete from public.timetable;
   insert into public.timetable (unit, topic, lesson_date, start_time, end_time, representative, representatives, venue, created_by)
   select
     nullif(trim(item->>'unit'), ''), nullif(trim(item->>'topic'), ''),
