@@ -23,7 +23,7 @@ begin
     auth.uid()
   from public.timetable t;
 
-  delete from public.timetable;
+  delete from public.timetable where true;
 
   insert into public.timetable (
     unit, topic, lesson_date, start_time, end_time,
