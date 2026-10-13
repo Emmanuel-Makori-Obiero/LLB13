@@ -396,25 +396,19 @@ export default function AdminTimetablePlanner({
     )
       return;
     setBusy(true);
+    setProposalStatus({ kind: "working", text: `Approving “${proposal.title}” and replacing the shared timetable…` });
     try {
       const count = await repository.approveTimetableProposal(proposal.id);
       const fresh = await repository.getTimetable();
       onApplied(fresh);
-      setProposals((current) =>
-        current.map((item) =>
-          item.id === proposal.id
-            ? {
-                ...item,
-                status: "approved",
-                approved_at: new Date().toISOString(),
-              }
-            : item,
-        ),
-      );
+      const refreshedProposals = await repository.getTimetableProposals();
+      setProposals(refreshedProposals);
+      setProposalStatus({ kind: "success", text: `Approved successfully · ${count} lessons are now in the shared Group 13 timetable.` });
       setNotice(
         `Approved. ${count} lessons now apply to the current timetable.`,
       );
     } catch (error) {
+      setProposalStatus({ kind: "error", text: error instanceof Error ? `Approval failed: ${error.message}` : "Approval failed. Please try again." });
       setNotice(
         error instanceof Error
           ? error.message
