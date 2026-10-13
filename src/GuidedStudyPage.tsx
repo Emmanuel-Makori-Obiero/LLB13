@@ -50,6 +50,7 @@ export default function GuidedStudyPage() {
   const [picked, setPicked] = useState<Record<number, number>>({});
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const [buildProgress, setBuildProgress] = useState<{ done: number; total: number; phase: string } | null>(null);
   const [writtenAnswer, setWrittenAnswer] = useState("");
   const [visibility, setVisibility] = useState<"private" | "group">("private");
   const [courseLanguage, setCourseLanguage] = useState<StudyLanguage>("en");
@@ -132,13 +133,20 @@ export default function GuidedStudyPage() {
     audioRequestId.current += 1;
     setBusy(true);
     setNotice("Starting a staged read so every source section is covered…");
+    setBuildProgress({ done: 0, total: 0, phase: "Preparing every readable section" });
     try {
+      const report = (message: string) => {
+        setNotice(message);
+        const match = message.match(/(?:section|digest|group)\s+(\d+)\s+of\s+(\d+)/i);
+        if (match) setBuildProgress({ done: Number(match[1]), total: Number(match[2]), phase: message });
+        else if (/final syllabus|saving|complete/i.test(message)) setBuildProgress((current) => current ? { ...current, done: current.total || current.done, phase: message } : { done: 0, total: 0, phase: message });
+      };
       const created = await createGuidedCourse(
         subject.trim(),
         sources.filter((source) => selected.includes(`${source.kind}:${source.id}`)),
         preferences,
         visibility,
-        setNotice,
+        report,
         courseLanguage,
       );
       activeLessonKey.current = `${created.id}:0`;
@@ -148,10 +156,12 @@ export default function GuidedStudyPage() {
       setPicked({});
       setProgress([]);
       setNotice("Syllabus ready. Your course card is saved below.");
+      setBuildProgress({ done: 1, total: 1, phase: "Complete — every selected readable section was covered" });
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Could not create the syllabus.");
     } finally {
       setBusy(false);
+      window.setTimeout(() => setBuildProgress(null), 2500);
     }
   };
 
@@ -398,7 +408,7 @@ export default function GuidedStudyPage() {
         </div>
         <div className="guide-icon"><GraduationCap size={30} /></div>
       </div>
-      {notice && <div className="guide-notice" aria-live="polite">{notice}</div>}
+      {notice && <div className="guide-notice" aria-live="polite">{notice}{busy && buildProgress && <div className="guide-build-progress"><div className="guide-build-progress-top"><strong>{buildProgress.phase}</strong><span>{buildProgress.total ? `${Math.min(buildProgress.done, buildProgress.total)} of ${buildProgress.total}` : "Preparing"}</span></div><div className="guide-build-track"><span style={{ width: `${buildProgress.total ? Math.min(100, Math.round((buildProgress.done / buildProgress.total) * 100)) : 8}%` }} /></div><small>Reading the complete selected source before building lessons. Keep this tab open.</small></div>}</div>}
 
       {!course && <>
         <div className="card card-pad guide-builder">

@@ -114,7 +114,10 @@ function parseJson(text: string, data?: unknown): GuideSyllabus {
 
 function fallbackSyllabus(subject: string, digest: string, language: StudyLanguage): GuideSyllabus {
   const sections = digest.split(/\n\n=== SOURCE DIGEST ===\n\n/).map((section) => section.trim()).filter(Boolean);
-  const lessons = (sections.length ? sections : [digest]).slice(0, 16).map((section, index) => {
+  // Never truncate a long source in the fallback. The AI-generated course may
+  // group chapters, but the source-preserving fallback must keep every section
+  // so a provider outage cannot silently remove pages from the student's book.
+  const lessons = (sections.length ? sections : [digest]).map((section, index) => {
     const lines = section.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
     const title = lines.find((line) => /^SOURCE:|^##\s/.test(line))?.replace(/^(SOURCE:|##\s*)/, "").trim() || `Source section ${index + 1}`;
     return { title, objective: language === "sw" ? "Soma na uhakiki hoja muhimu katika sehemu hii." : "Review the source-grounded points in this section.", explanation: section, example: "", checkpoint: "quiz" as const, quiz: [] };
