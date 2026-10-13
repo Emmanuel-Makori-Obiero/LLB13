@@ -290,7 +290,7 @@ const supabaseRepository: Group13Repository = {
     return data as TimetableProposal;
   },
   approveTimetableProposal: async (id) => {
-    const { data, error } = await db().rpc("admin_apply_timetable_proposal", {
+    const { data, error } = await db().rpc("admin_apply_timetable_proposal_safe", {
       proposal_id: id,
     });
     if (error)
