@@ -24,6 +24,7 @@ import {
   type ScannedNote,
 } from "./lib/scannerNotes";
 import { optimizeScanImage } from "./lib/scanImage";
+import { cleanOcrText } from "./lib/ocr";
 import "./scanner.css";
 
 const MAX_PAGES = 10;
@@ -210,19 +211,25 @@ export default function ScannerNotesPage({ userId }: { userId: string | null }) 
       }
       ocrWorker.current = worker;
       const pages: string[] = [];
+      let rejectedPages = 0;
       for (let index = 0; index < files.length; index += 1) {
         progressPage.current = index;
         setProgressLabel(`Reading page ${index + 1} of ${files.length}…`);
         const result = await worker.recognize(files[index]);
         if (ocrRunId.current !== runId) return;
-        const text = result.data.text.trim();
-        pages.push(`PAGE ${index + 1} — ${files[index].name}\n${text || "[No text detected. You can type the page content below.]"}`);
+        const quality = cleanOcrText(result.data.text, Number(result.data.confidence ?? 0));
+        if (quality.usable) {
+          pages.push(`PAGE ${index + 1} — ${files[index].name}\n${quality.text}`);
+        } else {
+          rejectedPages += 1;
+          pages.push(`PAGE ${index + 1} — ${files[index].name}\n[No reliable text detected. Review this page image manually or scan it again in better light.]`);
+        }
         setProgress(Math.round(((index + 1) / files.length) * 100));
       }
       if (ocrRunId.current === runId) {
         setDraftText(pages.join("\n\n────────────────────────\n\n"));
         setProgressLabel("Scan ready to review");
-        setNotice("Text extracted. Review names, section numbers and legal citations before saving.");
+        setNotice(rejectedPages ? `${rejectedPages} page${rejectedPages === 1 ? "" : "s"} did not reach the readability threshold, so OCR noise was not saved. Replace or rescan those pages, then review names, section numbers and legal citations before saving.` : "Text extracted and cleaned. Review names, section numbers and legal citations before saving.");
       }
     } catch (cause) {
       if (ocrRunId.current === runId)
@@ -243,6 +250,14 @@ export default function ScannerNotesPage({ userId }: { userId: string | null }) 
     }
     if (!draftTitle.trim() || !draftText.trim()) {
       setError("Add a title and review the extracted text before saving.");
+      return;
+    }
+    const meaningfulDraft = draftText
+      .replace(/\[No reliable text detected\.[\s\S]*?\]/g, "")
+      .replace(/\[No text detected\.[\s\S]*?\]/g, "")
+      .trim();
+    if ((meaningfulDraft.match(/[\p{L}\p{N}]/gu) ?? []).length < 18) {
+      setError("No meaningful text was detected. Rescan in brighter light, hold the page flat, or type the text manually before saving.");
       return;
     }
     if (!activeNote && !files.length) {

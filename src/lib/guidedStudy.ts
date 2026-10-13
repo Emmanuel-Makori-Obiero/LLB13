@@ -1,5 +1,5 @@
 import { supabase } from "../data/repository";
-import { askAI, saveTextMaterial, type AIResult } from "./ai";
+import { askAI, importLibraryMaterial, saveTextMaterial, type AIResult } from "./ai";
 
 export type SourceChoice = { id: string; title: string; author?: string | null; kind: "document" | "transcript" | "material"; citation?: string | null; scope?: "user" | "library"; url?: string | null };
 export type GuideLesson = {
@@ -253,9 +253,21 @@ export async function listGuideSources(): Promise<SourceChoice[]> {
 export async function createGuidedCourse(subject: string, sources: SourceChoice[], preferences: string, visibility: "private" | "group" = "private", onProgress?: GuideProgress, language: StudyLanguage = "en"): Promise<GuidedCourse> {
   if (!sources.length) throw new Error("Choose at least one book, saved document, or transcript.");
   const docIds: string[] = [];
-  for (const source of sources) if (source.kind === "transcript") docIds.push((await transcriptAsDocument(source)).id); else if (source.kind === "document") docIds.push(source.id);
-  const linkedMaterials = sources.filter((source) => source.kind === "material").map((source) => `${source.title}${source.citation ? ` (${source.citation})` : ""}`).join("; ");
-  const readableSources = sources.filter((source) => source.kind !== "material");
+  for (const source of sources) {
+    if (source.kind === "transcript") {
+      onProgress?.(`Preparing saved transcript: ${source.title}…`);
+      docIds.push((await transcriptAsDocument(source)).id);
+    } else if (source.kind === "document") {
+      docIds.push(source.id);
+    } else if (source.kind === "material" && source.url) {
+      // Library records may point to scanned PDFs or image-based books. Import
+      // them now so extractText() can OCR them before the staged reader starts.
+      onProgress?.(`Scanning unreadable Library book: ${source.title}…`);
+      docIds.push((await importLibraryMaterial(source)).id);
+    }
+  }
+  const linkedMaterials = sources.filter((source) => source.kind === "material" && !source.url).map((source) => `${source.title}${source.citation ? ` (${source.citation})` : ""}`).join("; ");
+  const readableSources = sources.filter((source) => source.kind !== "material" || Boolean(source.url));
   const hasReadableSourceText = docIds.length > 0;
   const mode = readableSources.length === 0 ? "general" : readableSources.every((source) => source.kind === "document" && source.scope === "library") ? "library" : readableSources.some((source) => source.scope === "library") ? "auto" : "materials";
   const grounding = hasReadableSourceText
