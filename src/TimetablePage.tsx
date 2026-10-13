@@ -93,7 +93,10 @@ export default function TimetablePage({
   const [personalProposal, setPersonalProposal] = useState<PersonalProposal | null>(null);
   const [replanInstruction, setReplanInstruction] = useState("");
   const [replanProposal, setReplanProposal] = useState<ReplanProposal | null>(null);
-  const [schedule, setSchedule] = useState<"personal" | "group">("personal");
+  // The admin approval flow publishes to the shared group timetable. Open that
+  // view first so an approved schedule is visible immediately; members can
+  // still switch to their private timetable with one click.
+  const [schedule, setSchedule] = useState<"personal" | "group">("group");
   const [showPast, setShowPast] = useState(false);
   const [f, setF] = useState({
     unit: "",
