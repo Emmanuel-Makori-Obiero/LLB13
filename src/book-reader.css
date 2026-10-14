@@ -420,3 +420,38 @@
   .reader-height-control { width: 100%; }
   .reader-height-control input[type="range"] { flex: 1; }
 }
+
+.pdf-notes-reader {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px;
+  background: #e8e5de;
+}
+.pdf-notes-status {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 6px 9px;
+  background: rgba(255, 253, 246, .96);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+}
+.pdf-notes-status > span:first-child { min-width: 28px; color: var(--forest); font-weight: 700; text-align: center; }
+.pdf-reader-spin { animation: pdf-reader-spin 1s linear infinite; }
+@keyframes pdf-reader-spin { to { transform: rotate(360deg); } }
+.pdf-notes-error { margin: 8px 0; padding: 9px; border-left: 3px solid var(--oxblood); background: #fff3ef; color: #8f3e32; font-size: 11px; line-height: 1.45; }
+.pdf-notes-empty { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 180px; color: var(--muted); font-size: 12px; }
+.pdf-notes-pages { display: grid; gap: 16px; margin-top: 10px; }
+.pdf-notes-page { margin: 0 auto; width: min(100%, 920px); }
+.pdf-notes-page-label { margin-bottom: 5px; color: var(--muted); font-size: 10px; letter-spacing: .04em; text-transform: uppercase; }
+.pdf-notes-canvas { position: relative; width: 100%; overflow: hidden; background: #fff; box-shadow: 0 3px 12px rgba(0,0,0,.12); }
+.pdf-notes-canvas > img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.pdf-notes-text-layer { position: absolute; inset: 0; color: transparent; user-select: text; -webkit-user-select: text; }
+.pdf-notes-text-layer span { position: absolute; display: block; overflow: hidden; color: transparent; white-space: nowrap; line-height: 1; cursor: text; }
+.pdf-notes-text-layer span::selection { color: rgba(24, 49, 38, .88); background: rgba(246, 204, 83, .72); }

@@ -6,6 +6,7 @@ import { Markdown } from "./Markdown";
 import StorytellButton from "./StorytellButton";
 import type { Material } from "./data/types";
 import { downloadBlob, downloadPdf, downloadWord } from "./export";
+import PdfNotesReader from "./PdfNotesReader";
 import "./book-reader.css";
 
 type Highlight = { id: string; text: string; createdAt: string };
@@ -161,8 +162,8 @@ export default function BookReader({ material, onClose }: Props) {
             </div>
           ) : frame ? (
             <div className="book-preview-wrap" style={{ height: `${readerHeight}px` }}>
-              {isPdf ? <object data={previewFrame} type="application/pdf" aria-label={`Preview ${material.title}`}><iframe src={previewFrame} title={`Preview ${material.title}`} /></object> : <iframe src={previewFrame} title={`Preview ${material.title}`} referrerPolicy="no-referrer" />}
-              <p className="reader-hint">Preview only — no background extraction or loading wait. Copy a passage and paste it into the AI reading desk.</p>
+              {isPdf ? <PdfNotesReader sourceUrl={sourceUrl} title={material.title} height={readerHeight - 44} onMouseUp={captureSelection} /> : <iframe src={previewFrame} title={`Preview ${material.title}`} referrerPolicy="no-referrer" />}
+              <p className="reader-hint">Scanned PDF pages are shown as images first. When OCR finishes, select text directly on the page and save it as a highlight.</p>
             </div>
           ) : <div className="empty">This material has no valid preview link.</div>}
         </section>
