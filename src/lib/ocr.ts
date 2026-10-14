@@ -1,5 +1,4 @@
 import { createWorker } from "tesseract.js";
-
 export type OcrQuality = { text: string; confidence: number; usable: boolean };
 
 /** Remove OCR noise, but never replace uncertain text with guessed words. */
@@ -22,42 +21,53 @@ export function cleanOcrText(raw: string, confidence = 0): OcrQuality {
   return { text: usable ? text : "", confidence: Math.round(confidence), usable };
 }
 
-async function recognizeImages(images: (Blob | File)[], label: string): Promise<string> {
-  if (!images.length) return "";
+export async function ocrImage(file: File): Promise<string> {
   const worker = await createWorker("eng", 1);
   try {
-    const pages: string[] = [];
-    for (let index = 0; index < images.length; index += 1) {
-      const result = await worker.recognize(images[index]);
-      const quality = cleanOcrText(result.data.text, Number(result.data.confidence ?? 0));
-      if (quality.usable) pages.push(`PAGE ${index + 1}\n${quality.text}`);
-    }
-    return pages.join("\n\n");
+    const result = await worker.recognize(file);
+    return cleanOcrText(result.data.text, Number(result.data.confidence ?? 0)).text;
   } finally {
     await worker.terminate();
   }
 }
 
-export async function ocrImage(file: File): Promise<string> {
-  return recognizeImages([file], "The image");
-}
-
+/**
+ * Render and recognize each PDF page before moving on. Keeping all rendered
+ * pages in memory at once made long scanned books (often hundreds of pages)
+ * exhaust browser memory before OCR could start.
+ */
 export async function ocrPdfPages(
   pdf: { numPages: number; getPage: (pageNumber: number) => Promise<any> },
+  onProgress?: (completed: number, total: number) => void,
 ): Promise<string> {
-  const pages: Blob[] = [];
-  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
-    const page = await pdf.getPage(pageNumber);
-    const viewport = page.getViewport({ scale: 1.5 });
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.ceil(viewport.width);
-    canvas.height = Math.ceil(viewport.height);
-    const context = canvas.getContext("2d");
-    if (!context) throw new Error("Your browser could not prepare a PDF page for OCR.");
-    await page.render({ canvasContext: context, viewport }).promise;
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
-    if (!blob) throw new Error(`Could not prepare scanned PDF page ${pageNumber} for OCR.`);
-    pages.push(blob);
+  if (!pdf.numPages) return "";
+  const worker = await createWorker("eng", 1);
+  const output: string[] = [];
+  try {
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+      const page = await pdf.getPage(pageNumber);
+      const viewport = page.getViewport({ scale: 1.5 });
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.ceil(viewport.width);
+      canvas.height = Math.ceil(viewport.height);
+      const context = canvas.getContext("2d", { alpha: false });
+      if (!context) throw new Error("Your browser could not prepare a PDF page for OCR.");
+      try {
+        await page.render({ canvasContext: context, viewport }).promise;
+        const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+        if (!blob) throw new Error(`Could not prepare scanned PDF page ${pageNumber} for OCR.`);
+        const result = await worker.recognize(blob);
+        const text = cleanOcrText(result.data.text, Number(result.data.confidence ?? 0)).text;
+        if (text) output.push(`PAGE ${pageNumber}\n${text}`);
+      } finally {
+        // Explicitly release the potentially large backing store after each page.
+        canvas.width = 0;
+        canvas.height = 0;
+      }
+      onProgress?.(pageNumber, pdf.numPages);
+    }
+    return output.join("\n\n");
+  } finally {
+    await worker.terminate();
   }
-  return recognizeImages(pages, "The PDF");
 }

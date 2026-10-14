@@ -44,23 +44,7 @@ export default function PdfNotesReader({ sourceUrl, title, height, onMouseUp }: 
         const initial: PdfPage[] = Array.from({ length: pdf.numPages }, (_, index) => ({ number: index + 1, imageUrl: "", width: 0, height: 0, words: [], status: "waiting" }));
         let renderedPages = initial;
         setPages(initial);
-        setStatus(`Rendering ${pdf.numPages} page${pdf.numPages === 1 ? "" : "s"} as images…`);
-
-        for (let index = 0; index < pdf.numPages; index += 1) {
-          if (!active || runRef.current !== runId) return;
-          const page = await pdf.getPage(index + 1);
-          const viewport = page.getViewport({ scale: 1.55 });
-          const canvas = document.createElement("canvas");
-          canvas.width = Math.ceil(viewport.width);
-          canvas.height = Math.ceil(viewport.height);
-          await withTimeout(page.render({ canvas, canvasContext: canvas.getContext("2d", { alpha: false })!, viewport }).promise, 45_000, `Page ${index + 1} took too long to render.`);
-          const imageUrl = canvas.toDataURL("image/jpeg", 0.88);
-          objectUrls.push(imageUrl);
-          renderedPages = renderedPages.map((item, itemIndex) => itemIndex === index ? { ...item, imageUrl, width: canvas.width, height: canvas.height, status: "reading" } : item);
-          setPages(renderedPages);
-        }
-
-        setStatus("Starting local OCR. You can already view the page images below…");
+        setStatus(`Preparing ${pdf.numPages} page${pdf.numPages === 1 ? "" : "s"} for reading…`);
         const { createWorker } = await import("tesseract.js");
         const worker = await createWorker("eng", 1, {
           logger: (message) => {
@@ -73,15 +57,33 @@ export default function PdfNotesReader({ sourceUrl, title, height, onMouseUp }: 
 
         for (let index = 0; index < pdf.numPages; index += 1) {
           if (!active || runRef.current !== runId) return;
-          const current = renderedPages[index];
-          const page = await withTimeout(worker.recognize(current.imageUrl), OCR_TIMEOUT_MS, `OCR timed out on page ${index + 1}. The image is still available below.`);
-          const words = ((page.data as { words?: Array<{ text?: string; bbox?: { x0: number; y0: number; x1: number; y1: number } }> }).words ?? [])
+          const page = await pdf.getPage(index + 1);
+          const viewport = page.getViewport({ scale: 1.55 });
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.ceil(viewport.width);
+          canvas.height = Math.ceil(viewport.height);
+          const context = canvas.getContext("2d", { alpha: false });
+          if (!context) throw new Error("Your browser could not prepare a PDF page for reading.");
+          await withTimeout(page.render({ canvas, canvasContext: context, viewport }).promise, 45_000, `Page ${index + 1} took too long to render.`);
+          const imageUrl = canvas.toDataURL("image/jpeg", 0.88);
+          const pageWidth = canvas.width;
+          const pageHeight = canvas.height;
+          objectUrls.push(imageUrl);
+          canvas.width = 0;
+          canvas.height = 0;
+          renderedPages = renderedPages.map((item, itemIndex) => itemIndex === index ? { ...item, imageUrl, width: pageWidth, height: pageHeight, status: "reading" } : item);
+          setPages(renderedPages);
+
+          const recognized = await withTimeout(worker.recognize(imageUrl, {}, { blocks: true }), OCR_TIMEOUT_MS, `OCR timed out on page ${index + 1}. The page image is still available below.`);
+          const blocks = (recognized.data as { blocks?: Array<{ paragraphs?: Array<{ lines?: Array<{ words?: Array<{ text?: string; bbox?: { x0: number; y0: number; x1: number; y1: number } }> }> }> }> }).blocks ?? [];
+          const recognizedWords = blocks.flatMap((block) => (block.paragraphs ?? []).flatMap((paragraph) => (paragraph.lines ?? []).flatMap((line) => line.words ?? [])));
+          const words = recognizedWords
             .filter((word) => word.text?.trim() && word.bbox)
             .map((word) => ({ text: word.text!.trim(), left: word.bbox!.x0, top: word.bbox!.y0, width: Math.max(2, word.bbox!.x1 - word.bbox!.x0), height: Math.max(8, word.bbox!.y1 - word.bbox!.y0) }));
           renderedPages = renderedPages.map((item, itemIndex) => itemIndex === index ? { ...item, words, status: "ready" } : item);
           setPages(renderedPages);
           setOcrProgress(Math.round(((index + 1) / Math.max(pdf.numPages, 1)) * 100));
-          setStatus(`Scanned text ready on page ${index + 1} of ${pdf.numPages}.`);
+          setStatus(`Selectable scanned text ready on page ${index + 1} of ${pdf.numPages}.`);
         }
       } catch (cause) {
         if (active && runRef.current === runId) {
