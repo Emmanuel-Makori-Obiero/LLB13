@@ -101,7 +101,7 @@ export default function KenyaLawCasesPage() {
             <input id="kl-case-query" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Case name, citation, or legal issue" required />
             <button type="submit" disabled={busy}>{busy ? <><Loader2 className="kl-spin" size={16} /> Searching</> : <>Find cases <Search size={16} /></>}</button>
           </form>
-          <p className="kl-search-note">The free worker searches public official Kenya Law links and returns the result here. It does not require a Google login.</p>
+          <p className="kl-search-note">Search requests go through the app’s authenticated server-side worker. It checks public Kenya Law search pages and public search indexes, but returns only links verified to official Kenya Law judgments or legislation. If no source responds, it will not invent a case; use the spelling suggestions or open Kenya Law advanced search.</p>
           {error && <p className="kl-error" role="alert">{error}</p>}
           {results.length > 0 && <section className="kl-results" aria-live="polite" aria-labelledby="kl-results-title"><div className="kl-results-head"><div><p className="kl-eyebrow">RESEARCH OUTPUT</p><h2 id="kl-results-title">Relevant judgments.</h2></div><span>{results.length} result{results.length === 1 ? "" : "s"}</span></div><div className="kl-result-list">{results.map((result) => <button type="button" className={`kl-result-button${selectedCase?.url === result.url ? " active" : ""}`} key={result.url} onClick={() => void summarizeCase(result)} disabled={summaryBusy}><span><strong>{result.title}</strong>{result.citation && <small>{result.citation}</small>}<em>{selectedCase?.url === result.url && summaryBusy ? "Preparing structured brief…" : "Select case and summarize"}</em></span><ArrowUpRight size={17} aria-hidden="true" /></button>)}</div></section>}
           {results.length === 0 && !busy && !error && query.trim().length >= 3 && <div className="kl-no-results"><p>No indexed match was returned for that query. Try a case name, citation, statute, or legal issue.</p><p><a className="kl-advanced" href={`https://kenyalaw.org/search/?show-advanced-tab=1&nature=Judgment&q=${encodeURIComponent(query.trim())}`} target="_blank" rel="noopener noreferrer">Open Kenya Law advanced search for this query <ArrowUpRight size={14} /></a></p>{suggestions.length > 0 && <div className="kl-suggestions"><strong>Try a related search:</strong>{suggestions.map((suggestion) => <button type="button" key={suggestion} onClick={() => { setQuery(suggestion); void searchKenyaLaw(suggestion).then((found) => { setResults(found); setSuggestions(found.length ? [] : suggestCaseQueries(suggestion)); }).catch((cause) => setError(cause instanceof Error ? cause.message : "The case search is unavailable right now.")); }}>{suggestion}</button>)}</div>}</div>}
@@ -123,6 +123,18 @@ export default function KenyaLawCasesPage() {
           </div>
         </section>
 
+        <section className="kl-courts" aria-labelledby="kl-other-sources-title">
+          <div className="kl-section-head">
+            <div><p className="kl-eyebrow">OTHER RESEARCH SOURCES</p><h2 id="kl-other-sources-title">Compare carefully.</h2></div>
+            <p>These services complement the official Kenyan judgment collection; they do not replace it.</p>
+          </div>
+          <div className="kl-court-list">
+            <a href="https://africanlii.org/judgments/" target="_blank" rel="noopener noreferrer"><span><strong>AfricanLII · regional and comparative law</strong><small>Search participating African collections. Kenya's national decisions route to Kenya Law.</small></span><ArrowUpRight size={17} aria-hidden="true" /></a>
+            <a href="https://www.worldlii.org/" target="_blank" rel="noopener noreferrer"><span><strong>WorldLII · international legal information</strong><small>Cross-jurisdiction discovery; confirm Kenyan authorities on the official source.</small></span><ArrowUpRight size={17} aria-hidden="true" /></a>
+            <a href="https://judiciary.ecitizen.go.ke/" target="_blank" rel="noopener noreferrer"><span><strong>Kenya Judiciary eCitizen services</strong><small>Case status, filing and order services—not a substitute for published judgments.</small></span><ArrowUpRight size={17} aria-hidden="true" /></a>
+          </div>
+        </section>
+
         <section className="kl-constitution" aria-labelledby="kl-constitution-title">
           <div>
             <p className="kl-constitution-label">THE SUPREME LAW</p>
@@ -140,7 +152,7 @@ export default function KenyaLawCasesPage() {
 
       <footer className="kl-footer">
         <a className="kl-brand" href="/" aria-label="Group 13 home"><span className="kl-brand-mark">13</span><span><strong>GROUP 13</strong><small>LAW SCHOOL HUB</small></span></a>
-        <span>Case searches and original judgments are provided by Kenya Law.</span>
+        <span>Original judgments remain on Kenya Law. The app’s proxy only discovers public links and never bypasses a login or access control.</span>
         <a href="#top">Back to top ↑</a>
       </footer>
     </main>

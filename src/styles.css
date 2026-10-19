@@ -172,7 +172,7 @@
 }
 :root {
   --ink: #1f2320;
-  --muted: #77776e;
+  --muted: #62635a;
   --paper: #f7f5f0;
   --white: #fffefa;
   --forest: #163a34;
@@ -185,6 +185,8 @@
   background: var(--paper);
   font-family: "DM Sans", system-ui, sans-serif;
 }
+::selection { background: #f5da76; color: #172a22; }
+:root[data-theme="dark"] ::selection { background: #745c2f; color: #fff7de; }
 * {
   box-sizing: border-box;
 }

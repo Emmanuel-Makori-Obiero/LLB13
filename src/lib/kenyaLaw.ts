@@ -23,7 +23,23 @@ export type KenyaCauseListResult = {
 const COMMON_LEGAL_TERMS = [
   "contract", "negligence", "defamation", "constitutional", "employment",
   "land", "succession", "judicial review", "criminal appeal", "tort",
+  "impeachment", "jurisdiction", "discrimination", "dismissal", "privacy",
+  "arbitration", "election", "murder", "fraud", "neighbour", "liability",
+  "administrative", "inheritance", "negligent", "appeal", "evidence",
 ];
+
+function editDistance(a: string, b: string): number {
+  const row = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i += 1) {
+    let previous = row[0]; row[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const saved = row[j];
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, previous + (a[i - 1] === b[j - 1] ? 0 : 1));
+      previous = saved;
+    }
+  }
+  return row[b.length];
+}
 
 export function suggestCaseQueries(query: string): string[] {
   const normalized = query.trim().toLowerCase();
@@ -36,20 +52,22 @@ export function suggestCaseQueries(query: string): string[] {
   const direct = replacements[normalized];
   const clean = query.trim();
   const suggestions = direct ? [direct] : [];
+  const terms = [...new Set(COMMON_LEGAL_TERMS.flatMap((term) => term.split(" ")).filter((term) => term.length >= 4))];
+  const corrected = clean.replace(/\b[A-Za-z]{4,}\b/g, (word) => {
+    const token = word.toLowerCase();
+    const ranked = terms
+      .filter((term) => Math.abs(term.length - token.length) <= (token.length >= 8 ? 2 : 1))
+      .map((term) => ({ term, distance: editDistance(token, term) }))
+      .filter((candidate) => candidate.distance > 0 && candidate.distance <= (token.length >= 8 ? 2 : 1))
+      .sort((a, b) => a.distance - b.distance);
+    if (!ranked.length || (ranked[1] && ranked[1].distance === ranked[0].distance)) return word;
+    return word[0] === word[0].toUpperCase()
+      ? ranked[0].term[0].toUpperCase() + ranked[0].term.slice(1)
+      : ranked[0].term;
+  });
+  if (corrected.toLowerCase() !== normalized) suggestions.unshift(corrected);
   if (!direct && normalized.length >= 4) {
-    const distance = (a: string, b: string) => {
-      const row = Array.from({ length: b.length + 1 }, (_, i) => i);
-      for (let i = 1; i <= a.length; i += 1) {
-        let previous = row[0]; row[0] = i;
-        for (let j = 1; j <= b.length; j += 1) {
-          const saved = row[j];
-          row[j] = Math.min(row[j] + 1, row[j - 1] + 1, previous + (a[i - 1] === b[j - 1] ? 0 : 1));
-          previous = saved;
-        }
-      }
-      return row[b.length];
-    };
-    for (const term of COMMON_LEGAL_TERMS) if (distance(normalized, term) <= Math.max(2, Math.floor(term.length / 4))) suggestions.push(term);
+    for (const term of COMMON_LEGAL_TERMS) if (editDistance(normalized, term) <= Math.max(2, Math.floor(term.length / 4))) suggestions.push(term);
   }
   if (clean.length >= 3) {
     suggestions.push(`${clean} case`, `${clean} judgment`, `${clean} Kenya Law`);

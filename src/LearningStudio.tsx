@@ -32,6 +32,16 @@ function audioProviderLabel(provider: string | null) {
   return provider.replace(/[-_]/g, " ");
 }
 
+function logPodcastAudioActivity(eventType: "podcast_audio_generated" | "podcast_audio_failed") {
+  if (!supabase) return;
+  void (async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) await supabase.from("platform_activity_events").insert({ user_id: session.user.id, event_type: eventType, page: "assistant", details: {} });
+    } catch { /* Activity reporting must never interrupt audio generation. */ }
+  })();
+}
+
 const perspectives = [
   "Act as a careful Kenyan law lecturer. Identify the governing rule, authorities, reasoning, and any uncertainty in the selected source.",
   "Act as a plain-language tutor. Explain the selected topic with a concrete everyday example, likely confusion, and a quick recall question.",
@@ -152,7 +162,9 @@ export default function LearningStudio() {
       setAudioMimeType(result.mime_type || "audio/mpeg");
       setAudioProvider(result.asset?.provider || null);
       setAudioNote("Audio is ready and saved in Media archive. Listen below, download it, or open Media to play and share it with Group 13.");
+      logPodcastAudioActivity("podcast_audio_generated");
     } catch (e) {
+      logPodcastAudioActivity("podcast_audio_failed");
       if (requestId === audioRequestId.current) setAudioNote(e instanceof Error ? e.message : "Could not create audio.");
     } finally {
       if (requestId === audioRequestId.current) setAudioBusy(false);

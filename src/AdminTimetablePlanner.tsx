@@ -236,6 +236,10 @@ export default function AdminTimetablePlanner({
       throw new Error(
         "No valid lessons were found. Use unit, topic and lesson_date columns.",
       );
+    const issues = timetableIssues(valid);
+    if (issues.length) {
+      throw new Error(`Group 13 timetables are Monday–Friday only: ${issues.join("; ")}`);
+    }
     const created = await repository.createTimetableProposal({
       title,
       instruction: instruction.trim(),
@@ -275,7 +279,7 @@ export default function AdminTimetablePlanner({
       setClassTimetable(parsed);
       setClassSourceText(text);
       setSourceFilename(file.name);
-      setUploadStatus({ kind: "success", text: `${file.name} uploaded and shared with everyone · ${parsed.length} structured row${parsed.length === 1 ? "" : "s"} found.` });
+      setUploadStatus({ kind: "success", text: `${file.name} uploaded for admin review · ${parsed.length} structured row${parsed.length === 1 ? "" : "s"} found. Students see only the approved Group 13 timetable.` });
       setNotice(
         `Official class timetable loaded: ${parsed.length} structured rows${parsed.length ? "" : " (the AI will read the extracted document text directly)"}. Now describe how to turn it into the Group 13 timetable.`,
       );
@@ -298,6 +302,13 @@ export default function AdminTimetablePlanner({
   const applyUploadedRows = async () => {
     if (!classTimetable?.length) {
       setNotice("This file did not contain rows with a recognised unit, topic and date. Use the planner below for PDF or Word files with an unusual layout.");
+      return;
+    }
+    const issues = timetableIssues(classTimetable);
+    if (issues.length) {
+      const message = `This upload includes dates that cannot be used for Group 13 classes. Weekends are never allowed. ${issues.join("; ")}`;
+      setProposalStatus({ kind: "error", text: message });
+      setNotice(message);
       return;
     }
     if (!window.confirm(`Apply the ${classTimetable.length} rows from “${sourceFilename || "the uploaded file"}” and replace the current Group 13 timetable?`)) return;
@@ -432,7 +443,7 @@ export default function AdminTimetablePlanner({
         mode: "general",
         messages: [{
           role: "user",
-          content: `Today is ${new Date().toISOString().slice(0, 10)}. Revise this existing timetable proposal into a new draft. Treat the existing proposal as a starting point, not as a permanent template: add, remove, move, replace or reschedule lessons exactly as the administrator requests, while preserving unaffected lessons. Resolve this week and next week from today's date, not from old dates in the source; move old lessons forward when the administrator asks for a current timetable. Never schedule a date before today unless a historical timetable is explicitly requested. Calculate the real weekday for every ISO date; never trust a weekday label if it conflicts with the calendar. Never schedule Saturday or Sunday unless the administrator explicitly asks for a weekend. Use at most one lesson per date when the request says one class per day.\n\nEXISTING PROPOSAL:\n${JSON.stringify(proposal.proposed_lessons)}\n\nOFFICIAL SOURCE EXTRACT:\n${classSourceText || "Use the existing proposal as the source."}\n\nADMINISTRATOR EDIT REQUEST:\n${editInstruction.trim()}`,
+          content: `Today is ${new Date().toISOString().slice(0, 10)}. Revise this existing timetable proposal into a new draft. Treat the existing proposal as a starting point, not as a permanent template: add, remove, move, replace or reschedule lessons as requested while preserving unaffected lessons. Resolve this week and next week from today's date, not from old dates in the source; move old lessons forward when the administrator asks for a current timetable. Never schedule a date before today unless a historical timetable is explicitly requested. Calculate the real weekday for every ISO date; never trust a weekday label if it conflicts with the calendar. HARD RULE: Saturday and Sunday are never allowed in the shared Group 13 class timetable, even if the administrator requests a weekend. If a requested change requires a weekend, explain that it cannot be applied and return a weekday alternative. Use at most one lesson per date when the request says one class per day.\n\nEXISTING PROPOSAL:\n${JSON.stringify(proposal.proposed_lessons)}\n\nOFFICIAL SOURCE EXTRACT:\n${classSourceText || "Use the existing proposal as the source."}\n\nADMINISTRATOR EDIT REQUEST:\n${editInstruction.trim()}`,
         }],
       });
       const data = (response.data ?? {}) as { title?: string; rationale?: string; lessons?: unknown };

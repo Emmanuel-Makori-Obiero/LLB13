@@ -202,6 +202,10 @@ export default function TimetablePage({
       setNotice("Pick a unit, a date and add a topic.");
       return;
     }
+    if (schedule === "group" && [0, 6].includes(new Date(`${f.lesson_date}T00:00:00`).getDay())) {
+      setNotice("Group 13 classes are Monday–Friday only. Choose a weekday; weekend dates are not allowed.");
+      return;
+    }
     try {
       const payload = {
         unit: f.unit,
@@ -347,7 +351,10 @@ export default function TimetablePage({
   };
 
   const activeLessons = schedule === "personal" ? personalLessons : lessons;
-  const visible = activeLessons.filter((l) => showPast || l.lesson_date >= today());
+  const visible = activeLessons.filter((l) =>
+    (showPast || l.lesson_date >= today()) &&
+    (schedule === "personal" || ![0, 6].includes(new Date(`${l.lesson_date}T00:00:00`).getDay())),
+  );
   const days = [...new Set(visible.map((l) => l.lesson_date))].sort();
 
   return (
@@ -371,12 +378,12 @@ export default function TimetablePage({
           </button>}
         </div>
       </div>
-      {schedule === "group" && latestUpload && (
+      {schedule === "group" && isAdmin && latestUpload && (
         <div className="card card-pad shared-upload-card">
           <div className="section-label">Shared admin upload</div>
           <div className="shared-upload-title">{latestUpload.filename}</div>
           <p className="field-hint">
-            Uploaded {new Date(latestUpload.created_at).toLocaleString("en-GB")} · {latestUpload.structured_rows.length} structured rows · visible to everyone signed in.
+            Uploaded {new Date(latestUpload.created_at).toLocaleString("en-GB")} · {latestUpload.structured_rows.length} structured rows · visible only to administrators.
           </p>
           {uploadRows(latestUpload).length > 0 ? (
             <div className="shared-upload-preview">

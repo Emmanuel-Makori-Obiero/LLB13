@@ -66,6 +66,13 @@ const TOOLS: Tool[] = [
     request: (i) => `Draft this section: ${i}`,
   },
   {
+    feature: "rw_draft",
+    label: "Complete paper",
+    placeholder: "Optional: your main argument, jurisdiction, or emphasis",
+    useDraft: true,
+    request: (i) => `Prepare a complete paper draft. ${i}`.trim(),
+  },
+  {
     feature: "rw_improve",
     label: "Improve text",
     placeholder:
@@ -112,42 +119,43 @@ const clip = (text: string, max = 12000) =>
     : `${text.slice(0, max / 2)}\n[... middle of draft omitted ...]\n${text.slice(-max / 2)}`;
 const count = (text: string) => text.trim().split(/\s+/).filter(Boolean).length;
 
-export function ResearchWriter() {
-  const [project, setProject] = useState<Project>(EMPTY);
-  const [draft, setDraft] = useState("");
+type StoredWriterState = { project?: Project; draft?: string; outputMode?: "write" | "teach"; turns?: Turn[] };
+function readWriterState(key: string): StoredWriterState {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(key) ?? "{}") as StoredWriterState;
+    const turns = Array.isArray(saved.turns)
+      ? saved.turns.slice(-40).map((turn) => turn.result || turn.error ? turn : { ...turn, error: "This request was interrupted before its answer was saved. Send it again if you still need it." })
+      : [];
+    return { ...saved, turns };
+  } catch {
+    return {};
+  }
+}
+
+export function ResearchWriter({ userId }: { userId: string | null }) {
+  const storageKey = `${STORE}.${userId ?? "anonymous"}`;
+  const [initial] = useState(() => readWriterState(storageKey));
+  const [project, setProject] = useState<Project>(() => ({ ...EMPTY, ...initial.project }));
+  const [draft, setDraft] = useState(() => initial.draft ?? "");
   const [mode, setMode] = useState<AIMode>("auto");
+  const [outputMode, setOutputMode] = useState<"write" | "teach">(() => initial.outputMode === "teach" ? "teach" : "write");
   const [tool, setTool] = useState<Tool>(TOOLS[0]);
   const [input, setInput] = useState("");
-  const [turns, setTurns] = useState<Turn[]>([]);
+  const [turns, setTurns] = useState<Turn[]>(() => initial.turns ?? []);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
-  const loaded = useRef(false);
-  const nextId = useRef(1);
+  const nextId = useRef(Math.max(0, ...(initial.turns ?? []).map((turn) => turn.id)) + 1);
   const endRef = useRef<HTMLDivElement>(null);
   const d = useDocuments();
 
-  // keep the project and draft in this browser so nothing is lost on refresh
+  // Keep this account's project, draft and recent transcript in this browser only.
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(STORE);
-      if (raw) {
-        const saved = JSON.parse(raw) as { project?: Project; draft?: string };
-        if (saved.project) setProject({ ...EMPTY, ...saved.project });
-        if (saved.draft) setDraft(saved.draft);
-      }
+      window.localStorage.setItem(storageKey, JSON.stringify({ project, draft, outputMode, turns: turns.slice(-40) }));
     } catch {
-      /* storage unavailable: carry on without it */
+      /* Storage is optional; keep the writer usable if browser storage is unavailable. */
     }
-    loaded.current = true;
-  }, []);
-  useEffect(() => {
-    if (!loaded.current) return;
-    try {
-      localStorage.setItem(STORE, JSON.stringify({ project, draft }));
-    } catch {
-      /* ignore */
-    }
-  }, [project, draft]);
+  }, [storageKey, project, draft, outputMode, turns]);
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [turns, busy]);
@@ -177,6 +185,10 @@ export function ResearchWriter() {
       setNote("Write or paste your draft first so it can be verified.");
       return;
     }
+    if (tool.label === "Complete paper" && outputMode === "write" && !d.selected.length) {
+      setNote("Select at least one readable research source before drafting a full legal paper. The writer will not invent authorities.");
+      return;
+    }
     if (
       !project.topic.trim() &&
       !project.title.trim() &&
@@ -189,8 +201,15 @@ export function ResearchWriter() {
 
     const usesDraft =
       tool.useDraft && draft.trim() && !(tool.feature === "rw_improve" && text);
+    const accuracyInstruction = outputMode === "write"
+      ? `OUTPUT MODE: Write the requested work fully in ${project.style}. For Complete paper, write a coherent full ${project.kind} near ${project.words || "the requested"} words, with a clear thesis, ordered headings, analysis and conclusion. For Citations, format only the authorities supplied in the input or selected source documents. Use no case, statute, quotation, pinpoint, date or bibliographic detail from memory. Use only facts visible in the selected source documents; where a citation detail or legal proposition is missing, mark [VERIFY SOURCE / PINPOINT] and explain what is missing. Never claim independent verification.`
+      : `OUTPUT MODE: Do not write the final paper or simply format the answer. Teach me step by step how to produce the requested ${tool.label.toLowerCase()} in ${project.style}: explain the structure, order of steps, citation placement and bibliography/footnote rules relevant to this task, common errors, and a short checklist. Use generic placeholders such as [Case Name] unless the exact authority is present in my selected sources. Distinguish style rules you can state confidently from details that must be checked against the official style guide.`;
+    const requestedWork = outputMode === "teach" && tool.label === "Complete paper"
+      ? `Teach me step by step how to prepare a complete ${project.kind} in ${project.style}. ${text}`.trim()
+      : tool.request(text);
     const message = [
-      tool.request(text),
+      requestedWork,
+      accuracyInstruction,
       `Topic: ${project.topic || project.title}`,
       project.title && `Paper title: ${project.title}`,
       `Paper type: ${project.kind}. Citation style: ${project.style}. Target length: ${project.words || "not set"} words.`,
@@ -198,20 +217,24 @@ export function ResearchWriter() {
     ]
       .filter(Boolean)
       .join("\n\n");
+    const priorMessages = turns.slice(-6).flatMap((prior) => [
+      { role: "user" as const, content: `${prior.task.label}: ${prior.prompt}` },
+      ...(prior.result ? [{ role: "assistant" as const, content: clip(prior.result.answer, 5000) }] : []),
+    ]);
 
     const turn: Turn = {
       id: nextId.current++,
       task: { feature: tool.feature, label: tool.label, placeholder: "" },
       prompt: text || tool.label,
     };
-    setTurns((t) => [...t, turn]);
+    setTurns((t) => [...t, turn].slice(-40));
     setInput("");
     setBusy(true);
     try {
       const result = await askAI({
         feature: tool.feature,
         mode,
-        messages: [{ role: "user", content: message }],
+        messages: [...priorMessages, { role: "user", content: message }],
         docIds: d.selected.length ? d.selected : undefined,
       });
       setTurns((all) =>
@@ -451,7 +474,16 @@ export function ResearchWriter() {
       <aside className="sa-side">
         <div className="card card-pad">
           <div className="section-label">Project details</div>
+          <p className="field-hint">Your draft and last 40 exchanges are saved locally in this browser for this account. The last six completed exchanges are included as context when you continue; use Clear conversation to remove saved AI turns.</p>
           <div className="data-form">
+            <label>
+              Writing mode
+              <select value={outputMode} onChange={(e) => setOutputMode(e.target.value as "write" | "teach")}>
+                <option value="write">Write the work fully</option>
+                <option value="teach">Teach me step by step</option>
+              </select>
+              <span className="field-hint">Writing uses your selected style. Legal authorities and pinpoint citations must come from your selected source documents; gaps are marked for verification.</span>
+            </label>
             <label>
               Paper title
               <input

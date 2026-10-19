@@ -126,6 +126,8 @@ const KenyaLawCasesPage = lazy(() => import("./KenyaLawCasesPage"));
 const ScheduledCourtCasesPage = lazy(() => import("./ScheduledCourtCasesPage"));
 const AttendancePage = lazy(() => import("./AttendancePage"));
 
+const CareerResearchPage = lazy(() => import("./CareerResearchPage"));
+
 const nav = [
   { id: "dashboard", label: "Home", icon: LayoutDashboard },
   { id: "timetable", label: "Timetable", icon: CalendarDays },
@@ -147,6 +149,7 @@ const nav = [
   { id: "research", label: "Research writer", icon: PenLine },
   { id: "arena", label: "Games Hub", icon: Gavel },
   { id: "growth", label: "Growth studio", icon: Sparkles },
+  { id: "opportunities", label: "Career research", icon: GraduationCap },
   { id: "cases", label: "Case law", icon: BookOpen },
   { id: "scheduled-cases", label: "Scheduled cases", icon: CalendarDays },
   { id: "counsellor", label: "Counsellor", icon: Users },
@@ -1040,7 +1043,12 @@ function App() {
             />
           )}
           {view === "growth" && (
-            <GrowthPage userId={userId} onOpenArena={() => setPage("arena")} />
+            <GrowthPage
+              userId={userId}
+              onOpenArena={() => setPage("arena")}
+              onNavigate={(page) => setPage(page)}
+              onOpenMainAssistant={() => window.dispatchEvent(new CustomEvent("g13:open-lawyer-agent", { detail: { prompt: "I would like a supportive wellbeing check-in. Please help me choose one manageable next step; do not treat this as a diagnosis." } }))}
+            />
           )}
           {view === "transcribe" && (
             <Suspense fallback={<div className="subheading">Opening transcripts…</div>}>
@@ -1238,8 +1246,13 @@ function App() {
                 title="Research writer."
                 subtitle="Plan, draft and critique your papers with an assistant that uses readable selected sources and turns missing authorities into research leads, not guessed citations."
               />
-              <ResearchWriter />
+              <ResearchWriter key={userId ?? "anonymous"} userId={userId} />
             </>
+          )}
+          {view === "opportunities" && (
+            <Suspense fallback={<div className="subheading">Loading career research…</div>}>
+              <CareerResearchPage />
+            </Suspense>
           )}
           {view === "counsellor" && <CounsellorPage />}
           {view === "account" && (
@@ -3250,30 +3263,6 @@ function CounsellorPage() {
       <div className="card card-pad" style={{ marginBottom: 16 }}>
         <CardHeader label="Talk it through" />
         <CounsellorChat />
-      </div>
-      <div className="grid grid-two">
-        <div className="card card-pad">
-          <div className="eyebrow">Career research desk</div>
-          <h2>Compare paths with real signals.</h2>
-          <p className="subheading">Use these as research starting points. Check role descriptions, current skills, location, and entry-level requirements before deciding.</p>
-          <div className="row-list">
-            <a className="row" href="https://www.linkedin.com/jobs/" target="_blank" rel="noreferrer"><span className="row-main"><strong>LinkedIn Jobs</strong><small>Search internships and entry-level roles</small></span><span>↗</span></a>
-            <a className="row" href="https://careers.google.com/" target="_blank" rel="noreferrer"><span className="row-main"><strong>Google Careers</strong><small>See how technology roles are described</small></span><span>↗</span></a>
-            <a className="row" href="https://skillsbuild.org/" target="_blank" rel="noreferrer"><span className="row-main"><strong>IBM SkillsBuild</strong><small>Free skills and project pathways</small></span><span>↗</span></a>
-            <a className="row" href="https://www.onetonline.org/" target="_blank" rel="noreferrer"><span className="row-main"><strong>O*NET career profiles</strong><small>Tasks, skills and work context</small></span><span>↗</span></a>
-          </div>
-        </div>
-        <div className="card card-pad">
-          <div className="eyebrow">Keep learning current</div>
-          <h2>Follow the field, not just the title.</h2>
-          <p className="subheading">Read more than one source. News is useful for direction, but it is not a promise of a job or salary.</p>
-          <div className="row-list">
-            <a className="row" href="https://news.google.com/search?q=cybersecurity%20AI%20engineering%20jobs" target="_blank" rel="noreferrer"><span className="row-main"><strong>Current technology news</strong><small>Google News search for cybersecurity and AI engineering</small></span><span>↗</span></a>
-            <a className="row" href="https://www.weforum.org/publications/the-future-of-jobs-report-2025/" target="_blank" rel="noreferrer"><span className="row-main"><strong>Future of Jobs research</strong><small>Skills and role trends to discuss with the counsellor</small></span><span>↗</span></a>
-            <a className="row" href="https://www.coursera.org/career-academy" target="_blank" rel="noreferrer"><span className="row-main"><strong>Coursera Career Academy</strong><small>Explore beginner-to-job skill paths</small></span><span>↗</span></a>
-            <a className="row" href="https://www.pinterest.com/search/pins/?q=career%20roadmap%20technology" target="_blank" rel="noreferrer"><span className="row-main"><strong>Pinterest inspiration</strong><small>Visual roadmap ideas only; verify claims elsewhere</small></span><span>↗</span></a>
-          </div>
-        </div>
       </div>
       <div className="grid grid-two">
         <div className="card card-pad">

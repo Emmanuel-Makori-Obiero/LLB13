@@ -455,3 +455,12 @@
 .pdf-notes-text-layer { position: absolute; inset: 0; color: transparent; user-select: text; -webkit-user-select: text; }
 .pdf-notes-text-layer span { position: absolute; display: block; overflow: hidden; color: transparent; white-space: nowrap; line-height: 1; cursor: text; }
 .pdf-notes-text-layer span::selection { color: rgba(24, 49, 38, .88); background: rgba(246, 204, 83, .72); }
+
+:root[data-theme="dark"] .book-selection,
+:root[data-theme="dark"] .book-highlight.on {
+  background: #342d24;
+  color: #fff3d5;
+}
+:root[data-theme="dark"] .book-selection { border-left-color: #e2b85e; }
+:root[data-theme="dark"] .book-highlight.on { border-color: #e2b85e; }
+:root[data-theme="dark"] .book-highlight.on > button:first-child { color: #fff3d5; }
