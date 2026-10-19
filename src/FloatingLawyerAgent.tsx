@@ -64,6 +64,16 @@ export default function FloatingLawyerAgent({ currentPage, onOpenDictionary, his
     if (hydrated) window.localStorage.setItem(storageKey(historyKey), JSON.stringify(threads.slice(0, 20)));
   }, [hydrated, historyKey, threads]);
 
+  useEffect(() => {
+    const openFromGrowth = (event: Event) => {
+      const detail = (event as CustomEvent<{ prompt?: string }>).detail;
+      setOpen(true);
+      if (detail?.prompt) setInput(detail.prompt);
+    };
+    window.addEventListener("g13:open-lawyer-agent", openFromGrowth);
+    return () => window.removeEventListener("g13:open-lawyer-agent", openFromGrowth);
+  }, []);
+
   const updateMessages = (next: AgentMessage[]) => {
     setThreads((current) => current.map((thread) => thread.id === activeId ? { ...thread, messages: next, title: thread.messages.length ? thread.title : (next.find((message) => message.role === "user")?.text.slice(0, 48) || thread.title), updatedAt: Date.now() } : thread));
   };
@@ -179,7 +189,8 @@ export default function FloatingLawyerAgent({ currentPage, onOpenDictionary, his
       }
       return;
     }
-    const wantsCaseSearch = /\b(find|search|look up|locate)\b[\s\S]*\b(case|judgment|kenya law|citation)\b/i.test(question);
+    const wantsCaseSearch = /\b(find|search|look up|locate|give me|show me|provide|suggest|name|example of)\b[\s\S]{0,100}\b(case|judgment|kenya law|citation|precedent|authority)\b/i.test(question)
+      || /\b(case law|case|cases|judgment|judgments|precedent|precedents|court decision|court decisions)\b[\s\S]{0,80}\b(on|about|for|related to|supporting|illustrating)\b/i.test(question);
     if (wantsCaseSearch) {
       setBusy(true);
       try {
@@ -198,7 +209,7 @@ export default function FloatingLawyerAgent({ currentPage, onOpenDictionary, his
     setBusy(true);
     try {
       const related = searchLegalDictionary(question).slice(0, 4).map((entry) => `${entry.term}: ${entry.definition}`).join("\n");
-      const prior: AIMessage[] = messages.slice(-10).map((message) => ({ role: message.role, content: message.text }));
+      const prior: AIMessage[] = messages.slice(-20).map((message) => ({ role: message.role, content: message.text.slice(0, 2200) }));
       const hasDocument = currentAttachment?.mime === "document";
       const result = await askAI({ feature: "chat", mode: hasDocument ? "materials" : "general", messages: [...prior, { role: "user", content: `You are the Group 13 Lawyer Agent, a careful Kenyan law study companion. The student is currently on the “${currentPage}” page. Continue the conversation using its earlier context. Answer directly in plain language, define legal terms, distinguish general principles from Kenyan law, and never invent a case, statute, section, quote, or current legal position. If authority is needed but not provided, say “verify the authority”. This is study support, not legal advice. Relevant local dictionary entries, if any:\n${related || "none"}\n\nStudent question: ${question}` }], docIds: hasDocument ? [currentAttachment.data] : undefined });
       updateMessages([...next, { role: "assistant", text: result.answer, result }]);

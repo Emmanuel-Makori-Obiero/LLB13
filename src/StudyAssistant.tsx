@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FileText, Library, Loader2, Send, Trash2, Upload } from "lucide-react";
-import { isSupabaseConfigured } from "./data/repository";
+import { isSupabaseConfigured, supabase } from "./data/repository";
 import {
   AI_MODES,
   askAI,
@@ -363,6 +363,8 @@ export function StudyAssistant() {
   const fileRef = useRef<HTMLInputElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const nextId = useRef(1);
+  const [historyOwner, setHistoryOwner] = useState("");
+  const [historyLoaded, setHistoryLoaded] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!isSupabaseConfigured) return;
@@ -376,6 +378,34 @@ export function StudyAssistant() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    let active = true;
+    if (!supabase) { setHistoryLoaded(true); return; }
+    void supabase.auth.getUser().then(({ data }) => {
+      if (!active) return;
+      setHistoryOwner(data.user?.id ?? "");
+      setHistoryLoaded(true);
+    }).catch(() => { if (active) setHistoryLoaded(true); });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!historyLoaded || !historyOwner) return;
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(`g13.study-assistant.history.${historyOwner}`) ?? "[]") as Turn[];
+      const restored = Array.isArray(saved) ? saved.filter((turn) => turn && typeof turn.id === "number" && turn.task && typeof turn.prompt === "string" && (turn.result || turn.error)).slice(-80) : [];
+      setTurns(restored);
+      nextId.current = restored.reduce((maximum, turn) => Math.max(maximum, turn.id), 0) + 1;
+    } catch { /* Ignore unavailable or malformed local history. */ }
+  }, [historyLoaded, historyOwner]);
+
+  useEffect(() => {
+    if (!historyLoaded || !historyOwner) return;
+    try {
+      window.localStorage.setItem(`g13.study-assistant.history.${historyOwner}`, JSON.stringify(turns.filter((turn) => turn.result || turn.error).slice(-80)));
+    } catch { /* Local history is a convenience; the assistant remains usable if storage is full. */ }
+  }, [historyLoaded, historyOwner, turns]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -437,10 +467,10 @@ export function StudyAssistant() {
       ? []
       : turns
           .filter((t) => t.result && !t.task.needsDoc)
-          .slice(-3)
+          .slice(-8)
           .flatMap((t) => [
-            { role: "user" as const, content: t.prompt },
-            { role: "assistant" as const, content: t.result!.answer },
+            { role: "user" as const, content: t.prompt.slice(0, 1200) },
+            { role: "assistant" as const, content: t.result!.answer.slice(0, 3000) },
           ]);
     try {
       const result = await askAI({
@@ -487,6 +517,7 @@ export function StudyAssistant() {
                 summaries, case briefs, quizzes and flashcards, tick a document
                 on the right first.
               </p>
+              <p className="field-hint">Your study-assistant conversation is saved in this browser for your signed-in account, so it remains available when you return to this page. It is not visible to other students or the admin.</p>
             </div>
           )}
           {turns.map((t) => (
@@ -550,7 +581,7 @@ export function StudyAssistant() {
               className="sa-clear"
               onClick={() => setTurns([])}
             >
-              Clear conversation
+                Clear conversation history
             </button>
           )}
         </form>
