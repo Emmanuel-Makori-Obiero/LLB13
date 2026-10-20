@@ -238,7 +238,7 @@ export async function listLeaderboard() {
     .order("points", { ascending: false })
     .order("rating", { ascending: false })
     .order("wins", { ascending: false })
-    .limit(20);
+    .limit(15);
   if (error) throw new Error(error.message);
   return (data ?? []) as LeaderboardEntry[];
 }
