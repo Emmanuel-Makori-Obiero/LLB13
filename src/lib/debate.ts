@@ -78,7 +78,12 @@ export type LeaderboardEntry = {
   total_score: number;
   best_streak: number;
   current_streak: number;
+  points: number;
+  is_bot: boolean;
+  tagline: string;
 };
+
+export type MatchResult = { queued: boolean; queue_id?: string; room?: DebateRoom; created_at?: string };
 
 function db() {
   if (!supabase) throw new Error("Supabase is not configured.");
@@ -109,10 +114,11 @@ export async function createDebateRoom(input: {
   return data as DebateRoom;
 }
 
-export async function joinDebateRoom(shareCode: string, displayName: string) {
+export async function joinDebateRoom(shareCode: string, displayName: string, role: DebateRole) {
   const { data, error } = await db().rpc("join_debate_room", {
     p_share_code: shareCode,
     p_display_name: displayName,
+    p_join_role: role,
   });
   if (error || !data) throw new Error(error?.message || "Could not join the invite room.");
   return data as DebateRoom;
@@ -144,6 +150,66 @@ export async function submitDebateTurn(roomId: string, content: string) {
   return data as DebateMessage;
 }
 
+export async function findDebateMatch(input: {
+  sourceId: string;
+  sourceTitle: string;
+  duration: 10 | 20;
+  difficulty: DebateDifficulty;
+  motion: string;
+  caseBrief: DebateCaseBrief;
+  displayName: string;
+  role: DebateRole;
+}) {
+  const { data, error } = await db().rpc("find_debate_match", {
+    p_source_id: input.sourceId,
+    p_source_title: input.sourceTitle,
+    p_duration_minutes: input.duration,
+    p_difficulty: input.difficulty,
+    p_motion: input.motion,
+    p_case_brief: input.caseBrief,
+    p_display_name: input.displayName,
+    p_role: input.role,
+  });
+  if (error || !data) throw new Error(error?.message || "Could not find a debate opponent.");
+  return data as MatchResult;
+}
+
+export async function getDebateMatchStatus() {
+  const { data, error } = await db().rpc("get_debate_match_status");
+  if (error || !data) throw new Error(error?.message || "Could not check the opponent search.");
+  return data as MatchResult;
+}
+
+export async function createAiDebateRoom(input: {
+  sourceId: string;
+  sourceTitle: string;
+  duration: 10 | 20;
+  difficulty: DebateDifficulty;
+  motion: string;
+  caseBrief: DebateCaseBrief;
+  displayName: string;
+  hostRole: DebateRole;
+}) {
+  const { data, error } = await db().rpc("create_ai_debate_room", {
+    p_source_id: input.sourceId,
+    p_source_title: input.sourceTitle,
+    p_duration_minutes: input.duration,
+    p_difficulty: input.difficulty,
+    p_motion: input.motion,
+    p_case_brief: input.caseBrief,
+    p_display_name: input.displayName,
+    p_host_role: input.hostRole,
+  });
+  if (error || !data) throw new Error(error?.message || "Could not start the AI match.");
+  return data as DebateRoom;
+}
+
+export async function submitBotDebateTurn(roomId: string, content: string) {
+  const { data, error } = await db().rpc("submit_bot_debate_turn", { p_room_id: roomId, p_content: content });
+  if (error || !data) throw new Error(error?.message || "The AI opponent could not submit its turn.");
+  return data as DebateMessage;
+}
+
 export async function expireDebateTurn(roomId: string) {
   const { data, error } = await db().rpc("expire_debate_turn", { p_room_id: roomId });
   if (error || !data) throw new Error(error?.message || "Could not advance the timed-out turn.");
@@ -167,8 +233,9 @@ export async function requestDebateEvaluation(roomId: string) {
 
 export async function listLeaderboard() {
   const { data, error } = await db()
-    .from("debate_leaderboard")
+    .from("debate_leaderboard_universal")
     .select("*")
+    .order("points", { ascending: false })
     .order("rating", { ascending: false })
     .order("wins", { ascending: false })
     .limit(20);

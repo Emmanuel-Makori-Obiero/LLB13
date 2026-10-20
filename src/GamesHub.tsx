@@ -6,13 +6,17 @@ import { searchKenyaLaw, type KenyaLawCaseResult } from "./lib/kenyaLaw";
 import { Markdown } from "./Markdown";
 import {
   createDebateRoom,
+  createAiDebateRoom,
   expireDebateTurn,
+  findDebateMatch,
+  getDebateMatchStatus,
   getDebateRoom,
   joinDebateRoom,
   listDebateMessages,
   listLeaderboard,
   requestDebateEvaluation,
   submitDebateTurn,
+  submitBotDebateTurn,
   subscribeToDebateRoom,
   subscribeToLeaderboard,
   type DebateCaseBrief,
@@ -54,7 +58,7 @@ function packetText(packet: DebateCaseBrief | null) {
   return packet ? JSON.stringify(packet, null, 2) : "No case packet has been prepared.";
 }
 function sideName(role: DebateRole | null | undefined) {
-  return role === "defendant" ? "Defendant" : "Claimant";
+  return role === "defendant" ? "Opposer" : "Proposer";
 }
 
 function CasePacket({ packet }: { packet: DebateCaseBrief }) {
@@ -107,6 +111,7 @@ export default function GamesHub({
   const [difficulty, setDifficulty] = useState<DebateDifficulty>("beginner");
   const [duration, setDuration] = useState<10 | 20>(10);
   const [hostRole, setHostRole] = useState<DebateRole>("claimant");
+  const [joinRole, setJoinRole] = useState<DebateRole>("defendant");
   const [topic, setTopic] = useState("");
   const [casePacket, setCasePacket] = useState<DebateCaseBrief | null>(null);
   const [caseBusy, setCaseBusy] = useState(false);
@@ -132,6 +137,9 @@ export default function GamesHub({
   const [pvpSubmission, setPvpSubmission] = useState("");
   const [pvpNotice, setPvpNotice] = useState("");
   const [pvpRemaining, setPvpRemaining] = useState(0);
+  const [matchBusy, setMatchBusy] = useState(false);
+  const [matchQueued, setMatchQueued] = useState(false);
+  const [aiTurnBusy, setAiTurnBusy] = useState(false);
   const [autoExpiredTurn, setAutoExpiredTurn] = useState("");
   const [runningObservation, setRunningObservation] = useState("");
   const [evaluationRequested, setEvaluationRequested] = useState(false);
@@ -218,9 +226,24 @@ export default function GamesHub({
   }, []);
 
   useEffect(() => {
+    if (!matchQueued || room) return;
+    const poll = window.setInterval(() => {
+      void getDebateMatchStatus().then((result) => {
+        if (result.room) {
+          setMatchQueued(false);
+          setRoom(result.room);
+          void listDebateMessages(result.room.id).then(setPvpMessages);
+          setPvpNotice("You have been matched. The debate starts now.");
+        }
+      }).catch(() => { /* the next poll will retry */ });
+    }, 3000);
+    return () => window.clearInterval(poll);
+  }, [matchQueued, room]);
+
+  useEffect(() => {
     if (!inviteCode || room) return;
     setTab("pvp");
-    setPvpNotice("This invite reserves the opposing role for you. Sign in, then join to start the server-enforced debate clock.");
+    setPvpNotice("Choose the open side, then join. The server rejects a role already taken and starts the debate clock only when both seats are filled.");
   }, [inviteCode, room]);
 
   useEffect(() => {
@@ -381,12 +404,46 @@ export default function GamesHub({
     }
   };
 
+  const findOpponent = async () => {
+    if (!userId || !source || !casePacket || matchBusy) return;
+    setMatchBusy(true);
+    setPvpNotice("Looking for another student with the same level and time. If nobody is available, an AI opponent will join automatically.");
+    try {
+      const result = await findDebateMatch({ sourceId: source.id, sourceTitle: sourceLabel, duration, difficulty, motion: topic.trim() || casePacket.question, caseBrief: casePacket, displayName, role: hostRole });
+      if (result.room) {
+        setRoom(result.room);
+        setPvpMessages(await listDebateMessages(result.room.id));
+        setPvpNotice("Opponent found. The debate starts now.");
+      } else {
+        setMatchQueued(true);
+        setPvpNotice("You are in the match queue. We will keep looking for 12 seconds, then bring in AI • BriefBot if no student joins.");
+        window.setTimeout(async () => {
+          try {
+            const current = await getDebateMatchStatus();
+            if (!current.queued) return;
+            const aiRoom = await createAiDebateRoom({ sourceId: source.id, sourceTitle: sourceLabel, duration, difficulty, motion: topic.trim() || casePacket.question, caseBrief: casePacket, displayName, hostRole });
+            setMatchQueued(false);
+            setRoom(aiRoom);
+            setPvpMessages([]);
+            setPvpNotice("No student was available, so AI • BriefBot has joined your room.");
+          } catch (error) {
+            setPvpNotice(error instanceof Error ? error.message : "The opponent search could not start the AI match.");
+          }
+        }, 12000);
+      }
+    } catch (error) {
+      setPvpNotice(error instanceof Error ? error.message : "Could not find an opponent.");
+    } finally {
+      setMatchBusy(false);
+    }
+  };
+
   const joinCompetition = async () => {
     if (!userId || !inviteCode || pvpBusy) return;
     setPvpBusy(true);
     setPvpNotice("");
     try {
-      const joined = await joinDebateRoom(inviteCode, displayName);
+      const joined = await joinDebateRoom(inviteCode, displayName, joinRole);
       setRoom(joined);
       setPvpMessages(await listDebateMessages(joined.id));
       setEvaluationRequested(false);
@@ -440,6 +497,16 @@ export default function GamesHub({
       setPvpBusy(false);
     }
   };
+
+  useEffect(() => {
+    if (!room || room.status !== "active" || room.player_two_id !== "00000000-0000-0000-0000-000000000001" || room.current_turn % 2 !== 1 || aiTurnBusy || !room.case_brief) return;
+    setAiTurnBusy(true);
+    const transcript = pvpMessages.map((item) => `${item.display_name} (${item.phase}): ${item.content}`).join("\n\n");
+    void askAI({ feature: "moot_judge", mode: "general", messages: [{ role: "user", content: `You are AI • BriefBot, a friendly Kenyan-law debate opponent. Reply with one concise debate submission for the ${phaseFor(room.current_turn)} phase. Use only the case packet and named authorities; never invent a citation. Clearly separate a legal point, a fact/evidence point, and your reasoning. This is a study game, not legal advice.\n\nCASE PACKET:\n${packetText(room.case_brief)}\n\nTRANSCRIPT:\n${transcript}` }] })
+      .then(async (result) => { await submitBotDebateTurn(room.id, result.answer); await refreshRoom(); })
+      .catch((error) => setPvpNotice(error instanceof Error ? error.message : "The AI opponent could not answer this turn."))
+      .finally(() => setAiTurnBusy(false));
+  }, [room?.id, room?.status, room?.current_turn, room?.player_two_id, aiTurnBusy, pvpMessages]);
 
   const advanceTimedOutTurn = async () => {
     if (!room || pvpBusy) return;
@@ -505,11 +572,11 @@ export default function GamesHub({
   const myRole = room ? room.player_one_id === userId ? room.player_one_role : room.player_two_role : null;
 
   return <>
-    <div className="page-heading"><div><div className="eyebrow">Timed advocacy, grounded feedback</div><h1>Legal Arena.</h1><p>Play a fictional Kenyan-law case, use the stated authority packet, and receive study feedback—not legal advice.</p></div><Trophy size={32} /></div>
+    <div className="page-heading"><div><div className="eyebrow">Learn · play · improve</div><h1>Legal Arena.</h1><p>Choose a legal issue, make your argument, and earn points. The cases are fictional study games—not legal advice.</p></div><Trophy size={32} /></div>
     <div className="games-directory" role="tablist" aria-label="Choose a Legal Arena game">
       <button className={`game-domain-card ${tab === "computer" ? "active" : ""}`} onClick={() => setTab("computer")}><span className="game-domain-icon"><Swords size={20} /></span><span><strong>Computer Court</strong><small>Test yourself as claimant or defendant against an AI opponent.</small></span><em>01</em></button>
       <button className={`game-domain-card ${tab === "training" ? "active" : ""}`} onClick={() => setTab("training")}><span className="game-domain-icon"><GraduationCap size={20} /></span><span><strong>Training Court</strong><small>Start with one small skill and earn marks from an AI judge.</small></span><em>02</em></button>
-      <button className={`game-domain-card ${tab === "pvp" ? "active" : ""}`} onClick={() => setTab("pvp")}><span className="game-domain-icon"><Users size={20} /></span><span><strong>PVP Competition</strong><small>Invite one opponent to a role-based, turn-timed debate.</small></span><em>03</em></button>
+      <button className={`game-domain-card ${tab === "pvp" ? "active" : ""}`} onClick={() => setTab("pvp")}><span className="game-domain-icon"><Users size={20} /></span><span><strong>Find a Debate</strong><small>Match with a student—or let an AI player join when nobody is free.</small></span><em>03</em></button>
       <button className={`game-domain-card ${tab === "choices" ? "active" : ""}`} onClick={() => setTab("choices")}><span className="game-domain-icon"><Gavel size={20} /></span><span><strong>Choices</strong><small>Make consequential decisions in a short legal scenario.</small></span><em>04</em></button>
     </div>
 
@@ -547,18 +614,17 @@ export default function GamesHub({
     </section>}
 
     {tab === "pvp" && <section className="game-room">
-      {!room && inviteCode && <div className="card card-pad arena-invite-card"><div className="game-kicker"><Users size={14} /> Invite-only room</div><h2>Join the other side.</h2><p>This link assigns you the role opposite the host. Once both players join, the server starts the first turn clock and records every submission.</p><button className="primary-button" onClick={() => void joinCompetition()} disabled={!userId || pvpBusy}>{pvpBusy ? "Joining room…" : "Join competition"}</button>{!userId && <p className="field-hint">Sign in first so the room can protect both sides' submissions.</p>}</div>}
-      {!room && !inviteCode && !isAdmin && <div className="card card-pad arena-invite-card"><div className="game-kicker"><Users size={14} /> Invite-only competition</div><h2>Ask an administrator for a room link.</h2><p>Administrators choose the level, authority packet, role assignment, and time control. Anyone with the private link can join the opposite side after signing in.</p></div>}
-      {!room && !inviteCode && isAdmin && <div className="card card-pad arena-case-builder">
-        <div><div className="game-kicker"><Users size={14} /> Administrator setup</div><h2>Create a PVP competition.</h2><p><strong>How to host:</strong> select the level and your side, generate a balanced case, create the private room, then send the invite link. Each submitted argument ends that side's clock and starts the other side's clock.</p></div>
-        <div className="arena-rules-grid"><div className="arena-rule"><strong>Admin sets level</strong>Beginner gives clearer prompts; Master expects compact, self-directed submissions.</div><div className="arena-rule"><strong>One private link</strong>The person using it joins the opposite party—claimant or defendant.</div><div className="arena-rule"><strong>Server enforces turns</strong>Players cannot submit for the other side, overwrite the case packet, or save a score.</div></div>
+      {!room && inviteCode && <div className="card card-pad arena-invite-card"><div className="game-kicker"><Users size={14} /> Two-seat event room</div><h2>Choose your side.</h2><p>This room has one open seat. Select proposer or opposer; once both seats are filled, the server starts the turn clock and records every submission.</p><label>Join as<select value={joinRole} onChange={(event) => setJoinRole(event.target.value as DebateRole)}><option value="claimant">Proposer</option><option value="defendant">Opposer</option></select></label><button className="primary-button" onClick={() => void joinCompetition()} disabled={!userId || pvpBusy}>{pvpBusy ? "Joining room…" : "Join competition"}</button>{!userId && <p className="field-hint">Sign in first so the room can protect both sides' submissions.</p>}</div>}
+      {!room && !inviteCode && <div className="card card-pad arena-case-builder">
+        <div><div className="game-kicker"><Users size={14} /> Open hosting</div><h2>Create a PVP competition.</h2><p><strong>How to host:</strong> choose your side, generate a motion and balanced case packet, create the two-seat room, then send the invite link. The joiner chooses the other open side. Each submitted argument ends that side's clock and starts the other side's clock.</p></div>
+        <div className="arena-rules-grid"><div className="arena-rule"><strong>AI motion setter</strong>The issue or theme becomes a balanced fictional Kenyan-law motion grounded in the selected sources.</div><div className="arena-rule"><strong>Two seats only</strong>The host occupies one side and the invitee chooses the other; a third participant cannot join.</div><div className="arena-rule"><strong>Server-enforced judge</strong>Timers, turns, final AI scoring, and leaderboard updates are protected by Supabase functions.</div></div>
         <div className="arena-form-grid">
           <label>Competition level<select value={difficulty} onChange={(event) => setDifficulty(event.target.value as DebateDifficulty)}><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="master">Master</option></select></label>
-          <label>Host side<select value={hostRole} onChange={(event) => setHostRole(event.target.value as DebateRole)}><option value="claimant">Claimant</option><option value="defendant">Defendant</option></select></label>
+          <label>Your side<select value={hostRole} onChange={(event) => setHostRole(event.target.value as DebateRole)}><option value="claimant">Proposer — supports the motion</option><option value="defendant">Opposer — challenges the motion</option></select></label>
           <label>Time control<select value={duration} onChange={(event) => setDuration(Number(event.target.value) as 10 | 20)}><option value={10}>10 minutes</option><option value={20}>20 minutes</option></select></label>
           <label className="arena-topic-field">Issue or theme<input value={topic} onChange={(event) => { setTopic(event.target.value); setCasePacket(null); }} placeholder="e.g. breach of duty and proof of damage" /></label>
         </div>
-        {!casePacket ? <button className="primary-button" onClick={() => void createCasePacket()} disabled={!source || caseBusy}>{caseBusy ? "Checking Kenya Law and setting the case…" : "Generate case packet"}</button> : <div className="arena-invite-actions"><button className="primary-button" onClick={() => void createCompetition()} disabled={pvpBusy || !userId}>{pvpBusy ? "Creating private room…" : "Create room and invite opponent"}</button><button className="secondary-button" onClick={() => void createCasePacket()} disabled={caseBusy}><RefreshCw size={14} /> New case</button></div>}
+        {!casePacket ? <button className="primary-button" onClick={() => void createCasePacket()} disabled={!source || caseBusy}>{caseBusy ? "Finding official sources and making the case…" : "Make a case"}</button> : <div className="arena-invite-actions"><button className="primary-button" onClick={() => void findOpponent()} disabled={matchBusy || !userId}>{matchBusy ? "Finding an opponent…" : "Find an opponent"}</button><button className="secondary-button" onClick={() => void createCompetition()} disabled={pvpBusy || !userId}>{pvpBusy ? "Creating invite…" : "Invite a friend"}</button><button className="secondary-button" onClick={() => void createCasePacket()} disabled={caseBusy}><RefreshCw size={14} /> New case</button></div>}
       </div>}
       {room && <>
         <CasePacket packet={room.case_brief ?? casePacket ?? { title: room.source_title, question: room.motion || "Debate issue", packet: "The case packet could not be loaded.", authorities: [], materials: [], sourceBasis: "Tournament record" }} />
@@ -571,7 +637,7 @@ export default function GamesHub({
         {room.status === "finished" && room.evaluation && <div className="card card-pad game-evaluation"><div className="section-label">Secure final judgment</div><p><strong>Scores:</strong> {room.player_one_name} {room.player_one_score} · {room.player_two_name} {room.player_two_score}</p><div className="arena-result-grid"><div><strong>{room.player_one_name}</strong><p>{String(room.evaluation.playerOneFeedback || "Review the shared record and retry.")}</p></div><div><strong>{room.player_two_name || "Opponent"}</strong><p>{String(room.evaluation.playerTwoFeedback || "Review the shared record and retry.")}</p></div></div><Markdown text={String(room.evaluation.summary || "Match evaluated.")} /><p className="arena-packet-warning"><strong>Authority and evidence:</strong> {String(room.evaluation.authorityAssessment || "Only the packet sources count as verified authority.")}<br />{String(room.evaluation.evidenceAssessment || "Reasoning and evidence were assessed separately.")}</p><p><strong>Retry advice:</strong> {String(room.evaluation.retryAdvice || "Identify the issue, link a source, and answer the strongest opposing point.")}</p></div>}
       </>}
       {pvpNotice && <div className="connection-error game-notice">{pvpNotice}</div>}
-      <div className="card card-pad leaderboard-card"><div className="game-kicker"><Trophy size={14} /> Live leaderboard</div><h2>Competition standings</h2><p>Ratings update only after the secure evaluator saves a completed PVP result.</p>{leaderboardError ? <p className="field-hint">{leaderboardError}</p> : <div className="leaderboard-list">{leaderboard.slice(0, 10).map((entry, index) => <div className="leaderboard-row" key={entry.user_id}><strong>#{index + 1} {entry.display_name}</strong><span>{entry.rating} rating · {entry.wins}W {entry.losses}L · {entry.matches} matches</span></div>)}{!leaderboard.length && <p className="field-hint">Complete the first PVP competition to create the leaderboard.</p>}</div>}</div>
+      <div className="card card-pad leaderboard-card"><div className="game-kicker"><Trophy size={14} /> Universal leaderboard</div><h2>Who is climbing?</h2><p>Points are added after every completed debate: your score, plus a win or participation bonus. AI entries are labelled clearly.</p>{leaderboardError ? <p className="field-hint">{leaderboardError}</p> : <div className="leaderboard-list">{leaderboard.slice(0, 10).map((entry, index) => <div className="leaderboard-row" key={entry.user_id}><strong>#{index + 1} {entry.display_name}{entry.is_bot ? " · AI" : ""}</strong><span>{entry.points} points · {entry.wins} wins · {entry.matches} debates{entry.tagline ? ` · ${entry.tagline}` : ""}</span></div>)}{!leaderboard.length && <p className="field-hint">Finish a debate to appear on the universal leaderboard.</p>}</div>}</div>
     </section>}
 
     {tab === "choices" && <section className="game-room"><div className="card card-pad game-card"><div className="game-kicker"><Gavel size={14} /> Branching scenario</div><h2>Choices</h2><p><strong>How to play:</strong> read the fictional facts, choose a path, then compare the consequence with another legal strategy. Authority claims remain limited to the stated record.</p><button className="primary-button" onClick={() => void generateChoices()} disabled={!source || choiceBusy}>{choiceBusy ? "Setting the scenario…" : choiceNode ? "Try another scenario" : "Start Choices"}</button></div>{choiceNode && <div className="card card-pad choice-card"><div className="section-label">{choiceNode.title}</div><h2>{choiceNode.situation}</h2><div className="choice-list">{choiceNode.choices.map((choice, index) => <button key={`${choice.label}-${index}`} className="choice-option" onClick={() => choose(choice)}><strong>{choice.label}</strong><span>{choice.consequence}</span></button>)}</div>{choicePath.length > 0 && <p className="field-hint">Path: {choicePath.join(" → ")}</p>}{choiceDebrief && <div className="game-evaluation"><strong>Debrief</strong><p>{choiceDebrief}</p></div>}</div>}{notice && <div className="connection-error game-notice">{notice}</div>}</section>}
