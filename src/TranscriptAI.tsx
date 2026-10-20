@@ -62,9 +62,9 @@ const ACTIONS: Action[] = [
     feature: "quiz",
     label: "Quiz",
     icon: ListChecks,
-    hint: "Multiple-choice questions on this lecture.",
+    hint: "Open-response questions you answer in your own words.",
     prompt:
-      "Create 8 multiple-choice questions testing the main points of this lecture transcript.",
+      "Create 8 open-response questions testing the main points of this lecture transcript. Require me to type a substantive answer for every question; do not include A/B/C/D choices, options, or true/false questions.",
   },
   {
     feature: "flashcards",
@@ -378,7 +378,7 @@ export function TranscriptAI({
       if (action.feature === "extract_assignments") {
         applyAssignmentResult(result);
       }
-      setTurn({ id: 1, task, prompt: generationPrompt, result });
+      setTurn({ id: 1, task, prompt: generationPrompt, result, mode: "materials", docIds: [doc.id] });
       if (action.feature === "summarize") await reviewOutput(result.answer);
     } catch (e) {
       setTurn({

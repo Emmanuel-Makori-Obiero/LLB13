@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FileText, Library, Loader2, Send, Trash2, Upload } from "lucide-react";
+import { FileText, Library, Loader2, Send, Trash2, Upload, CheckCircle2 } from "lucide-react";
 import { isSupabaseConfigured, supabase } from "./data/repository";
 import {
   AI_MODES,
@@ -118,7 +118,7 @@ const TASKS: Task[] = [
     label: "Quiz",
     needsDoc: true,
     placeholder: "Optional: topic or number of questions",
-    fallback: "Create 8 multiple-choice questions from the selected document.",
+    fallback: "Create 8 open-response exam questions from the selected document. I will write each answer myself.",
   },
   {
     feature: "flashcards",
@@ -133,6 +133,8 @@ export type Turn = {
   id: number;
   task: Task;
   prompt: string;
+  mode?: AIMode;
+  docIds?: string[];
   result?: AIResult;
   error?: string;
 };
@@ -147,20 +149,25 @@ const BASIS_LABEL: Record<AIResult["basis"], string> = {
 
 type QuizQ = {
   question: string;
-  options: string[];
-  answerIndex: number;
+  modelAnswer: string;
+  keyPoints: string[];
   explanation: string;
 };
 type Card = { front: string; back: string };
 type ContentsItem = { title: string; topics?: string[]; summary?: string };
 
 function asQuiz(data: unknown): QuizQ[] {
-  const qs = (data as { questions?: QuizQ[] } | null)?.questions;
-  return Array.isArray(qs)
-    ? qs.filter(
-        (q) => q && typeof q.question === "string" && Array.isArray(q.options),
-      )
-    : [];
+  const qs = (data as { questions?: unknown[] } | null)?.questions;
+  if (!Array.isArray(qs)) return [];
+  return qs.flatMap((value) => {
+    if (!value || typeof value !== "object") return [];
+    const item = value as Record<string, unknown>;
+    if (typeof item.question !== "string") return [];
+    const options = Array.isArray(item.options) ? item.options.map(String) : [];
+    const answerIndex = Number(item.answerIndex);
+    const modelAnswer = String(item.modelAnswer ?? item.model_answer ?? item.answer ?? (Number.isInteger(answerIndex) ? options[answerIndex] : "") ?? "");
+    return [{ question: item.question, modelAnswer, keyPoints: Array.isArray(item.keyPoints) ? item.keyPoints.map(String) : [], explanation: String(item.explanation ?? "") }];
+  });
 }
 function asCards(data: unknown): Card[] {
   const cs = (data as { cards?: Card[] } | null)?.cards;
@@ -197,60 +204,51 @@ function Contents({ items }: { items: ContentsItem[] }) {
   );
 }
 
-function Quiz({ questions }: { questions: QuizQ[] }) {
-  const [picked, setPicked] = useState<Record<number, number>>({});
-  const done = Object.keys(picked).length;
-  const score = questions.filter((q, i) => picked[i] === q.answerIndex).length;
+function Quiz({ questions, mode, docIds }: { questions: QuizQ[]; mode: AIMode; docIds?: string[] }) {
+  const [answers, setAnswers] = useState<Record<number, string>>({});
+  const [reviews, setReviews] = useState<Record<number, string>>({});
+  const [checking, setChecking] = useState<number | null>(null);
+  const done = Object.keys(reviews).length;
+  const check = async (index: number) => {
+    const answer = answers[index]?.trim();
+    if (!answer || checking !== null) return;
+    setChecking(index);
+    try {
+      const question = questions[index];
+      const result = await askAI({
+        feature: "chat",
+        mode,
+        docIds,
+        messages: [{ role: "user", content: `Assess this student's written revision answer fairly. Identify accurate reasoning, omissions or errors and why they matter. Give one concrete improvement. Treat a proposed answer as a guide, not the only acceptable view; accept defensible alternatives and do not invent authorities.
+
+Question: ${question.question}
+Suggested answer: ${question.modelAnswer}
+Key points: ${question.keyPoints.join("; ")}
+Explanation: ${question.explanation}
+Student answer: ${answer}` }],
+      });
+      setReviews((current) => ({ ...current, [index]: result.answer }));
+    } catch (error) {
+      setReviews((current) => ({ ...current, [index]: error instanceof Error ? error.message : "Could not review this answer." }));
+    } finally {
+      setChecking(null);
+    }
+  };
   return (
     <div className="sa-quiz">
-      {questions.map((q, qi) => {
-        const choice = picked[qi];
-        const answered = choice !== undefined;
-        return (
-          <div className="sa-q" key={qi}>
-            <p className="sa-q-text">
-              {qi + 1}. {q.question}
-            </p>
-            <div className="sa-options">
-              {q.options.map((o, oi) => {
-                const cls = !answered
-                  ? ""
-                  : oi === q.answerIndex
-                    ? "right"
-                    : oi === choice
-                      ? "wrong"
-                      : "";
-                return (
-                  <button
-                    key={oi}
-                    type="button"
-                    className={`sa-option ${cls}`}
-                    disabled={answered}
-                    onClick={() => setPicked((p) => ({ ...p, [qi]: oi }))}
-                  >
-                    <span className="sa-letter">
-                      {String.fromCharCode(65 + oi)}
-                    </span>
-                    {o}
-                  </button>
-                );
-              })}
-            </div>
-            {answered && q.explanation && (
-              <p className="sa-explain">{q.explanation}</p>
-            )}
-          </div>
-        );
-      })}
-      <p className="sa-score">
-        {done < questions.length
-          ? `${done} of ${questions.length} answered`
-          : `Score: ${score} of ${questions.length}`}
-      </p>
+      <p className="field-hint">Write an answer in your own words, then check it for feedback. There are no answer choices.</p>
+      {questions.map((question, index) => (
+        <div className="sa-q" key={index}>
+          <p className="sa-q-text">{index + 1}. {question.question}</p>
+          <textarea rows={5} value={answers[index] ?? ""} disabled={!!reviews[index] || checking !== null} onChange={(event) => setAnswers((current) => ({ ...current, [index]: event.target.value }))} placeholder="Write your answer in your own words…" />
+          <button type="button" className="primary-button" disabled={!answers[index]?.trim() || checking !== null || !!reviews[index]} onClick={() => void check(index)}>{checking === index ? <><Loader2 size={14} /> Reviewing…</> : reviews[index] ? <><CheckCircle2 size={14} /> Answer reviewed</> : "Check my written answer"}</button>
+          {reviews[index] && <div className="sa-explain"><Markdown text={reviews[index]} />{question.modelAnswer && <details><summary>Suggested answer</summary><Markdown text={question.modelAnswer} />{question.explanation && <Markdown text={question.explanation} />}</details>}</div>}
+        </div>
+      ))}
+      <p className="sa-score">{done} of {questions.length} answers reviewed</p>
     </div>
   );
 }
-
 function Flashcards({ cards }: { cards: Card[] }) {
   const [i, setI] = useState(0);
   const [flipped, setFlipped] = useState(false);
@@ -314,7 +312,7 @@ export function Answer({ turn }: { turn: Turn }) {
         </span>
         {r.model && <span className="quiet">{r.model}</span>}
       </div>
-      {quiz.length > 0 && <Quiz questions={quiz} />}
+      {quiz.length > 0 && <Quiz questions={quiz} mode={turn.mode ?? "auto"} docIds={turn.docIds} />}
       {cards.length > 0 && <Flashcards cards={cards} />}
       {contents.length > 0 && <Contents items={contents} />}
       {!structured && <Markdown text={r.answer} />}
@@ -452,9 +450,6 @@ export function StudyAssistant() {
     }
     setNote("");
     const turn: Turn = { id: nextId.current++, task, prompt: text };
-    setTurns((t) => [...t, turn]);
-    setInput("");
-    setBusy(true);
 
     // Document tasks need the chosen documents, so "Any law" is switched to "Smart" for them.
     const useMode: AIMode =
@@ -463,6 +458,11 @@ export function StudyAssistant() {
         : task.needsDoc && mode === "general"
           ? "auto"
           : mode;
+    turn.mode = useMode;
+    turn.docIds = selected.length ? [...selected] : undefined;
+    setTurns((t) => [...t, turn]);
+    setInput("");
+    setBusy(true);
     const history = task.needsDoc
       ? []
       : turns

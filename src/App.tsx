@@ -18,6 +18,7 @@ import {
   Clock3,
   Download,
   FileText,
+  ClipboardCheck,
   Filter,
   Film,
   FolderOpen,
@@ -88,6 +89,7 @@ import TimetablePage from "./TimetablePage";
 const TranscribePage = lazy(() => import("./TranscribePage"));
 import { CounsellorChat } from "./CounsellorChat";
 import { StudyAssistant } from "./StudyAssistant";
+import ExamReviewPage from "./ExamReviewPage";
 import LegalDictionaryPage from "./LegalDictionaryPage";
 import LegalProcessPage from "./LegalProcessPage";
 import FloatingLawyerAgent from "./FloatingLawyerAgent";
@@ -139,6 +141,7 @@ const nav = [
   { id: "legal-process", label: "Legal what-ifs", icon: Workflow },
   { id: "scanner", label: "Scan & notes", icon: ScanLine },
   { id: "guide", label: "Guided study", icon: GraduationCap },
+  { id: "exam-review", label: "Exam review", icon: ClipboardCheck },
   { id: "music", label: "Music & media", icon: Music2 },
   { id: "assignment-helper", label: "AI assignment helper", icon: Sparkles },
   { id: "units", label: "Units", icon: BookOpen },
@@ -1228,6 +1231,16 @@ function App() {
               <StudyAssistant />
               <LearningStudio />
             </Suspense>
+          )}
+          {view === "exam-review" && (
+            <>
+              <PageHeading
+                eyebrow="Independent exam practice"
+                title="Exam paper review."
+                subtitle="Upload any revision paper, understand the questions, and write your way through a new one."
+              />
+              <ExamReviewPage />
+            </>
           )}
           {view === "guide" && (
             <Suspense fallback={<div className="subheading">Opening guided study…</div>}>
@@ -3973,6 +3986,7 @@ function MaterialForm({
   const [file, setFile] = useState<File>();
   const [dragActive, setDragActive] = useState(false);
   const [extracting, setExtracting] = useState(false);
+  const [savingMaterial, setSavingMaterial] = useState(false);
   const [extractNote, setExtractNote] = useState("");
   const [form, setForm] = useState<Omit<Material, "id">>(() =>
     initial
@@ -4092,9 +4106,15 @@ function MaterialForm({
           setDragActive(false);
           if (!initial) chooseFile(event.dataTransfer.files?.[0]);
         }}
-        onSubmit={(event) => {
+        onSubmit={async (event) => {
           event.preventDefault();
-          void (initial ? onUpdated?.(form) : onCreated?.(form, file));
+          if (savingMaterial || extracting) return;
+          setSavingMaterial(true);
+          try {
+            await (initial ? onUpdated?.(form) : onCreated?.(form, file));
+          } finally {
+            setSavingMaterial(false);
+          }
         }}
       >
         <label>
@@ -4187,16 +4207,15 @@ function MaterialForm({
               AI is analysing the readable text…
             </span>
           )}
+          {savingMaterial && file && file.size > 6 * 1024 * 1024 && (
+            <span className="field-hint">Uploading this large book in resumable chunks, then adding its readable text to the Library AI knowledge base…</span>
+          )}
           {!extracting && extractNote && (
             <span className="field-hint">{extractNote}</span>
           )}
         </label>
-        <button className="primary-button" type="submit">
-          {initial
-            ? "Save book details"
-            : file
-              ? "Upload material"
-              : "Save material link"}
+        <button className="primary-button" type="submit" disabled={savingMaterial || extracting}>
+          {savingMaterial ? "Saving and indexing…" : initial ? "Save book details" : file ? "Upload material" : "Save material link"}
         </button>
       </form>
     </FormShell>

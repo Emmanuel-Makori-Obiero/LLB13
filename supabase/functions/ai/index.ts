@@ -466,7 +466,7 @@ const FEATURES: Record<
   quiz: {
     json: true,
     docWide: true,
-    task: 'Create exam-style multiple-choice questions. Return ONLY JSON: {"questions":[{"question":"","options":["","","",""],"answerIndex":0,"explanation":""}]}',
+    task: 'Create exam-style OPEN-RESPONSE questions that require a typed explanation, application, problem answer, or short essay. Never create multiple-choice questions or answer options, and never label questions A/B/C/D. Return ONLY JSON: {"questions":[{"question":"","modelAnswer":"","keyPoints":[""],"explanation":""}]}. Base questions and marking guidance on the selected source; mark source gaps rather than inventing law or citations.',
   },
   flashcards: {
     json: true,

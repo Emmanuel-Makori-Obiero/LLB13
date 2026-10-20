@@ -1,3 +1,4 @@
+import { Upload as TusUpload } from "tus-js-client";
 import { createClient } from "@supabase/supabase-js";
 import type {
   AdminAccount,
@@ -465,11 +466,7 @@ const supabaseRepository: Group13Repository = {
       throw new Error("Links must start with http:// or https://");
     if (file) {
       const path = `${record.id}/${file.name.replace(/[^a-zA-Z0-9._-]/g, "-")}`;
-      const upload = await supabase.storage
-        .from("materials")
-        .upload(path, file, { upsert: false });
-      if (upload.error)
-        throw new Error(`Could not upload material: ${upload.error.message}`);
+      await uploadStorageObject("materials", path, file);
       record = {
         ...record,
         url: supabase.storage.from("materials").getPublicUrl(path).data
@@ -696,5 +693,36 @@ const supabaseRepository: Group13Repository = {
       throw new Error("Only the super admin can change unit representatives.");
   },
 };
+
+async function uploadStorageObject(bucket: string, path: string, file: File) {
+  if (!supabase || !supabaseUrl) throw new Error("Supabase is not configured.");
+  const resumableThreshold = 6 * 1024 * 1024;
+  if (file.size <= resumableThreshold) {
+    const { error } = await supabase.storage.from(bucket).upload(path, file, { upsert: false });
+    if (error) throw new Error(`Could not upload material: ${error.message}`);
+    return;
+  }
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) throw new Error("Your session expired. Sign in again and retry this upload.");
+  const projectUrl = new URL(supabaseUrl);
+  const storageHost = projectUrl.hostname.endsWith(".supabase.co")
+    ? projectUrl.hostname.replace(/\.supabase\.co$/i, ".storage.supabase.co")
+    : projectUrl.host;
+  const endpoint = `${projectUrl.protocol}//${storageHost}/storage/v1/upload/resumable`;
+  await new Promise<void>((resolve, reject) => {
+    const upload = new TusUpload(file, {
+      endpoint,
+      retryDelays: [0, 3000, 5000, 10000, 20000],
+      headers: { authorization: `Bearer ${session.access_token}`, "x-upsert": "false" },
+      uploadDataDuringCreation: true,
+      removeFingerprintOnSuccess: true,
+      chunkSize: resumableThreshold,
+      metadata: { bucketName: bucket, objectName: path, contentType: file.type || "application/octet-stream", cacheControl: "3600" },
+      onError: (error) => reject(new Error(`Could not finish large-file upload: ${error.message}`)),
+      onSuccess: () => resolve(),
+    });
+    upload.start();
+  });
+}
 
 export const repository: Group13Repository = supabaseRepository;

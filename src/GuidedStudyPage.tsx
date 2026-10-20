@@ -23,7 +23,6 @@ import {
   listGuideSources,
   listGuidedCourses,
   resumeLessonIndex,
-  saveLessonProgress,
   updateGuidedCourseVisibility,
   type CourseProgress,
   type GuidedCourse,
@@ -47,7 +46,7 @@ export default function GuidedStudyPage() {
   );
   const [selected, setSelected] = useState<string[]>([]);
   const [lessonIndex, setLessonIndex] = useState(0);
-  const [picked, setPicked] = useState<Record<number, number>>({});
+  const [quizAnswers, setQuizAnswers] = useState<Record<number, string>>({});
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [buildProgress, setBuildProgress] = useState<{ done: number; total: number; phase: string } | null>(null);
@@ -123,10 +122,7 @@ export default function GuidedStudyPage() {
     () => progress.find((item) => item.lesson_index === lessonIndex),
     [progress, lessonIndex],
   );
-  const answered = lesson?.quiz.filter((_, index) => picked[index] !== undefined).length ?? 0;
-  const score = lesson
-    ? lesson.quiz.filter((question, index) => picked[index] === question.answerIndex).length
-    : 0;
+  const answered = lesson?.quiz.filter((_, index) => Boolean(quizAnswers[index]?.trim())).length ?? 0;
 
   const generate = async () => {
     lessonActionId.current += 1;
@@ -153,7 +149,7 @@ export default function GuidedStudyPage() {
       setCourses((current) => [created, ...current.filter((item) => item.id !== created.id)]);
       setCourse(created);
       setLessonIndex(0);
-      setPicked({});
+      setQuizAnswers({});
       setProgress([]);
       setNotice("Syllabus ready. Your course card is saved below.");
       setBuildProgress({ done: 1, total: 1, phase: "Complete — every selected readable section was covered" });
@@ -173,7 +169,7 @@ export default function GuidedStudyPage() {
     setBusy(true);
     setCourse(next);
     setProgress([]);
-    setPicked({});
+    setQuizAnswers({});
     setWrittenAnswer("");
     setLessonAudio(null);
     setAudioBusy(false);
@@ -206,7 +202,7 @@ export default function GuidedStudyPage() {
     setLessonAudio(null);
     setAudioBusy(false);
     setWrittenAnswer("");
-    setPicked({});
+    setQuizAnswers({});
   };
 
   const removeCourse = async (item: GuidedCourse) => {
@@ -273,24 +269,19 @@ export default function GuidedStudyPage() {
     if (!course || !lesson || !lesson.quiz.length || answered < lesson.quiz.length) return;
     const requestId = ++lessonActionId.current;
     const lessonKey = `${course.id}:${lessonIndex}`;
-    const selectedAnswers = { ...picked };
+    const writtenAnswers = lesson.quiz.map((item, index) => `Question ${index + 1}: ${item.question}\nMy answer: ${quizAnswers[index]?.trim() || "[not answered]"}`).join("\n\n");
     setBusy(true);
     try {
-      const result = await saveLessonProgress(
-        course,
-        lessonIndex,
-        Math.round((score / lesson.quiz.length) * 100),
-        lesson.quiz.map((_, index) => selectedAnswers[index]),
-      );
+      const result = await evaluateWrittenCheckpoint(course, lessonIndex, writtenAnswers, lessonProgress?.last_answer);
       if (requestId !== lessonActionId.current || activeLessonKey.current !== lessonKey) return;
       const savedProgress = await getCourseProgress(course.id);
       if (requestId !== lessonActionId.current || activeLessonKey.current !== lessonKey) return;
       setProgress(savedProgress);
       setCourse({ ...course, progress: result.progress });
       setNotice(
-        result.status === "completed"
-          ? "Checkpoint saved. Nice work—continue to the next lesson."
-          : "Checkpoint saved. Repeat this lesson once more, then try the quiz again.",
+        result.checkpoint.passed
+          ? "Written checkpoint reviewed. Nice work—continue to the next lesson."
+          : "Written checkpoint reviewed. Use the feedback to improve and try again.",
       );
     } catch (error) {
       if (requestId !== lessonActionId.current || activeLessonKey.current !== lessonKey) return;
@@ -376,7 +367,7 @@ export default function GuidedStudyPage() {
     setLessonAudio(null);
     setAudioBusy(false);
     setLessonIndex(nextIndex);
-    setPicked({});
+    setQuizAnswers({});
     setWrittenAnswer("");
   };
 
@@ -385,7 +376,7 @@ export default function GuidedStudyPage() {
     const text = [
       course.syllabus.overview,
       ...course.syllabus.lessons.map((item, index) =>
-        `## Lesson ${index + 1}: ${item.title}\n\n**Goal:** ${item.objective}\n\n${item.explanation}\n\n${item.example ? `**Story / example**\n\n${item.example}\n\n` : ""}### Checkpoint\n\n${item.quiz.map((question, questionIndex) => `${questionIndex + 1}. ${question.question}\n   ${question.options.map((option, optionIndex) => `${String.fromCharCode(65 + optionIndex)}. ${option}`).join("\n   ")}`).join("\n\n")}`,
+        `## Lesson ${index + 1}: ${item.title}\n\n**Goal:** ${item.objective}\n\n${item.explanation}\n\n${item.example ? `**Story / example**\n\n${item.example}\n\n` : ""}### Checkpoint\n\n${item.quiz.map((question, questionIndex) => `${questionIndex + 1}. ${question.question}`).join("\n\n")}`,
       ),
     ].join("\n\n");
     const options = {
@@ -507,10 +498,10 @@ export default function GuidedStudyPage() {
               <p className="field-hint">Try the questions after the explanation. You can repeat this lesson whenever you need.</p>
               {lesson.quiz.map((question, questionIndex) => <div className="guide-question" key={`${question.question}-${questionIndex}`}>
                 <strong>{questionIndex + 1}. {question.question}</strong>
-                {question.options.map((option, optionIndex) => <button key={option} className={picked[questionIndex] === optionIndex ? "picked" : ""} disabled={busy || lessonProgress?.status === "completed"} onClick={() => setPicked((current) => ({ ...current, [questionIndex]: optionIndex }))}><span>{String.fromCharCode(65 + optionIndex)}</span>{option}</button>)}
-                {picked[questionIndex] !== undefined && <p className={picked[questionIndex] === question.answerIndex ? "guide-right" : "guide-wrong"}>{picked[questionIndex] === question.answerIndex ? "Correct. " : "Not quite. "}{question.explanation}</p>}
+                <textarea rows={5} value={quizAnswers[questionIndex] ?? ""} disabled={busy || lessonProgress?.status === "completed"} onChange={(event) => setQuizAnswers((current) => ({ ...current, [questionIndex]: event.target.value }))} placeholder="Write your answer in your own words…" />
+                {question.explanation && <p className="field-hint">Think about the rule, its application, and the reason for your conclusion.</p>}
               </div>)}
-              {lesson.quiz.length > 0 && <div className="guide-submit"><span>{answered} of {lesson.quiz.length} answered{lessonProgress?.status === "repeat" ? " · Repeat recommended" : ""}</span><button className="primary-button" disabled={busy || answered < lesson.quiz.length || lessonProgress?.status === "completed"} onClick={() => void submit()}>{lessonProgress?.status === "completed" ? <><CheckCircle2 size={14} /> Completed</> : "Save checkpoint"}</button></div>}
+              {lesson.quiz.length > 0 && <div className="guide-submit"><span>{answered} of {lesson.quiz.length} answered{lessonProgress?.status === "repeat" ? " · Feedback available to review" : ""}</span><button className="primary-button" disabled={busy || answered < lesson.quiz.length || lessonProgress?.status === "completed"} onClick={() => void submit()}>{busy ? "Reviewing written answers…" : lessonProgress?.status === "completed" ? <><CheckCircle2 size={14} /> Completed</> : "Submit written checkpoint"}</button></div>}
             </div>
             <div className="guide-nav">
               <button className="secondary-button" disabled={busy || lessonIndex === 0} onClick={() => goToLesson(lessonIndex - 1)}><ChevronLeft size={14} /> Previous</button>
