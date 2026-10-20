@@ -24,12 +24,14 @@ This separates discovery from the study library and allows the repository to gro
 
 ## PVP debate event
 
-The Arena is already wired to the `debate_rooms`, `debate_messages`, `debate_leaderboard`, and `evaluate-debate` services. Apply the new migration after the existing Legal Arena migrations:
+The Arena is already wired to the `debate_rooms`, `debate_messages`, `debate_leaderboard`, and `evaluate-debate` services. Apply the Arena migrations after the existing Legal Arena migrations:
 
 ```bash
 supabase db push
 # or apply only the reviewed migration in the SQL editor:
-# supabase/migrations/028_self_serve_pvp_rooms.sql
+# 028_self_serve_pvp_rooms.sql
+# 029_arena_points_matchmaking_ai.sql
+# 030_matchmaking_status_poll_fix.sql
 supabase functions deploy evaluate-debate
 ```
 
@@ -42,5 +44,9 @@ Migration `028_self_serve_pvp_rooms.sql` changes the event flow as follows:
 - Six alternating turns are enforced server-side as opening, rebuttal, and closing phases.
 - Each side gets the room’s server-generated turn clock. Expired turns are recorded as no submission.
 - The secure evaluator scores the completed transcript and updates the live leaderboard; clients cannot write scores directly.
+
+The player-facing language is intentionally simple: **Proposer** means “supports the motion,” and **Opposer** means “challenges the motion.” A player can press **Find an opponent** after making a case. The server first looks for a signed-in student with the same level and time control. If nobody joins during the short search window, **AI • BriefBot** joins automatically. It is clearly marked as AI, and the demo AI rows on the universal leaderboard are also labelled as AI/demo entries rather than pretending to be real students.
+
+The universal leaderboard uses points as its main score. A completed debate adds the player’s judge score plus a result bonus, so points keep increasing instead of resetting after each match. Real students are stored in the authenticated leaderboard table; AI/demo players are stored separately and combined through a read-only universal view, preserving the real-user foreign-key protection.
 
 For today’s event, use a signed-in host account, select a library source, choose the motion/topic and 10- or 20-minute control, generate the packet, create the room, and share the `/arena?join=...` invite link. The second participant signs in, chooses the open side, and joins. Do not start the round until both names and roles are visible in the room.
