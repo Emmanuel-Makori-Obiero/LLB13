@@ -739,3 +739,8 @@ body,
 @media(max-width:900px){.home-grid-organized{grid-template-columns:repeat(2,minmax(0,1fr))}.home-welcome{padding:25px}.home-welcome-mark{width:88px;height:88px;flex-basis:88px}}
 @media(max-width:620px){.home-dashboard{gap:16px}.home-welcome{min-height:0;padding:23px 19px}.home-welcome-mark{display:none}.home-section-head{align-items:flex-start}.home-section-head h2{font-size:18px}.home-text-button{max-width:130px;text-align:right}.home-grid-organized,.home-quick-links{grid-template-columns:1fr}.home-panel{min-height:0}.survey-options{grid-template-columns:1fr}.cohort-options{grid-template-columns:1fr}.assignment-row{flex-wrap:wrap!important}.assignment-row .row-end{margin-left:auto}}
 .game-speech-draft{display:grid;gap:8px}.game-speech-label{font-size:12px;font-weight:700}.game-speech-draft textarea{width:100%;box-sizing:border-box}.game-speech-tools{display:flex;align-items:center;flex-wrap:wrap;gap:9px}.game-speech-tools>span{color:var(--muted);font-size:10px}.game-dictation-button{font-size:10px!important;padding:7px 10px!important}.game-dictation-button.listening{border-color:#b65341;color:#a33e31;background:#fff1ed}
+
+/* Make learner-level selection visibly responsive, and keep its save action in reach. */
+.survey-options button[aria-pressed="true"]{border-color:var(--forest);background:var(--moss);box-shadow:inset 0 0 0 1px var(--forest)}
+.survey-options button:focus-visible{outline:3px solid var(--forest);outline-offset:2px}
+.survey-save{position:sticky;bottom:0;z-index:2;width:100%;margin-top:14px}
