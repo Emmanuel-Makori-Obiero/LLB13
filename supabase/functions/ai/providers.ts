@@ -25,8 +25,15 @@ export function combineProviderChains(
   return result;
 }
 
-export function shouldTryAnotherKey(status: number): boolean {
-  return status === 401 || status === 403 || status === 429;
+export function modelRouteCooldownMs(status: number, retryAfterSeconds = 0): number {
+  if (status === 429) return Math.max(60_000, retryAfterSeconds * 1000);
+  if (status === 401 || status === 403) return 15 * 60_000;
+  if (status === 400 || status === 404) return 30 * 60_000;
+  return 45_000;
+}
+
+export function boundedProviderTimeoutMs(configured: number): number {
+  return Number.isFinite(configured) ? Math.min(8_000, Math.max(3_000, configured)) : 8_000;
 }
 
 const BASE = {

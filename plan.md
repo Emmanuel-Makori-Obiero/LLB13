@@ -83,7 +83,7 @@ AI prompts must identify the selected source IDs and use the existing `materials
 - Keep the existing React/TypeScript SPA, Supabase repository boundary, and editorial Group 13 dashboard design.
 - Extend the current server-verified administrator identity to additional verified accounts. Preserve the original primary administrator as the only account that can grant or revoke admin roles; all admins may use the existing admin dashboard and timetable controls.
 - Let admins directly update and edit existing shared timetable lessons and revise saved proposals. Preserve RLS authorization and ensure older proposals can be edited without losing their history.
-- Normalize configured AI fallback chains so duplicate provider/model entries do not cause repeated futile calls. Retain current documented model IDs, provide independent fallbacks, and keep actionable provider attempt diagnostics visible to admins.
+- Normalize configured AI fallback chains so duplicate provider/model entries do not cause repeated futile calls. Use the newest configured key once per model route, cap each provider request at eight seconds, and on any terminal error advance immediately to the next model/provider with the same full request. Retain independent fallbacks and actionable, non-secret attempt diagnostics.
 
 
 ## Exam paper review persistence

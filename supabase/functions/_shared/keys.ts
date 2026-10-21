@@ -17,6 +17,10 @@ export function newestKeySlotsFirst(entries: readonly SecretKeyEntry[]): SecretK
   return [...entries].sort((left, right) => right.slot - left.slot);
 }
 
+export function fastFailoverKeys(entries: readonly SecretKeyEntry[]): SecretKeyEntry[] {
+  return newestKeySlotsFirst(entries).slice(0, 1);
+}
+
 export function secretKeys(baseName: string): string[] {
   return secretKeyEntries(baseName).map((entry) => entry.value);
 }

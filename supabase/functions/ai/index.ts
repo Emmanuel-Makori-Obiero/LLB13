@@ -1,6 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { EXTRA_FEATURES, handleExtra } from "./exam.ts";
-import { newestKeySlotsFirst, secretKeyEntries } from "../_shared/keys.ts";
+import { fastFailoverKeys, secretKeyEntries } from "../_shared/keys.ts";
 import { reserveAiQuota } from "../_shared/quotas.ts";
 import { recordProviderUsage } from "../_shared/usage.ts";
 
@@ -14,7 +14,7 @@ import { recordProviderUsage } from "../_shared/usage.ts";
 export type Msg = { role: "system" | "user" | "assistant"; content: string };
 type ReasoningStyle = "openrouter" | "effort" | "none";
 
-import { combineProviderChains, DEFAULT_CHAIN, shouldTryAnotherKey, type Entry } from "./providers.ts";
+import { boundedProviderTimeoutMs, combineProviderChains, DEFAULT_CHAIN, modelRouteCooldownMs, type Entry } from "./providers.ts";
 
 function chain(feature?: string): Entry[] {
   const stageName = feature
@@ -126,16 +126,14 @@ export async function callChain(
   },
   ): Promise<ChainResult> {
   const started = Date.now();
-  // Keep a fallback request alive long enough to try another provider, but do
-  // not let one stalled model consume the whole edge-function deadline.
+  // Bound each model call so a stalled provider cannot block the next fallback.
   const deadline = opts.deadlineMs ?? Number(Deno.env.get("AI_DEADLINE_MS") ?? 110_000);
-  const perCall = opts.perCallMs ?? Number(Deno.env.get("AI_PER_CALL_MS") ?? 20_000);
+  const configuredPerCall = opts.perCallMs ?? Number(Deno.env.get("AI_PER_CALL_MS") ?? 8_000);
+  const perCall = boundedProviderTimeoutMs(configuredPerCall);
   const attempts: Attempt[] = [];
   let retryAfterMs = 0;
-  // A 503, timeout, or network failure is normally shared by the provider/model
-  // endpoint. Do not spend the request deadline replaying that outage with every
-  // sibling key. 429 is different: another key may belong to another quota project,
-  // so quota failures continue to the next configured key.
+  // Use one newest key for each route; any terminal failure skips sibling keys and
+  // advances to the next model/provider with the same request messages.
   const unavailableRoutes = new Set<string>();
   for (const ent of orderedChain(opts.feature)) {
     const route = routeId(ent);
@@ -147,7 +145,7 @@ export async function callChain(
       attempts.push({ id: id(ent), status: "route_cooldown" });
       continue;
     }
-    const keys = newestKeySlotsFirst(secretKeyEntries(ent.keyEnv));
+    const keys = fastFailoverKeys(secretKeyEntries(ent.keyEnv));
     if (!keys.length) {
       attempts.push({ id: id(ent), status: "missing_key" });
       continue;
@@ -209,15 +207,9 @@ export async function callChain(
             }
             const retryAfter = Number(res.headers.get("retry-after")) || 0;
             retryAfterMs = Math.max(retryAfterMs, retryAfter * 1000);
-            const routeUnavailable = !shouldTryAnotherKey(res.status);
-            if (routeUnavailable) {
-              const routeCooldown = res.status === 400 || res.status === 404
-                ? 30 * 60_000
-                : 45_000;
-              unavailableRoutes.add(route);
-              routeCooldownUntil.set(route, Date.now() + routeCooldown);
-            }
-            const cool = res.status === 429 ? Math.max(retryAfter * 1000, 60_000) : res.status === 401 || res.status === 403 ? 15 * 60_000 : res.status === 404 || res.status === 400 ? 30 * 60_000 : 45_000;
+            const cool = modelRouteCooldownMs(res.status, retryAfter);
+            unavailableRoutes.add(route);
+            routeCooldownUntil.set(route, Date.now() + cool);
             cooldownUntil.set(eid, Date.now() + cool);
             let detail: string | undefined;
             if (Deno.env.get("AI_DEBUG")) detail = (await res.text().catch(() => "")).slice(0, 240);
@@ -1060,7 +1052,7 @@ Deno.serve(async (req) => {
   } catch (err) {
     return json(
       {
-        error: "The configured AI providers could not complete this request. Check the provider key, model ID, and current quota, then try again.",
+        error: "Each failed model was skipped and the same request was sent to the next fallback, but none of the configured models returned a result. Check provider keys, model IDs, and quota, then retry.",
         attempts: (err as { attempts?: unknown }).attempts ?? [],
         retry_after_seconds: Math.ceil(Number((err as { retryAfterMs?: number }).retryAfterMs ?? 0) / 1000),
       },

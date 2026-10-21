@@ -13,9 +13,9 @@
 
 ## AI timetable proposer fallback reliability
 - Default and environment-configured fallback chains remove duplicate entries before calls while preserving intentional alternative API keys.
-- A model/route failure that will repeat for the same model is skipped for the rest of that request; quota failures can still try alternate keys and models.
+- Each model route gets one bounded attempt using its newest configured key; any provider error, 429, network failure or timeout immediately advances to the next model/provider without cycling sibling key aliases. The same full request is sent to the next model, and the chain stops on the first successful result or reports that all routes failed.
 - Keep currently supported Gemini, Groq, and OpenRouter model IDs, remove model routes that return confirmed 404s, and preserve useful provider/model/status diagnostics when all fallbacks fail.
-- Try configured independent-provider fallbacks before slower routes, and try newer numbered key slots (such as `GEMINI_API_KEY_7`) before older slots so a new distinct project key is not skipped after an older-key timeout; diagnostics identify missing key names and exact attempted slot numbers without exposing values.
+- Try configured independent-provider fallbacks before slower routes, use the newest numbered key slot (such as `GEMINI_API_KEY_7`) for that route, and keep each model's wait bounded; diagnostics identify missing key names and the exact attempted slot without exposing values.
 
 
 ## Exam-analysis persistence

@@ -142,7 +142,7 @@ export async function askAI(args: {
       const body = await (error as { context?: Response }).context?.json();
       msg = body?.error ?? msg;
       if (Number(body?.retry_after_seconds) > 0) {
-        msg += ` The provider chain is paused for about ${Number(body.retry_after_seconds)} seconds before retrying.`;
+        msg += ` The fallback models were already tried; at least one provider asked that it not be retried for about ${Number(body.retry_after_seconds)} seconds. This request will not restart automatically.`;
       }
       if (Array.isArray(body?.attempts) && body.attempts.length)
         msg += ` [${body.attempts

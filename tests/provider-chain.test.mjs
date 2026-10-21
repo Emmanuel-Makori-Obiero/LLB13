@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { combineProviderChains, DEFAULT_CHAIN, shouldTryAnotherKey } from "../supabase/functions/ai/providers.ts";
-import { newestKeySlotsFirst } from "../supabase/functions/_shared/keys.ts";
+import { boundedProviderTimeoutMs, combineProviderChains, DEFAULT_CHAIN, modelRouteCooldownMs } from "../supabase/functions/ai/providers.ts";
+import { fastFailoverKeys, newestKeySlotsFirst } from "../supabase/functions/_shared/keys.ts";
 
 test("the AI provider chain uses current high-availability fallback model IDs", () => {
   const ids = DEFAULT_CHAIN.map(({ provider, model }) => `${provider}:${model}`);
@@ -52,13 +52,20 @@ test("newer numbered provider keys are tried before older and legacy key slots",
     { slot: 7, value: "newest" },
   ];
   assert.deepEqual(newestKeySlotsFirst(entries).map(({ slot }) => slot), [7, 1, 0]);
+  assert.deepEqual(fastFailoverKeys(entries), [{ slot: 7, value: "newest" }]);
+  assert.equal(fastFailoverKeys(entries).length, 1, "only one key is used before model failover");
 });
 
-test("provider timeouts and server/model errors move to another route instead of rotating sibling keys", () => {
-  for (const status of [400, 404, 408, 500, 502, 503, 504]) {
-    assert.equal(shouldTryAnotherKey(status), false, `status ${status} must stop this route`);
-  }
-  for (const status of [401, 403, 429]) {
-    assert.equal(shouldTryAnotherKey(status), true, `status ${status} may use another key`);
-  }
+test("failed model routes cool down for later requests without delaying current-request failover", () => {
+  assert.equal(modelRouteCooldownMs(429, 58), 60_000);
+  assert.equal(modelRouteCooldownMs(401), 15 * 60_000);
+  assert.equal(modelRouteCooldownMs(404), 30 * 60_000);
+  assert.equal(modelRouteCooldownMs(503), 45_000);
+});
+
+test("provider call timeout is bounded between three and eight seconds", () => {
+  assert.equal(boundedProviderTimeoutMs(20_000), 8_000);
+  assert.equal(boundedProviderTimeoutMs(6_000), 6_000);
+  assert.equal(boundedProviderTimeoutMs(1_000), 3_000);
+  assert.equal(boundedProviderTimeoutMs(Number.NaN), 8_000);
 });
