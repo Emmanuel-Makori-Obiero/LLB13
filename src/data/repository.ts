@@ -5,10 +5,12 @@ import type {
   Assignment,
   AssignmentStatus,
   Discussion,
+  ExamAnalysisDraft,
   Lesson,
   Material,
   MediaResource,
   Member,
+  SavedExamAnalysis,
   Todo,
   Unit,
   TimetableProposal,
@@ -97,6 +99,8 @@ export type Group13Repository = {
     unit: Pick<Unit, "name" | "code" | "lead">,
   ) => Promise<Unit>;
   adminDeleteUnit: (id: string) => Promise<void>;
+  getExamAnalyses: () => Promise<SavedExamAnalysis[]>;
+  saveExamAnalysis: (draft: ExamAnalysisDraft) => Promise<SavedExamAnalysis>;
 };
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
@@ -776,6 +780,31 @@ const supabaseRepository: Group13Repository = {
       );
     if (!data?.length)
       throw new Error("Only the super admin can change unit representatives.");
+  },
+  getExamAnalyses: async () => {
+    const client = db();
+    const { data: { user }, error: authError } = await client.auth.getUser();
+    if (authError || !user) throw new Error("Sign in to view your saved exam analyses.");
+    const { data, error } = await client
+      .from("exam_analyses")
+      .select("id,paper_title,source_document_id,student_answers,analysis,created_at")
+      .eq("owner", user.id)
+      .order("created_at", { ascending: false })
+      .limit(50);
+    if (error) throw new Error(`Could not load saved exam analyses: ${error.message}`);
+    return (data ?? []) as SavedExamAnalysis[];
+  },
+  saveExamAnalysis: async (draft) => {
+    const client = db();
+    const { data: { user }, error: authError } = await client.auth.getUser();
+    if (authError || !user) throw new Error("Sign in before saving an exam analysis.");
+    const { data, error } = await client
+      .from("exam_analyses")
+      .upsert({ ...draft, owner: user.id }, { onConflict: "id" })
+      .select("id,paper_title,source_document_id,student_answers,analysis,created_at")
+      .single();
+    if (error) throw new Error(`Could not save exam analysis: ${error.message}`);
+    return data as SavedExamAnalysis;
   },
 };
 

@@ -84,3 +84,10 @@ AI prompts must identify the selected source IDs and use the existing `materials
 - Extend the current server-verified administrator identity to additional verified accounts. Preserve the original primary administrator as the only account that can grant or revoke admin roles; all admins may use the existing admin dashboard and timetable controls.
 - Let admins directly update and edit existing shared timetable lessons and revise saved proposals. Preserve RLS authorization and ensure older proposals can be edited without losing their history.
 - Normalize configured AI fallback chains so duplicate provider/model entries do not cause repeated futile calls. Retain current documented model IDs, provide independent fallbacks, and keep actionable provider attempt diagnostics visible to admins.
+
+
+## Exam paper review persistence
+
+- Keep exam-review data behind the existing typed Supabase repository; save only a successful review result and its paper title, source-document reference, and the student's supplied answers.
+- Store each review in an owner-scoped table with row-level security; never add it to the shared Library automatically.
+- Automatically save after AI completion, expose recent saved reviews for reopening, and retain a failed-to-save result in account-keyed tab storage with an idempotent retry instead of claiming it was saved.

@@ -90,6 +90,17 @@ export type AdminAccount = {
   is_primary_admin: boolean;
 };
 
+export type SavedExamAnalysis = {
+  id: string;
+  paper_title: string;
+  source_document_id: string | null;
+  student_answers: string;
+  analysis: string;
+  created_at: string;
+};
+
+export type ExamAnalysisDraft = Omit<SavedExamAnalysis, "created_at">;
+
 export type Lesson = {
   id: string;
   unit: string;

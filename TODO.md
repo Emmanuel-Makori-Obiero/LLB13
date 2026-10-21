@@ -16,3 +16,10 @@
 - A model/route failure that will repeat for the same model is skipped for the rest of that request; quota failures can still try alternate keys and models.
 - Keep currently supported Gemini, Groq, and OpenRouter model IDs, remove model routes that return confirmed 404s, and preserve useful provider/model/status diagnostics when all fallbacks fail.
 - Try configured independent-provider fallbacks before slower routes, and try newer numbered key slots (such as `GEMINI_API_KEY_7`) before older slots so a new distinct project key is not skipped after an older-key timeout; diagnostics identify missing key names and exact attempted slot numbers without exposing values.
+
+
+## Exam-analysis persistence
+- Every successful question-by-question exam analysis is saved automatically to the requesting user's private history with paper title, source-document reference, supplied answers, result and timestamp.
+- Users can reopen prior saved analyses after navigating away or refreshing; records remain owner-scoped with database-enforced RLS.
+- A failed save leaves the generated analysis visible, reports that it was not saved, restores an account-keyed tab draft after navigation or refresh, warns on page exit, and provides an idempotent retry; the UI never shows success until Supabase confirms.
+- No exam paper or analysis is silently copied into the shared Library. Run typecheck, all tests and production build; verify the live table, grants and owner policy without mutating real analysis data.

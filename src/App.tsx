@@ -1305,6 +1305,8 @@ function App() {
                 subtitle="Upload any revision paper, understand the questions, and write your way through a new one."
               />
               <ExamReviewPage
+                key={userId ?? "signed-out"}
+                userId={userId}
                 materials={materials}
                 units={units}
                 onOpenLibrary={(materialId) => {
