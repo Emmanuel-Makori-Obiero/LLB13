@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { combineProviderChains, DEFAULT_CHAIN } from "../supabase/functions/ai/providers.ts";
+import { combineProviderChains, DEFAULT_CHAIN, shouldTryAnotherKey } from "../supabase/functions/ai/providers.ts";
 
 test("the AI provider chain uses current high-availability fallback model IDs", () => {
   const ids = DEFAULT_CHAIN.map(({ provider, model }) => `${provider}:${model}`);
@@ -38,4 +38,13 @@ test("configured duplicates are removed while alternate key sources are retained
   assert.equal(merged[0].keyEnv, first.keyEnv);
   assert.equal(merged[1].keyEnv, alternateKey.keyEnv);
   assert.equal(merged[2].model, DEFAULT_CHAIN[1].model);
+});
+
+test("provider timeouts and server/model errors move to another route instead of rotating sibling keys", () => {
+  for (const status of [400, 404, 408, 500, 502, 503, 504]) {
+    assert.equal(shouldTryAnotherKey(status), false, `status ${status} must stop this route`);
+  }
+  for (const status of [401, 403, 429]) {
+    assert.equal(shouldTryAnotherKey(status), true, `status ${status} may use another key`);
+  }
 });

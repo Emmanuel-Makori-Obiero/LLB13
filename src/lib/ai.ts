@@ -6,6 +6,7 @@ import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import * as mammoth from "mammoth";
 import { ocrImage, ocrPdfPages } from "./ocr";
 import { isPersonalizedStudyFeature, personalizeMessages, type LearningProfile } from "./learnerAdaptation";
+import { shouldRetryAiRequest } from "./aiRetryPolicy";
 
 function db() {
   if (!client) throw new Error("Supabase is not configured.");
@@ -120,8 +121,15 @@ export async function askAI(args: {
     data = response.data;
     error = response.error;
     if (!error) break;
-    const status = Number((error as { context?: Response })?.context?.status ?? 0);
-    if (attempt === 0 && (status === 429 || status === 502 || status === 503 || status === 504)) {
+    const context = (error as { context?: Response })?.context;
+    const status = Number(context?.status ?? 0);
+    let errorBody: { attempts?: unknown; retry_after_seconds?: unknown } | null = null;
+    try {
+      errorBody = context ? await context.clone().json() : null;
+    } catch {
+      /* gateway/network errors may not include JSON */
+    }
+    if (attempt === 0 && shouldRetryAiRequest(status, errorBody)) {
       await new Promise((resolve) => setTimeout(resolve, 1200));
       continue;
     }

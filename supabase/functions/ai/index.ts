@@ -14,7 +14,7 @@ import { recordProviderUsage } from "../_shared/usage.ts";
 export type Msg = { role: "system" | "user" | "assistant"; content: string };
 type ReasoningStyle = "openrouter" | "effort" | "none";
 
-import { combineProviderChains, DEFAULT_CHAIN, type Entry } from "./providers.ts";
+import { combineProviderChains, DEFAULT_CHAIN, shouldTryAnotherKey, type Entry } from "./providers.ts";
 
 function chain(feature?: string): Entry[] {
   const stageName = feature
@@ -149,6 +149,7 @@ export async function callChain(
     }
     const keys = secretKeys(ent.keyEnv);
     for (const [keyIndex, key] of keys.entries()) {
+      if (unavailableRoutes.has(route)) break;
       const eid = `${id(ent)}#${keyIndex + 1}`;
       if ((cooldownUntil.get(eid) ?? 0) > Date.now()) {
         attempts.push({ id: eid, status: "cooldown" });
@@ -202,8 +203,7 @@ export async function callChain(
             }
             const retryAfter = Number(res.headers.get("retry-after")) || 0;
             retryAfterMs = Math.max(retryAfterMs, retryAfter * 1000);
-            const routeUnavailable = res.status === 400 || res.status === 404 ||
-              res.status === 500 || res.status === 502 || res.status === 503 || res.status === 504;
+            const routeUnavailable = !shouldTryAnotherKey(res.status);
             if (routeUnavailable) {
               const routeCooldown = res.status === 400 || res.status === 404
                 ? 30 * 60_000

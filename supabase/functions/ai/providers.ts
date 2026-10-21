@@ -25,6 +25,10 @@ export function combineProviderChains(
   return result;
 }
 
+export function shouldTryAnotherKey(status: number): boolean {
+  return status === 401 || status === 403 || status === 429;
+}
+
 const BASE = {
   gemini: ["https://generativelanguage.googleapis.com/v1beta/openai", "GEMINI_API_KEY"],
   nvidia: ["https://integrate.api.nvidia.com/v1", "NVIDIA_API_KEY"],
