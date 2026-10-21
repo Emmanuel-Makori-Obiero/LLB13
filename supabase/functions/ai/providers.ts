@@ -60,8 +60,4 @@ export const DEFAULT_CHAIN: Entry[] = [
   e("gemini", "gemini-3.6-flash", "effort", false, 16000),
   e("gemini", "gemini-3.5-flash-lite", "effort", false, 10000),
   e("gemini", "gemini-3.1-flash-lite", "effort", false, 8192),
-  // Gemini 2.5 remains a legacy option, but Google restricts it to projects
-  // that have actively used it before; it is intentionally near the end.
-  e("gemini", "gemini-2.5-flash", "effort", false, 12000),
-  e("gemini", "gemini-2.5-flash-lite", "effort", false, 8192),
 ];
