@@ -4,7 +4,11 @@ import { selectFastFailoverKey, secretKeyEntries } from "../_shared/keys.ts";
 import { reserveAiQuota } from "../_shared/quotas.ts";
 import { recordProviderUsage } from "../_shared/usage.ts";
 import { selectDocumentChunkIndexes } from "./retrieval.ts";
-import { EXAM_ANALYSIS_SYSTEM_PROMPT, legalWhatIfSystemPrompt } from "./prompts.ts";
+import {
+  EXAM_ANALYSIS_SYSTEM_PROMPT,
+  hasLegalProcessSteps,
+  legalWhatIfSystemPrompt,
+} from "./prompts.ts";
 
 // ===== providers (fallback chain) =====
 // Free-tier fallback chain. Every provider speaks the OpenAI chat-completions format.
@@ -125,6 +129,7 @@ export async function callChain(
     perCallMs?: number;
     fast?: boolean;
     feature?: string;
+    validateResponse?: (text: string) => boolean;
   },
   ): Promise<ChainResult> {
   const started = Date.now();
@@ -204,6 +209,11 @@ export async function callChain(
           if (res.ok) {
             const data = await res.json();
             const text = clean(data?.choices?.[0]?.message?.content ?? "");
+            if (text && opts.validateResponse && !opts.validateResponse(text)) {
+              attempts.push({ id: eid, status: "invalid_response" });
+              unavailableRoutes.add(route);
+              break;
+            }
             if (text) {
               attempts.push({ id: eid, status: "ok" });
               if (opts.feature) preferredByFeature.set(opts.feature, id(ent));
@@ -1012,6 +1022,9 @@ Deno.serve(async (req) => {
       json: FEATURES[feature].json,
       fast: feature === "study_plan",
       maxTokens: feature === "study_plan" ? 10_000 : undefined,
+      validateResponse: feature === "legal_process"
+        ? (text) => hasLegalProcessSteps(parseJsonObject(text))
+        : undefined,
     });
     await admin.from("ai_usage").insert({
       user_id: u.user.id,
@@ -1112,12 +1125,18 @@ Deno.serve(async (req) => {
     const publicMessage = (err as { publicMessage?: unknown }).publicMessage;
     const attempts = (err as { attempts?: unknown }).attempts;
     const requestTooLarge = Array.isArray(attempts) && attempts.some((attempt) => (attempt as { status?: unknown }).status === "413");
+    const invalidCardResponse =
+      feature === "legal_process" &&
+      Array.isArray(attempts) &&
+      attempts.some((attempt) => (attempt as { status?: unknown }).status === "invalid_response");
     return json(
       {
         error: typeof publicMessage === "string" ? publicMessage : requestTooLarge
           ? feature === "exam_analysis"
             ? "One or more providers rejected the exam-review request as too large (HTTP 413). The unrelated prompt overhead has been removed; the selected paper was not truncated. If this persists, shorten the student-answer text and retry."
             : "One or more providers rejected the request as too large (HTTP 413). The Legal what-if prompt overhead has been removed; your question was not truncated. If this persists, shorten unnecessary scenario detail and retry."
+          : invalidCardResponse
+            ? "The providers did not return a usable Legal what-if card structure. Invalid card replies were skipped and the other models were tried; switch to Normal explanation or retry Cards later."
           : "Each failed model was skipped and the same request was sent to the next fallback, but none of the configured models returned a result. Check provider keys, model IDs, and quota, then retry.",
         attempts: attempts ?? [],
         retry_after_seconds: Math.ceil(Number((err as { retryAfterMs?: number }).retryAfterMs ?? 0) / 1000),

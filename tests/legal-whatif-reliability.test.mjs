@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { boundedProviderTimeoutMs } from "../supabase/functions/ai/providers.ts";
-import { LEGAL_WHATIF_SYSTEM_PROMPT, legalWhatIfSystemPrompt } from "../supabase/functions/ai/prompts.ts";
+import { hasLegalProcessSteps, LEGAL_WHATIF_SYSTEM_PROMPT, legalWhatIfSystemPrompt } from "../supabase/functions/ai/prompts.ts";
 
 const edge = readFileSync(new URL("../supabase/functions/ai/index.ts", import.meta.url), "utf8");
 const page = readFileSync(new URL("../src/LegalProcessPage.tsx", import.meta.url), "utf8");
@@ -18,6 +18,15 @@ test("both Legal what-if modes use a compact, source-grounded prompt with the ex
   assert.match(prompt, /TASK: Return ONLY JSON/);
   assert.match(edge, /feature === "legal_process" \|\| feature === "legal_explain"[\s\S]*?legalWhatIfSystemPrompt/);
   assert.match(page, /answerMode === "cards" \? "legal_process" : "legal_explain"/);
+  assert.match(edge, /validateResponse: feature === "legal_process"/);
+  assert.match(edge, /status: "invalid_response"/);
+});
+
+test("Legal what-if card validation rejects empty or missing steps before accepting a provider reply", () => {
+  assert.equal(hasLegalProcessSteps({ title: "Process", steps: [{ number: 1 }] }), true);
+  assert.equal(hasLegalProcessSteps({ title: "Process", steps: [] }), false);
+  assert.equal(hasLegalProcessSteps({ title: "Process" }), false);
+  assert.equal(hasLegalProcessSteps(null), false);
 });
 
 test("Legal what-if calls get a 15–18 second bounded window while ordinary requests remain unchanged", () => {

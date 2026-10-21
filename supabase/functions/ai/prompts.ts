@@ -15,3 +15,9 @@ Verified constitutional fallback summaries (paraphrases only): Article 2(1) esta
 export function legalWhatIfSystemPrompt(task: string): string {
   return `${LEGAL_WHATIF_SYSTEM_PROMPT}\n\nTASK: ${task}`;
 }
+
+export function hasLegalProcessSteps(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const steps = (value as { steps?: unknown }).steps;
+  return Array.isArray(steps) && steps.length > 0;
+}
