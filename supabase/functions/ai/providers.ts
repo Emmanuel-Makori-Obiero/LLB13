@@ -32,11 +32,16 @@ export function modelRouteCooldownMs(status: number, retryAfterSeconds = 0): num
   return 45_000;
 }
 
-export function boundedProviderTimeoutMs(configured: number | undefined, inputChars = 0): number {
+export function boundedProviderTimeoutMs(
+  configured: number | undefined,
+  inputChars = 0,
+  feature?: string,
+): number {
+  const isLegalWhatIf = feature === "legal_process" || feature === "legal_explain";
   const isLargeDocumentRequest = inputChars >= 8_000;
-  const ceiling = isLargeDocumentRequest ? 18_000 : 8_000;
-  const fallback = isLargeDocumentRequest ? 15_000 : 8_000;
-  const floor = isLargeDocumentRequest ? 15_000 : 3_000;
+  const ceiling = isLegalWhatIf || isLargeDocumentRequest ? 18_000 : 8_000;
+  const fallback = isLegalWhatIf || isLargeDocumentRequest ? 15_000 : 8_000;
+  const floor = isLegalWhatIf ? 12_000 : isLargeDocumentRequest ? 15_000 : 3_000;
   const requested = Number.isFinite(configured) ? configured as number : fallback;
   return Math.min(ceiling, Math.max(floor, requested));
 }

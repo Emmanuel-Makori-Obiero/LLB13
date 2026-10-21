@@ -4,7 +4,7 @@ import { selectFastFailoverKey, secretKeyEntries } from "../_shared/keys.ts";
 import { reserveAiQuota } from "../_shared/quotas.ts";
 import { recordProviderUsage } from "../_shared/usage.ts";
 import { selectDocumentChunkIndexes } from "./retrieval.ts";
-import { EXAM_ANALYSIS_SYSTEM_PROMPT } from "./prompts.ts";
+import { EXAM_ANALYSIS_SYSTEM_PROMPT, legalWhatIfSystemPrompt } from "./prompts.ts";
 
 // ===== providers (fallback chain) =====
 // Free-tier fallback chain. Every provider speaks the OpenAI chat-completions format.
@@ -133,7 +133,7 @@ export async function callChain(
   const inputChars = messages.reduce((total, message) => total + message.content.length, 0);
   const envPerCallMs = Deno.env.get("AI_PER_CALL_MS");
   const configuredPerCall = opts.perCallMs ?? (envPerCallMs ? Number(envPerCallMs) : undefined);
-  const perCall = boundedProviderTimeoutMs(configuredPerCall, inputChars);
+  const perCall = boundedProviderTimeoutMs(configuredPerCall, inputChars, opts.feature);
   const attempts: Attempt[] = [];
   let retryAfterMs = 0;
   // Use one key per model attempt, rotate slots across later routes for that provider,
@@ -714,6 +714,8 @@ function systemPrompt(
   feature: string,
 ): string {
   if (feature === "exam_analysis") return EXAM_ANALYSIS_SYSTEM_PROMPT;
+  if (feature === "legal_process" || feature === "legal_explain")
+    return legalWhatIfSystemPrompt(FEATURES[feature]?.task ?? FEATURES.chat.task);
   const base = `You are the Group 13 Hub legal learning coach for law students. Default jurisdiction: ${JURISDICTION} unless the student says otherwise.
 
 NON-NEGOTIABLE RULES
@@ -1113,7 +1115,9 @@ Deno.serve(async (req) => {
     return json(
       {
         error: typeof publicMessage === "string" ? publicMessage : requestTooLarge
-          ? "One or more providers rejected the exam-review request as too large (HTTP 413). The unrelated prompt overhead has been removed; the selected paper was not truncated. If this persists, shorten the student-answer text and retry."
+          ? feature === "exam_analysis"
+            ? "One or more providers rejected the exam-review request as too large (HTTP 413). The unrelated prompt overhead has been removed; the selected paper was not truncated. If this persists, shorten the student-answer text and retry."
+            : "One or more providers rejected the request as too large (HTTP 413). The Legal what-if prompt overhead has been removed; your question was not truncated. If this persists, shorten unnecessary scenario detail and retry."
           : "Each failed model was skipped and the same request was sent to the next fallback, but none of the configured models returned a result. Check provider keys, model IDs, and quota, then retry.",
         attempts: attempts ?? [],
         retry_after_seconds: Math.ceil(Number((err as { retryAfterMs?: number }).retryAfterMs ?? 0) / 1000),
