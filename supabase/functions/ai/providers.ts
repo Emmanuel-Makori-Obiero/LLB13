@@ -50,6 +50,8 @@ const e = (
 // The OpenRouter free router selects from models it currently marks available,
 // avoiding hard-coded free slugs that quickly become stale.
 export const DEFAULT_CHAIN: Entry[] = [
+  e("cerebras", "gpt-oss-120b", "effort", false, 12000),
+  e("mistral", "mistral-large-latest"),
   e("gemini", "gemini-3.8-flash", "effort", false, 16000),
   e("groq", "openai/gpt-oss-20b", "effort", false, 8192),
   e("openrouter", "openrouter/free", "openrouter", false, 8192),
@@ -58,8 +60,6 @@ export const DEFAULT_CHAIN: Entry[] = [
   e("gemini", "gemini-3.6-flash", "effort", false, 16000),
   e("gemini", "gemini-3.5-flash-lite", "effort", false, 10000),
   e("gemini", "gemini-3.1-flash-lite", "effort", false, 8192),
-  e("cerebras", "gpt-oss-120b", "effort", false, 12000),
-  e("mistral", "mistral-large-latest"),
   // Gemini 2.5 remains a legacy option, but Google restricts it to projects
   // that have actively used it before; it is intentionally near the end.
   e("gemini", "gemini-2.5-flash", "effort", false, 12000),

@@ -4,6 +4,8 @@ import { combineProviderChains, DEFAULT_CHAIN, shouldTryAnotherKey } from "../su
 
 test("the AI provider chain uses current high-availability fallback model IDs", () => {
   const ids = DEFAULT_CHAIN.map(({ provider, model }) => `${provider}:${model}`);
+  assert.equal(ids[0], "cerebras:gpt-oss-120b");
+  assert.equal(ids[1], "mistral:mistral-large-latest");
   for (const expected of [
     "gemini:gemini-3.8-flash",
     "groq:openai/gpt-oss-20b",

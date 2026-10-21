@@ -148,6 +148,10 @@ export async function callChain(
       continue;
     }
     const keys = secretKeys(ent.keyEnv);
+    if (!keys.length) {
+      attempts.push({ id: id(ent), status: "missing_key" });
+      continue;
+    }
     for (const [keyIndex, key] of keys.entries()) {
       if (unavailableRoutes.has(route)) break;
       const eid = `${id(ent)}#${keyIndex + 1}`;
