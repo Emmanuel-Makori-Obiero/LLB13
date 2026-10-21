@@ -4,6 +4,10 @@ export type LearningProfile = { learnerLevel: LearnerLevel; learningPreference: 
 export type AdaptationMessage = { role: "user" | "assistant"; content: string };
 export type DebateDifficulty = "beginner" | "intermediate" | "master";
 
+export function defaultLearningPreference(preference?: LearningPreference | null): Exclude<LearningPreference, ""> {
+  return preference || "balanced";
+}
+
 const PERSONALIZED_STUDY_FEATURES = new Set([
   "chat", "explain", "summarize", "book_contents", "topic_summary", "book_recommendation", "case_brief",
   "irac", "essay_feedback", "arena_judgment", "study_plan", "kaizen_check", "moot", "moot_judge", "moot_guide",

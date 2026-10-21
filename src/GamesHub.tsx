@@ -6,6 +6,7 @@ import { makeDebateInviteUrl } from "./lib/debate-links";
 import { searchKenyaLaw, type KenyaLawCaseResult } from "./lib/kenyaLaw";
 import { Markdown } from "./Markdown";
 import { initialDebateDifficulty, type LearnerLevel, type LearningPreference } from "./lib/learnerAdaptation";
+import { appendSpeechTranscript, dictationErrorMessage } from "./lib/speechDictation";
 import {
   createDebateRoom,
   createAiDebateRoom,
@@ -31,7 +32,7 @@ import {
 import "./legal-arena-tournament.css";
 
 type GameTab = "computer" | "training" | "pvp" | "choices";
-type DictationRecognition = { continuous: boolean; interimResults: boolean; lang: string; onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>>; resultIndex: number }) => void) | null; onerror: (() => void) | null; onend: (() => void) | null; start: () => void; stop: () => void };
+type DictationRecognition = { continuous: boolean; interimResults: boolean; lang: string; onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>>; resultIndex: number }) => void) | null; onerror: ((event: { error: string }) => void) | null; onend: (() => void) | null; start: () => void; stop: () => void };
 type DictationWindow = Window & { SpeechRecognition?: new () => DictationRecognition; webkitSpeechRecognition?: new () => DictationRecognition };
 type LocalTurn = { label: string; text: string; role: "user" | "ai" };
 type ChoiceNode = { title: string; situation: string; choices: { label: string; consequence: string; next?: number }[] };
@@ -67,20 +68,24 @@ function sideName(role: DebateRole | null | undefined) {
 
 function SpeechDraft({ label, value, onChange, rows, placeholder, id }: { label: string; value: string; onChange: (value: string) => void; rows: number; placeholder: string; id?: string }) {
   const [listening, setListening] = useState(false);
+  const [dictationError, setDictationError] = useState("");
   const speechRef = useRef<DictationRecognition | null>(null);
   const valueRef = useRef(value);
   valueRef.current = value;
   useEffect(() => () => speechRef.current?.stop(), []);
   const toggle = () => {
     if (listening) { speechRef.current?.stop(); setListening(false); return; }
+    setDictationError("");
     const Ctor = (window as DictationWindow).SpeechRecognition ?? (window as DictationWindow).webkitSpeechRecognition;
     if (!Ctor) return;
     const rec = new Ctor(); rec.continuous = true; rec.interimResults = false; rec.lang = "en-KE";
-    rec.onresult = (event) => { let text = ""; for (let i = event.resultIndex; i < event.results.length; i++) text += event.results[i][0]?.transcript ?? ""; if (text.trim()) { const next = `${valueRef.current}${valueRef.current.trim() ? " " : ""}${text.trim()}`; valueRef.current = next; onChange(next); } };
-    rec.onerror = () => setListening(false); rec.onend = () => setListening(false); speechRef.current = rec; setListening(true); rec.start();
+    rec.onresult = (event) => { const next = appendSpeechTranscript(valueRef.current, event); if (next !== valueRef.current) { valueRef.current = next; onChange(next); } };
+    rec.onerror = (event) => { setListening(false); setDictationError(dictationErrorMessage(event.error)); };
+    rec.onend = () => setListening(false); speechRef.current = rec;
+    try { rec.start(); setListening(true); } catch { setListening(false); setDictationError("Could not start dictation. Allow microphone access in your browser, then retry."); }
   };
   const supported = Boolean((window as DictationWindow).SpeechRecognition || (window as DictationWindow).webkitSpeechRecognition);
-  return <div className="game-speech-draft"><label className="game-speech-label" htmlFor={id}>{label}</label><textarea id={id} rows={rows} value={value} onChange={(event) => { valueRef.current = event.target.value; onChange(event.target.value); }} placeholder={placeholder} /><div className="game-speech-tools"><button type="button" className={`secondary-button game-dictation-button ${listening ? "listening" : ""}`} onClick={toggle} disabled={!supported} title={supported ? "Speak your answer" : "Speech recognition is not supported in this browser"}>{listening ? "Stop dictation" : "Dictate answer"}</button><span>{supported ? (listening ? "Listening… your words appear above." : "Speech-to-text · edit the transcript before submitting") : "Speech-to-text is not supported here; typing remains available."}</span></div></div>;
+  return <div className="game-speech-draft"><label className="game-speech-label" htmlFor={id}>{label}</label><textarea id={id} rows={rows} value={value} onChange={(event) => { valueRef.current = event.target.value; onChange(event.target.value); }} placeholder={placeholder} /><div className="game-speech-tools"><button type="button" className={`secondary-button game-dictation-button ${listening ? "listening" : ""}`} onClick={toggle} disabled={!supported} title={supported ? "Speak your answer" : "Speech recognition is not supported in this browser"}>{listening ? "Stop dictation" : "Dictate answer"}</button><span role="status" aria-live="polite">{dictationError || (supported ? (listening ? "Listening… your words appear above." : "Speech-to-text · edit the transcript before submitting") : "Speech-to-text is not supported here; typing remains available.")}</span></div></div>;
 }
 function CasePacket({ packet }: { packet: DebateCaseBrief }) {
   const references = [CONSTITUTION_REFERENCE, ...packet.authorities];
