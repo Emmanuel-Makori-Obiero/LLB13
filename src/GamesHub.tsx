@@ -5,6 +5,7 @@ import { askAI } from "./lib/ai";
 import { makeDebateInviteUrl } from "./lib/debate-links";
 import { searchKenyaLaw, type KenyaLawCaseResult } from "./lib/kenyaLaw";
 import { Markdown } from "./Markdown";
+import { initialDebateDifficulty, type LearnerLevel, type LearningPreference } from "./lib/learnerAdaptation";
 import {
   createDebateRoom,
   createAiDebateRoom,
@@ -115,6 +116,7 @@ export default function GamesHub({
   userId,
   displayName = "Player",
   learnerLevel = "",
+  learningPreference = "",
   isAdmin = false,
   inviteCode,
 }: {
@@ -122,6 +124,7 @@ export default function GamesHub({
   userId: string | null;
   displayName?: string;
   learnerLevel?: string;
+  learningPreference?: string;
   isAdmin?: boolean;
   inviteCode?: string | null;
 }) {
@@ -130,8 +133,11 @@ export default function GamesHub({
   const source = materials.find((item) => item.id === sourceId) ?? materials[0];
   const sourceLabel = source ? `${source.title} · ${source.topic || source.type}` : "No library source selected";
   const sourceOptions = useMemo(() => materials, [materials]);
-  const [difficulty, setDifficulty] = useState<DebateDifficulty>(() => learnerLevel === "llb-year-1" ? "beginner" : learnerLevel === "llb-year-2" ? "intermediate" : learnerLevel ? "master" : "beginner");
-  const learnerStage = learnerLevel === "llb-year-1" ? "first-year foundation level: scaffold core concepts and explain legal vocabulary" : learnerLevel === "llb-year-2" ? "second-year application level: connect substantive rules with evidence, procedure, ethics, and client problems" : learnerLevel === "llb-year-3" ? "third-year practice level: challenge advocacy, synthesis, negotiation, and clinical reasoning" : learnerLevel === "llb-year-4" ? "fourth-year advanced level: expect independent research, nuanced authority analysis, and professional judgment" : learnerLevel === "masters" ? "masters level: emphasise specialist depth, research method, critical synthesis, and clearly bounded conclusions" : learnerLevel === "phd" ? "doctoral level: emphasise original research framing, methodological rigor, literature synthesis, and defensible contribution" : "a law student's self-selected level";
+  const normalizedLevel = learnerLevel as LearnerLevel;
+  const normalizedPreference = learningPreference as LearningPreference;
+  const [difficulty, setDifficulty] = useState<DebateDifficulty>(() => initialDebateDifficulty(normalizedLevel, normalizedPreference));
+  useEffect(() => setDifficulty(initialDebateDifficulty(normalizedLevel, normalizedPreference)), [normalizedLevel, normalizedPreference]);
+  const learnerStage = learnerLevel === "llb-year-1" ? "LLB Year 1; use foundational scaffolding without presuming any specific UON unit" : learnerLevel === "llb-year-2" ? "LLB Year 2; develop more complete contextual application without presuming a unit sequence" : learnerLevel === "llb-year-3" ? "LLB Year 3; challenge synthesis, broader legal context, and practical problem-solving" : learnerLevel === "llb-year-4" ? "LLB Year 4; expect increasing independence, research and professional communication" : learnerLevel === "masters" ? "UON-aligned Masters/LLM; ask about specialization and project" : learnerLevel === "phd" ? "UON-aligned PhD; emphasize advanced scholarly research" : "level not stated; ask if needed";
   const [duration, setDuration] = useState<10 | 20>(10);
   const [hostRole, setHostRole] = useState<DebateRole>("claimant");
   const [joinRole, setJoinRole] = useState<DebateRole>("defendant");

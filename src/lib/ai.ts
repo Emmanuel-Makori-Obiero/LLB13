@@ -5,6 +5,7 @@ import * as pdfjs from "pdfjs-dist";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import * as mammoth from "mammoth";
 import { ocrImage, ocrPdfPages } from "./ocr";
+import { isPersonalizedStudyFeature, personalizeMessages, type LearningProfile } from "./learnerAdaptation";
 
 function db() {
   if (!client) throw new Error("Supabase is not configured.");
@@ -82,6 +83,13 @@ export interface AIMessage {
   role: "user" | "assistant";
   content: string;
 }
+
+let currentLearnerProfile: LearningProfile = { learnerLevel: "", learningPreference: "" };
+
+/** Set from the signed-in profile; cleared when auth state becomes null. */
+export function setLearnerAdaptation(profile: LearningProfile): void {
+  currentLearnerProfile = { ...profile };
+}
 export interface AIResult {
   answer: string;
   data: unknown | null; // parsed JSON for quiz / flashcards
@@ -100,11 +108,15 @@ export async function askAI(args: {
   docIds?: string[];
   part?: number; // 'notes' only: which block of a document to read
   size?: number; // 'notes' only: how many sections per block
+  learnerLevel?: LearningProfile["learnerLevel"];
 }): Promise<AIResult> {
   let data: unknown = null;
   let error: unknown = null;
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    const response = await db().functions.invoke("ai", { body: args });
+    const request = isPersonalizedStudyFeature(args.feature)
+      ? { ...args, learnerLevel: currentLearnerProfile.learnerLevel, messages: personalizeMessages(args.messages, currentLearnerProfile) }
+      : args;
+    const response = await db().functions.invoke("ai", { body: request });
     data = response.data;
     error = response.error;
     if (!error) break;
@@ -276,15 +288,17 @@ export async function uploadLibraryMaterial(
   file: File,
   citation?: string,
   author?: string,
+  targetYears: string[] = [],
+  materialId?: string,
 ): Promise<{ id: string; chunks: number }> {
   if (!file.size) throw new Error("The selected file is empty. Choose a file with at least 1 byte.");
   const text = (await extractText(file)).trim();
   if (!text.length)
     throw new Error("No readable text found after OCR. Try a clearer scan, or save the Word file as .docx before indexing.");
-  return storeText(file.name.replace(/\.[^.]+$/, ""), text, citation, "library", author);
+  return storeText(file.name.replace(/\.[^.]+$/, ""), text, citation, "library", author, targetYears, materialId);
 }
 
-export async function importLibraryMaterial(source: { title: string; url?: string | null; citation?: string | null; author?: string | null }) {
+export async function importLibraryMaterial(source: { title: string; url?: string | null; citation?: string | null; author?: string | null; target_years?: string[] | null }) {
   if (!source.url) throw new Error("This Library item does not have a readable file attached.");
   const response = await fetch(source.url);
   if (!response.ok) throw new Error(`Could not open ${source.title} (${response.status}).`);
@@ -294,7 +308,7 @@ export async function importLibraryMaterial(source: { title: string; url?: strin
   const file = new File([blob], `${source.title.replace(/[^a-z0-9._-]+/gi, "-")}.${extension}`, { type: blob.type || "application/octet-stream" });
   const text = (await extractText(file)).trim();
   if (!text.length) throw new Error(`${source.title} has no readable text after OCR. Try a clearer scan.`);
-  const saved = await saveTextMaterial(source.title, text, source.citation ?? undefined, source.author ?? undefined);
+  const saved = await saveTextMaterial(source.title, text, source.citation ?? undefined, source.author ?? undefined, source.target_years ?? []);
   return { ...saved, text };
 }
 
@@ -305,6 +319,7 @@ export async function saveTextMaterial(
   text: string,
   citation?: string,
   author?: string,
+  targetYears: string[] = [],
 ): Promise<{ id: string; chunks: number }> {
   const { data: u } = await db().auth.getUser();
   if (!u.user) throw new Error("Sign in first.");
@@ -318,7 +333,7 @@ export async function saveTextMaterial(
     .eq("scope", "user")
     .eq("title", title);
   for (const o of old ?? []) await deleteMaterial(o.id);
-  return storeText(title, clean, citation, "user", author);
+  return storeText(title, clean, citation, "user", author, targetYears);
 }
 
 async function storeText(
@@ -327,6 +342,8 @@ async function storeText(
   citation?: string,
   scope: "user" | "library" = "user",
   author?: string,
+  targetYears: string[] = [],
+  materialId?: string,
 ): Promise<{ id: string; chunks: number }> {
   const { data: u } = await db().auth.getUser();
   if (!u.user) throw new Error("Sign in first.");
@@ -339,6 +356,8 @@ async function storeText(
       title,
       citation: citation ?? null,
       author: author?.trim() || null,
+      target_years: targetYears,
+      material_id: materialId ?? null,
     })
     .select("id")
     .single();
@@ -366,10 +385,16 @@ async function storeText(
 export async function listMyMaterials() {
   const { data, error } = await db()
     .from("ai_documents")
-    .select("id,title,author,citation,scope,created_at")
+    .select("id,title,author,citation,scope,created_at,target_years,material_id")
     .order("created_at", { ascending: false });
   if (error) throw new Error("Could not load AI documents.");
-  return data ?? [];
+  const linkedIds = [...new Set((data ?? []).map((doc) => doc.material_id).filter(Boolean).map(String))];
+  const currentTags = new Map<string, string[]>();
+  if (linkedIds.length) {
+    const { data: materials } = await db().from("materials").select("id,target_years").in("id", linkedIds).limit(200);
+    for (const material of materials ?? []) currentTags.set(String(material.id), material.target_years ?? []);
+  }
+  return (data ?? []).map((doc) => ({ ...doc, target_years: doc.material_id && currentTags.has(String(doc.material_id)) ? currentTags.get(String(doc.material_id))! : (doc.target_years ?? []) }));
 }
 
 export async function deleteMaterial(id: string) {

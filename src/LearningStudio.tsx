@@ -12,9 +12,10 @@ import { askAI, importLibraryMaterial, listMyMaterials, uploadMaterial } from ".
 import { generateAudio } from "./lib/cloudMedia";
 import { supabase } from "./data/repository";
 import { Markdown } from "./Markdown";
+import { materialVisibleToLevel } from "./lib/learnerAdaptation";
 import "./learning-studio.css";
 
-type Doc = { id: string; title: string; scope: "user" | "library"; citation?: string | null; kind?: "document" | "library"; url?: string | null };
+type Doc = { id: string; title: string; scope: "user" | "library"; citation?: string | null; kind?: "document" | "library"; url?: string | null; target_years?: string[] | null };
 type Mode = "podcast" | "video";
 const STUDIO_STORAGE_KEY = "group13-learning-studio-draft-v2";
 type StudioDraft = { topic: string; selected: string[]; mode: Mode; spokenLanguage: "en" | "sw" | "mix" | "sheng"; scriptLanguage: "en" | "sw" | "mix" | "sheng"; presenterStyle: string; presenterName: string; guideName: string; presenterGender: "male" | "female"; guideGender: "male" | "female"; script: string; slide: number; audioUrl: string | null; audioMimeType: string; audioProvider: string | null };
@@ -48,7 +49,7 @@ const perspectives = [
   "Act as a Kenyan legal case researcher and demanding moot coach. Identify the most relevant real reported case supported by the selected sources; give the correct case name, court, year/citation only if source-supported, material facts, issue, each side's strongest argument, holding and reasoning. Explain exactly how it illuminates the requested topic. Do not invent a case or citation; if the source set does not verify one, clearly flag that a citation must be checked. Also test application, counterargument and exam traps.",
 ];
 
-export default function LearningStudio() {
+export default function LearningStudio({ learnerLevel = "" }: { learnerLevel?: string }) {
   const saved = useMemo(savedStudioDraft, []);
   const [docs, setDocs] = useState<Doc[]>([]);
   const [selected, setSelected] = useState<string[]>(saved.selected ?? []);
@@ -88,12 +89,12 @@ export default function LearningStudio() {
   const loadSources = async () => {
     const [items, library] = await Promise.all([listMyMaterials(), import("./lib/guidedStudy").then(({ listGuideSources }) => listGuideSources())]);
     const documents = (items as Doc[]).filter(isBookSource).map((doc) => ({ ...doc, kind: "document" as const }));
-    const libraryBooks = library.filter((source) => source.kind === "material" && source.url).map((source) => ({ id: `library:${source.id}`, title: source.title, scope: "library" as const, citation: source.citation, kind: "library" as const, url: source.url }));
-    const books = [...documents, ...libraryBooks];
+    const libraryBooks = library.filter((source) => source.kind === "material" && source.url && materialVisibleToLevel(source.target_years, learnerLevel)).map((source) => ({ id: `library:${source.id}`, title: source.title, scope: "library" as const, citation: source.citation, kind: "library" as const, url: source.url, target_years: source.target_years ?? [] }));
+    const books = [...documents.filter((doc) => doc.scope !== "library" || materialVisibleToLevel(doc.target_years, learnerLevel)), ...libraryBooks];
     setDocs(books);
     setSelected((current) => current.filter((id) => books.some((doc) => doc.id === id)));
   };
-  useEffect(() => { void loadSources().catch(() => setError("Could not load your Library and AI-ready sources.")); }, []);
+  useEffect(() => { void loadSources().catch(() => setError("Could not load your Library and AI-ready sources.")); }, [learnerLevel]);
   const selectedDocs = useMemo(
     () => docs.filter((doc) => selected.includes(doc.id)),
     [docs, selected],
@@ -116,7 +117,7 @@ export default function LearningStudio() {
     setSelected((current) => current.includes(doc.id) ? current.filter((id) => id !== doc.id) : [...current, doc.id].slice(-6));
     setImportingSource(doc.id); setError("");
     try {
-      const imported = await importLibraryMaterial({ title: doc.title, url: doc.url, citation: doc.citation });
+      const imported = await importLibraryMaterial({ title: doc.title, url: doc.url, citation: doc.citation, target_years: doc.target_years ?? [] });
       setLibraryImports((current) => ({ ...current, [doc.id]: imported.id }));
       await loadSources();
       setSelected((current) => [...current.filter((id) => id !== doc.id), imported.id].slice(-6));

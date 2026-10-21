@@ -96,7 +96,8 @@ import LegalProcessPage from "./LegalProcessPage";
 import FloatingLawyerAgent from "./FloatingLawyerAgent";
 import { ResearchWriter } from "./ResearchWriter";
 import { TranscriptAI } from "./TranscriptAI";
-import { askAI, extractText, uploadLibraryMaterial, type AIFeature } from "./lib/ai";
+import { askAI, extractText, setLearnerAdaptation, uploadLibraryMaterial, type AIFeature } from "./lib/ai";
+import { materialVisibleToLevel } from "./lib/learnerAdaptation";
 import { Markdown } from "./Markdown";
 import GrowthPage from "./GrowthPage";
 import PracticeRoom from "./PracticeRoom";
@@ -206,6 +207,12 @@ const profileInitials = (name: string, email = "") =>
     .join("")
     .toUpperCase();
 type LearnerLevel = "llb-year-1" | "llb-year-2" | "llb-year-3" | "llb-year-4" | "masters" | "phd" | "prefer-not-to-say";
+type LearningPreference = "guided" | "balanced" | "challenge";
+const learningPreferences: { id: LearningPreference; label: string; description: string }[] = [
+  { id: "guided", label: "Guide me step by step", description: "Plain-language steps, examples, and check-ins" },
+  { id: "balanced", label: "A balanced mix", description: "Clear explanation, a worked example, then practice" },
+  { id: "challenge", label: "Challenge me", description: "More independent reasoning, complexity, and counterarguments" },
+];
 const learnerLevels: { id: LearnerLevel; label: string }[] = [
   { id: "llb-year-1", label: "LLB · First year" }, { id: "llb-year-2", label: "LLB · Second year" },
   { id: "llb-year-3", label: "LLB · Third year" }, { id: "llb-year-4", label: "LLB · Fourth year" },
@@ -214,6 +221,7 @@ const learnerLevels: { id: LearnerLevel; label: string }[] = [
 ];
 type UserProfile = {
   learnerLevel: LearnerLevel | "";
+  learningPreference: LearningPreference | "";
   displayName: string;
   role: string;
   avatarUrl: string;
@@ -247,10 +255,13 @@ function App() {
   );
   const [recovering, setRecovering] = useState(false);
   const [surveyOpen, setSurveyOpen] = useState(false);
+  const [surveyLevel, setSurveyLevel] = useState<LearnerLevel | "">("");
+  const [surveyPreference, setSurveyPreference] = useState<LearningPreference | "">("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [pathKey, setPathKey] = useState(() => window.location.pathname);
   const [profile, setProfile] = useState<UserProfile>({
     learnerLevel: "",
+    learningPreference: "",
     displayName: "",
     role: "LLB · Year 1",
     avatarUrl: "",
@@ -280,6 +291,7 @@ function App() {
   const [musicIndex, setMusicIndex] = useState(0);
   const [musicPlaying, setMusicPlaying] = useState(false);
   const isAdmin = adminState === "yes";
+  const visibleAssignments = useMemo(() => assignments.filter((assignment) => materialVisibleToLevel(assignment.target_years, profile.learnerLevel)), [assignments, profile.learnerLevel]);
   useEffect(() => {
     const wallpaper = profile.wallpaperUrl || window.localStorage.getItem("group13-wallpaper") || "";
     if (wallpaper) window.localStorage.setItem("group13-wallpaper", wallpaper);
@@ -330,9 +342,15 @@ function App() {
       setUserEmail(session?.user?.email ?? null);
       setUserId(session?.user?.id ?? null);
       const level = typeof metadata.learner_level === "string" && learnerLevels.some((item) => item.id === metadata.learner_level) ? metadata.learner_level as LearnerLevel : "";
-      setSurveyOpen(Boolean(session?.user && !level));
+      const preference = typeof metadata.learning_preference === "string" && learningPreferences.some((item) => item.id === metadata.learning_preference) ? metadata.learning_preference as LearningPreference : "";
+      const learnerProfile: import("./lib/learnerAdaptation").LearningProfile = { learnerLevel: level as import("./lib/learnerAdaptation").LearnerLevel, learningPreference: preference as import("./lib/learnerAdaptation").LearningPreference };
+      setLearnerAdaptation(learnerProfile);
+      setSurveyLevel(level);
+      setSurveyPreference(preference);
+      setSurveyOpen(Boolean(session?.user && (!level || !preference)));
       setProfile({
         learnerLevel: level,
+        learningPreference: preference,
         displayName:
           typeof metadata.display_name === "string"
             ? metadata.display_name
@@ -523,7 +541,8 @@ function App() {
       ),
     [materials, search],
   );
-  const visibleTodos = todos;
+  const visibleAssignmentIds = new Set(visibleAssignments.map((assignment) => assignment.id));
+  const visibleTodos = todos.filter((todo) => !todo.assignment_id || visibleAssignmentIds.has(todo.assignment_id));
   const currentPageLabel = nav.find((item) => item.id === view)?.label ?? "Group 13 workspace";
   const setPage = (next: string) => {
     const target = validViews.has(next) ? next : "dashboard";
@@ -692,25 +711,29 @@ function App() {
       avatar_url: changes.avatarUrl ?? profile.avatarUrl,
       wallpaper_url: changes.wallpaperUrl ?? profile.wallpaperUrl,
       learner_level: changes.learnerLevel ?? profile.learnerLevel,
+      learning_preference: changes.learningPreference ?? profile.learningPreference,
     };
     const { error } = await supabase.auth.updateUser({ data: metadata });
     if (error) throw new Error(error.message);
     setProfile({
       learnerLevel: metadata.learner_level as LearnerLevel | "",
+      learningPreference: metadata.learning_preference as LearningPreference | "",
       displayName: metadata.display_name,
       role: metadata.role,
       avatarUrl: metadata.avatar_url,
       wallpaperUrl: metadata.wallpaper_url,
     });
+    setLearnerAdaptation({ learnerLevel: metadata.learner_level as LearnerLevel | "", learningPreference: metadata.learning_preference as LearningPreference | "" });
   };
-  const saveLearnerLevel = async (level: LearnerLevel) => {
-    const selected = learnerLevels.find((item) => item.id === level)!;
+  const saveAdaptationSurvey = async () => {
+    if (!surveyLevel || !surveyPreference) return;
+    const selected = learnerLevels.find((item) => item.id === surveyLevel)!;
     try {
-      await saveProfile({ learnerLevel: level, role: selected.label });
+      await saveProfile({ learnerLevel: surveyLevel, learningPreference: surveyPreference, role: selected.label });
       setSurveyOpen(false);
-      setNotice(`Your workspace is now tailored for ${selected.label}.`);
+      setNotice(`Saved. Your study workspace is tailored to ${selected.label} and your preferred support style.`);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Could not save your study level. Please try again.");
+      setNotice(error instanceof Error ? error.message : "Could not save your study preferences. Please try again.");
     }
   };
   const uploadProfileAssetAndSave = async (
@@ -1065,9 +1088,10 @@ function App() {
             <Home
               name={profile.displayName || userEmail?.split("@")[0] || "there"}
               learnerLevel={profile.learnerLevel}
+              learningPreference={profile.learningPreference}
               lessons={lessons}
               todos={visibleTodos}
-              assignments={assignments}
+              assignments={visibleAssignments}
               userId={userId}
               setPage={setPage}
             />
@@ -1178,12 +1202,13 @@ function App() {
           )}
           {view === "assignments" && (
             <AssignmentsPageReal
-              assignments={assignments}
-              selected={selectedA}
+              assignments={visibleAssignments}
+              selected={visibleAssignments.find((item) => item.id === selectedAssignment)}
               selectedId={selectedAssignment}
               setSelected={setSelectedAssignment}
               bump={bumpAssignment}
               openCreate={() => setAssignmentFormOpen(true)}
+              learnerLevel={profile.learnerLevel}
             />
           )}
           {view === "todos" && (
@@ -1236,7 +1261,7 @@ function App() {
               }}
             />
           )}
-          {view === "arena" && <GamesHub materials={materials} userId={userId} displayName={profile.displayName || userEmail?.split("@")[0] || "Player"} learnerLevel={profile.learnerLevel} isAdmin={isAdmin} inviteCode={readDebateInviteCode(window.location.search)} />}
+          {view === "arena" && <GamesHub materials={materials} userId={userId} displayName={profile.displayName || userEmail?.split("@")[0] || "Player"} learnerLevel={profile.learnerLevel} learningPreference={profile.learningPreference} isAdmin={isAdmin} inviteCode={readDebateInviteCode(window.location.search)} />}
           {view === "members" && <SectionedMembersPage members={members} />}
           {view === "dictionary" && <LegalDictionaryPage />}
           {view === "legal-process" && (
@@ -1257,7 +1282,7 @@ function App() {
                 subtitle="Ask, summarise, brief cases and practise from your own materials."
               />
               <StudyAssistant learnerLevel={profile.learnerLevel} />
-              <LearningStudio />
+              <LearningStudio learnerLevel={profile.learnerLevel} />
             </Suspense>
           )}
           {view === "exam-review" && (
@@ -1306,12 +1331,12 @@ function App() {
           )}
           {view === "guide" && (
             <Suspense fallback={<div className="subheading">Opening guided study…</div>}>
-              <GuidedStudyPage />
+              <GuidedStudyPage learnerLevel={profile.learnerLevel} />
             </Suspense>
           )}
           {view === "assignment-helper" && (
             <Suspense fallback={<div className="subheading">Opening assignment helper…</div>}>
-              <AssignmentHelperPage assignments={assignments} />
+              <AssignmentHelperPage assignments={assignments} learnerLevel={profile.learnerLevel} />
             </Suspense>
           )}
           {view === "research" && (
@@ -1422,6 +1447,8 @@ function App() {
                     file,
                     `${created.type} · ${created.unit} · ${created.source}`,
                     created.author ?? undefined,
+                    created.target_years ?? [],
+                    created.id,
                   );
                   setNotice(`Material uploaded and added to AI knowledge (${indexed.chunks} sections).`);
                 } catch (indexError) {
@@ -1448,13 +1475,18 @@ function App() {
           onUpdated={(changes) => updateMaterial(editingMaterial, changes)}
         />
       )}
-      {surveyOpen && userEmail && (
+      {surveyOpen && userId && (
         <div className="survey-backdrop" role="presentation">
           <section className="survey-card" role="dialog" aria-modal="true" aria-labelledby="learner-survey-title">
-            <span className="eyebrow">Make your workspace yours</span>
-            <h2 id="learner-survey-title">What level are you studying?</h2>
-            <p>This one-question check-in helps us prioritise the right library materials, practice level, and study guidance. Your answer stays on your profile and you can change it later.</p>
-            <div className="survey-options">{learnerLevels.map((item) => <button key={item.id} onClick={() => void saveLearnerLevel(item.id)}>{item.label}<span>Tailor resources and practice for this level</span></button>)}</div>
+            <span className="eyebrow">Make your workspace yours · 1 of 2</span>
+            <h2 id="learner-survey-title">What are you studying?</h2>
+            <p>Choose a programme level. This gives the study assistant a starting point—not an assumption about your ability. You can change it in Profile settings.</p>
+            <div className="survey-options">{learnerLevels.map((item) => <button type="button" key={item.id} aria-pressed={surveyLevel === item.id} className={surveyLevel === item.id ? "selected" : ""} onClick={() => setSurveyLevel(item.id)}>{item.label}<span>{item.id === "prefer-not-to-say" ? "We will not infer a course or stage" : "Set relevant study context"}</span></button>)}</div>
+            <div className="survey-style">
+              <span className="eyebrow">2 · How would you like help?</span>
+              <div className="survey-options">{learningPreferences.map((item) => <button type="button" key={item.id} aria-pressed={surveyPreference === item.id} className={surveyPreference === item.id ? "selected" : ""} onClick={() => setSurveyPreference(item.id)}>{item.label}<span>{item.description}</span></button>)}</div>
+            </div>
+            <button type="button" className="primary-button survey-save" disabled={!surveyLevel || !surveyPreference} onClick={() => void saveAdaptationSurvey()}>Save my study settings</button>
           </section>
         </div>
       )}
@@ -3792,7 +3824,7 @@ function LibraryPageReal({
   const visibleMaterials = [...materials]
     .filter((material) => unitFilter === "all" || material.unit === unitFilter)
     .filter((material) => typeFilter === "all" || material.type === typeFilter)
-    .filter((material) => yearFilter === "all" || !material.target_years?.length || material.target_years.includes(yearFilter))
+    .filter((material) => yearFilter === "all" || materialVisibleToLevel(material.target_years, yearFilter))
     .sort((a, b) => {
       if (sortBy === "date-asc") return (Date.parse(a.date) || 0) - (Date.parse(b.date) || 0);
       if (sortBy === "title-asc") return a.title.localeCompare(b.title);
@@ -3943,29 +3975,33 @@ function AssignmentsPageReal({
   setSelected,
   bump,
   openCreate,
+  learnerLevel,
 }: {
   assignments: Assignment[];
+  learnerLevel: string;
   selected?: Assignment;
   selectedId: string;
   setSelected: (id: string) => void;
   bump: (id: string) => Promise<void>;
   openCreate: () => void;
 }) {
+  const cohortAssignments = assignments.filter((assignment) => materialVisibleToLevel(assignment.target_years, learnerLevel));
+  const cohortSelected = cohortAssignments.find((assignment) => assignment.id === selectedId);
   return (
     <>
       <PageHeading
         eyebrow="Work in progress"
         title="Assignments."
-        subtitle="Create and track assignments. New ones appear on everyone’s to-do list automatically."
+        subtitle="Create assignments, keep details private until opened, and target the right study levels when needed."
       />
       <div className="page-grid">
         <div className="card card-pad">
           <CardHeader
             label="Your queue"
-            action={`${assignments.length} assignments`}
+            action={`${cohortAssignments.length} assignments`}
           />
           <div className="row-list">
-            {assignments.map((assignment) => (
+            {cohortAssignments.map((assignment) => (
               <div className="row assignment-row" key={assignment.id}>
                 <div className="type-mark">
                   {assignment.unit.slice(0, 2).toUpperCase()}
@@ -3994,23 +4030,23 @@ function AssignmentsPageReal({
           </button>
         </div>
         <div className="card card-pad">
-          {selected ? (
+          {cohortSelected ? (
             <>
               <div className="eyebrow">Assignment detail</div>
-              <h2 style={{ fontSize: 28 }}>{selected.title}</h2>
+              <h2 style={{ fontSize: 28 }}>{cohortSelected.title}</h2>
               <div className="detail-meta">
-                {selected.unit} · Due {selected.due} · Reviewer{" "}
-                {selected.reviewer}
+                {cohortSelected.unit} · Due {cohortSelected.due} · Reviewer{" "}
+                {cohortSelected.reviewer}
               </div>
               <div className="callout">
                 <p>
-                  <strong>Brief:</strong> {selected.brief}
+                  <strong>Brief:</strong> {cohortSelected.brief}
                 </p>
               </div>
               <button
                 className="primary-button"
                 style={{ marginTop: 20 }}
-                onClick={() => void bump(selected.id)}
+                onClick={() => void bump(cohortSelected.id)}
               >
                 Save next status{" "}
                 <ChevronRight size={14} style={{ verticalAlign: "middle" }} />
@@ -4327,6 +4363,7 @@ function AssignmentForm({
     owner,
     reviewer: "",
     brief: "",
+    target_years: [],
   });
   const change = (key: keyof typeof form, value: string) =>
     setForm((current) => ({ ...current, [key]: value }));
@@ -4375,6 +4412,11 @@ function AssignmentForm({
             onChange={(event) => change("reviewer", event.target.value)}
           />
         </label>
+        <fieldset className="assignment-cohort-field">
+          <legend>Visible to which study levels?</legend>
+          <p className="field-hint">Leave all boxes unchecked to share with every signed-in learner.</p>
+          <div className="cohort-options">{learnerLevels.filter((item) => item.id !== "prefer-not-to-say").map((item) => <label key={item.id}><input type="checkbox" checked={Boolean(form.target_years?.includes(item.id))} onChange={(event) => setForm((current) => ({ ...current, target_years: event.target.checked ? [...(current.target_years ?? []), item.id] : (current.target_years ?? []).filter((level) => level !== item.id) }))} />{item.label}</label>)}</div>
+        </fieldset>
         <label>
           Brief
           <textarea
@@ -4404,6 +4446,7 @@ function ProfileSettings({
   const [name, setName] = useState(profile.displayName);
   const [role, setRole] = useState(profile.role);
   const [learnerLevel, setLearnerLevel] = useState(profile.learnerLevel);
+  const [learningPreference, setLearningPreference] = useState(profile.learningPreference);
   const [busy, setBusy] = useState("");
   const completion =
     ([name.trim(), role.trim(), profile.avatarUrl].filter(Boolean).length / 3) *
@@ -4412,7 +4455,7 @@ function ProfileSettings({
     event.preventDefault();
     setBusy("profile");
     try {
-      await onSave({ displayName: name.trim(), role: role.trim(), learnerLevel });
+      await onSave({ displayName: name.trim(), role: role.trim(), learnerLevel, learningPreference });
       setNotice("Profile saved.");
     } catch (error) {
       setNotice(
@@ -4481,6 +4524,12 @@ function ProfileSettings({
             <select value={learnerLevel} onChange={(event) => { const value = event.target.value as LearnerLevel; setLearnerLevel(value); setRole(learnerLevels.find((item) => item.id === value)?.label ?? role); }}>
               <option value="">Choose a study level</option>
               {learnerLevels.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+            </select>
+          </label>
+          <label>How should study help be tailored?
+            <select value={learningPreference} onChange={(event) => setLearningPreference(event.target.value as LearningPreference)}>
+              <option value="">Choose a support style</option>
+              {learningPreferences.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
             </select>
           </label>
           <label>Role or other detail (optional)<input value={role} onChange={(event) => setRole(event.target.value)} placeholder="e.g. research focus" /></label>

@@ -13,6 +13,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { Markdown } from "./Markdown";
+import { materialVisibleToLevel } from "./lib/learnerAdaptation";
 import { askAI } from "./lib/ai";
 import { generateAudio } from "./lib/cloudMedia";
 import {
@@ -35,7 +36,7 @@ import { supabase } from "./data/repository";
 
 type LessonAudio = { url: string; mimeType: string; courseId: string; lessonIndex: number };
 
-export default function GuidedStudyPage() {
+export default function GuidedStudyPage({ learnerLevel = "" }: { learnerLevel?: string }) {
   const [sources, setSources] = useState<SourceChoice[]>([]);
   const [courses, setCourses] = useState<GuidedCourse[]>([]);
   const [course, setCourse] = useState<GuidedCourse | null>(null);
@@ -65,7 +66,7 @@ export default function GuidedStudyPage() {
   const load = async () => {
     try {
       const [available, saved] = await Promise.all([
-        listGuideSources(),
+        listGuideSources().then((sources) => sources.filter((source) => source.scope !== "library" || materialVisibleToLevel(source.target_years, learnerLevel))),
         listGuidedCourses(),
       ]);
       const withProgress = await Promise.all(
@@ -95,7 +96,7 @@ export default function GuidedStudyPage() {
   useEffect(() => {
     void load();
     void supabase?.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id ?? null));
-  }, []);
+  }, [learnerLevel]);
   useEffect(() => {
     activeLessonKey.current = `${course?.id ?? ""}:${lessonIndex}`;
     audioRequestId.current += 1;

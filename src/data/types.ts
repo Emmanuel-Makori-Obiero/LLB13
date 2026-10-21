@@ -39,6 +39,7 @@ export type Assignment = {
   owner: string;
   reviewer: string;
   brief: string;
+  target_years?: string[] | null;
 };
 export type Discussion = {
   id: string;

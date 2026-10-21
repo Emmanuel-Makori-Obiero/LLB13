@@ -484,7 +484,7 @@ const supabaseRepository: Group13Repository = {
     readRequired<Assignment>("assignments", async () =>
       supabase!
         .from("assignments")
-        .select("id,title,unit,due,status,owner,reviewer,brief")
+        .select("id,title,unit,due,status,owner,reviewer,brief,target_years")
         .order("due"),
     ),
   getDiscussions: () =>
@@ -582,7 +582,7 @@ const supabaseRepository: Group13Repository = {
     const { data, error } = await supabase
       .from("assignments")
       .insert(record)
-      .select("id,title,unit,due,status,owner,reviewer,brief")
+      .select("id,title,unit,due,status,owner,reviewer,brief,target_years")
       .single();
     if (error) throw new Error(`Could not create assignment: ${error.message}`);
     return data as Assignment;
