@@ -276,7 +276,7 @@ export default function AdminPage({
           )}
           <p className="field-hint">
             {canManageAdmins
-              ? "Only you, as the primary admin, can grant or revoke admin access."
+              ? "Only you, as the primary admin, can grant or revoke admin access. To promote someone, they need an existing verified account."
               : "Admin access is managed by the primary admin."}
           </p>
           <div className="row-list">

@@ -370,8 +370,13 @@ export default function TimetablePage({
           <button
             className="secondary-button"
             onClick={() => setShowPast((v) => !v)}
+            aria-label={showPast ? "Hide previous lessons" : schedule === "group" && isAdmin ? "Show previous lessons to edit" : "Show past lessons"}
           >
-            {showPast ? "Hide past lessons" : "Show past lessons"}
+            {showPast
+              ? "Hide past lessons"
+              : schedule === "group" && isAdmin
+                ? "Edit previous lessons"
+                : "Show past lessons"}
           </button>
           {(schedule === "personal" || isAdmin) && <button className="primary-button" onClick={() => { setEditing(null); setOpen(true); }}>
             <Plus size={14} /> {schedule === "personal" ? "Add personal event" : "Add group lesson"}
