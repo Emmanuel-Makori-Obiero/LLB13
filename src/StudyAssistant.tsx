@@ -348,7 +348,7 @@ export function Answer({ turn }: { turn: Turn }) {
   );
 }
 
-export function StudyAssistant() {
+export function StudyAssistant({ learnerLevel = "" }: { learnerLevel?: string }) {
   const [mode, setMode] = useState<AIMode>("auto");
   const [task, setTask] = useState<Task>(TASKS[0]);
   const [input, setInput] = useState("");
@@ -363,6 +363,7 @@ export function StudyAssistant() {
   const nextId = useRef(1);
   const [historyOwner, setHistoryOwner] = useState("");
   const [historyLoaded, setHistoryLoaded] = useState(false);
+  const stageGuidance = learnerLevel === "llb-year-1" ? "Scaffold for a first-year LLB student: define key terms, show basic case-reading and issue-spotting steps, use a simple rule-application-conclusion structure, and explain unfamiliar legal vocabulary." : learnerLevel === "llb-year-2" ? "Tailor for second-year LLB: connect doctrine with procedure, evidence, ethics, client problems, and reasoned application." : learnerLevel === "llb-year-3" ? "Tailor for third-year LLB: use more complex fact patterns, compare authorities, and develop advocacy, negotiation, and clinical problem-solving." : learnerLevel === "llb-year-4" ? "Tailor for fourth-year LLB: expect independent research, advanced synthesis, nuanced authority use, and professional judgment." : learnerLevel === "masters" ? "Tailor for a Masters/LL.M. learner: foreground specialist depth, research methodology, literature synthesis, and limitations." : learnerLevel === "phd" ? "Tailor for a doctoral learner: foreground research design, literature positioning, methodological rigor, and original contribution." : "Ask the learner what level and depth they want if it materially affects the answer.";
 
   const refresh = useCallback(async () => {
     if (!isSupabaseConfigured) return;
@@ -476,7 +477,9 @@ export function StudyAssistant() {
       const result = await askAI({
         feature: task.feature,
         mode: useMode,
-        messages: [...history, { role: "user", content: text }],
+        messages: [...history, { role: "user", content: `${stageGuidance} Adapt the depth and scaffolding, but do not assume ability from year alone.
+
+Student request: ${text}` }],
         docIds: selected.length ? selected : undefined,
       });
       setTurns((all) =>

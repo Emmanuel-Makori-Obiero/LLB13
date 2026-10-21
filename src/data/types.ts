@@ -21,6 +21,7 @@ export type Material = {
   storage_path?: string;
   owner_id?: string | null;
   file_sha256?: string | null;
+  target_years?: string[] | null;
 };
 export type AssignmentStatus =
   | "Not Started"

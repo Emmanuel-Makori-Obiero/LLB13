@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, BookOpen, Clock3, Copy, Gavel, GraduationCap, Library, Play, RefreshCw, Share2, Swords, Trophy, Users } from "lucide-react";
 import type { Material } from "./data/types";
 import { askAI } from "./lib/ai";
@@ -30,6 +30,8 @@ import {
 import "./legal-arena-tournament.css";
 
 type GameTab = "computer" | "training" | "pvp" | "choices";
+type DictationRecognition = { continuous: boolean; interimResults: boolean; lang: string; onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>>; resultIndex: number }) => void) | null; onerror: (() => void) | null; onend: (() => void) | null; start: () => void; stop: () => void };
+type DictationWindow = Window & { SpeechRecognition?: new () => DictationRecognition; webkitSpeechRecognition?: new () => DictationRecognition };
 type LocalTurn = { label: string; text: string; role: "user" | "ai" };
 type ChoiceNode = { title: string; situation: string; choices: { label: string; consequence: string; next?: number }[] };
 type TrainingHistoryItem = { title: string; score: number; maxScore: number; outcome: string; date: string };
@@ -62,6 +64,23 @@ function sideName(role: DebateRole | null | undefined) {
   return role === "defendant" ? "Opposer" : "Proposer";
 }
 
+function SpeechDraft({ label, value, onChange, rows, placeholder, id }: { label: string; value: string; onChange: (value: string) => void; rows: number; placeholder: string; id?: string }) {
+  const [listening, setListening] = useState(false);
+  const speechRef = useRef<DictationRecognition | null>(null);
+  const valueRef = useRef(value);
+  valueRef.current = value;
+  useEffect(() => () => speechRef.current?.stop(), []);
+  const toggle = () => {
+    if (listening) { speechRef.current?.stop(); setListening(false); return; }
+    const Ctor = (window as DictationWindow).SpeechRecognition ?? (window as DictationWindow).webkitSpeechRecognition;
+    if (!Ctor) return;
+    const rec = new Ctor(); rec.continuous = true; rec.interimResults = false; rec.lang = "en-KE";
+    rec.onresult = (event) => { let text = ""; for (let i = event.resultIndex; i < event.results.length; i++) text += event.results[i][0]?.transcript ?? ""; if (text.trim()) { const next = `${valueRef.current}${valueRef.current.trim() ? " " : ""}${text.trim()}`; valueRef.current = next; onChange(next); } };
+    rec.onerror = () => setListening(false); rec.onend = () => setListening(false); speechRef.current = rec; setListening(true); rec.start();
+  };
+  const supported = Boolean((window as DictationWindow).SpeechRecognition || (window as DictationWindow).webkitSpeechRecognition);
+  return <div className="game-speech-draft"><label className="game-speech-label" htmlFor={id}>{label}</label><textarea id={id} rows={rows} value={value} onChange={(event) => { valueRef.current = event.target.value; onChange(event.target.value); }} placeholder={placeholder} /><div className="game-speech-tools"><button type="button" className={`secondary-button game-dictation-button ${listening ? "listening" : ""}`} onClick={toggle} disabled={!supported} title={supported ? "Speak your answer" : "Speech recognition is not supported in this browser"}>{listening ? "Stop dictation" : "Dictate answer"}</button><span>{supported ? (listening ? "Listening… your words appear above." : "Speech-to-text · edit the transcript before submitting") : "Speech-to-text is not supported here; typing remains available."}</span></div></div>;
+}
 function CasePacket({ packet }: { packet: DebateCaseBrief }) {
   const references = [CONSTITUTION_REFERENCE, ...packet.authorities];
   return <section className="card card-pad arena-case-packet">
@@ -95,12 +114,14 @@ export default function GamesHub({
   materials,
   userId,
   displayName = "Player",
+  learnerLevel = "",
   isAdmin = false,
   inviteCode,
 }: {
   materials: Material[];
   userId: string | null;
   displayName?: string;
+  learnerLevel?: string;
   isAdmin?: boolean;
   inviteCode?: string | null;
 }) {
@@ -109,7 +130,8 @@ export default function GamesHub({
   const source = materials.find((item) => item.id === sourceId) ?? materials[0];
   const sourceLabel = source ? `${source.title} · ${source.topic || source.type}` : "No library source selected";
   const sourceOptions = useMemo(() => materials, [materials]);
-  const [difficulty, setDifficulty] = useState<DebateDifficulty>("beginner");
+  const [difficulty, setDifficulty] = useState<DebateDifficulty>(() => learnerLevel === "llb-year-1" ? "beginner" : learnerLevel === "llb-year-2" ? "intermediate" : learnerLevel ? "master" : "beginner");
+  const learnerStage = learnerLevel === "llb-year-1" ? "first-year foundation level: scaffold core concepts and explain legal vocabulary" : learnerLevel === "llb-year-2" ? "second-year application level: connect substantive rules with evidence, procedure, ethics, and client problems" : learnerLevel === "llb-year-3" ? "third-year practice level: challenge advocacy, synthesis, negotiation, and clinical reasoning" : learnerLevel === "llb-year-4" ? "fourth-year advanced level: expect independent research, nuanced authority analysis, and professional judgment" : learnerLevel === "masters" ? "masters level: emphasise specialist depth, research method, critical synthesis, and clearly bounded conclusions" : learnerLevel === "phd" ? "doctoral level: emphasise original research framing, methodological rigor, literature synthesis, and defensible contribution" : "a law student's self-selected level";
   const [duration, setDuration] = useState<10 | 20>(10);
   const [hostRole, setHostRole] = useState<DebateRole>("claimant");
   const [joinRole, setJoinRole] = useState<DebateRole>("defendant");
@@ -321,7 +343,7 @@ export default function GamesHub({
     setTrainingBusy(true);
     setTrainingResult(null);
     try {
-      const response = await askAI({ feature: "arena_training", mode: "general", messages: [{ role: "user", content: `Create training step ${trainingStep + 1} for an extreme beginner in Kenyan legal advocacy. Selected library reference metadata: ${JSON.stringify({ title: source.title, topic: source.topic, source: source.source, url: source.url })}. The Constitution is available through the library source. First identify the issue, then use the relevant constitutional provision or supplied authority; do not default to Article 2 or Article 2(4). Article 2(4) is only for inconsistency with the Constitution. Start with one small skill only: issue, fact/evidence, source, inference, opposing point, or structure. Do not dump a full moot. Return the drill JSON.` }] });
+      const response = await askAI({ feature: "arena_training", mode: "general", messages: [{ role: "user", content: `Create training step ${trainingStep + 1} for a Kenyan law learner at ${learnerStage}. Adapt scaffolding to this level, without assuming ability from year alone. Selected library reference metadata: ${JSON.stringify({ title: source.title, topic: source.topic, source: source.source, url: source.url })}. The Constitution is available through the library source. First identify the issue, then use the relevant constitutional provision or supplied authority; do not default to Article 2 or Article 2(4). Article 2(4) is only for inconsistency with the Constitution. Start with one small skill only: issue, fact/evidence, source, inference, opposing point, or structure. Do not dump a full moot. Return the drill JSON.` }] });
       setTrainingDrill(parseJsonAnswer(response.answer));
       setTrainingAnswer("");
     } catch (error) { setNotice(error instanceof Error ? error.message : "Training drill unavailable."); }
@@ -332,7 +354,7 @@ export default function GamesHub({
     if (!source || !trainingDrill || !trainingAnswer.trim() || trainingBusy) return;
     setTrainingBusy(true);
     try {
-      const response = await askAI({ feature: "arena_training", mode: "general", messages: [{ role: "user", content: `Grade this beginner advocacy exercise as a Kenyan-law judge. Library metadata: ${JSON.stringify({ title: source.title, topic: source.topic, source: source.source, url: source.url })}. The Constitution is available through the library source. Identify the issue before selecting authority. Award constitutional authority marks only for a provision relevant to this issue; Article 2(4) must not receive credit unless the answer addresses inconsistency with the Constitution. DRILL: ${JSON.stringify(trainingDrill)}. STUDENT ANSWER: ${trainingAnswer.trim()}. Award marks for every valid point actually made, including a relevant source, fact/evidence, inference, issue, response to opposition, and clear structure. Separate verified authority from reasoning. Return the grading JSON exactly.` }] });
+      const response = await askAI({ feature: "arena_training", mode: "general", messages: [{ role: "user", content: `Grade this advocacy exercise as a Kenyan-law judge for a learner at ${learnerStage}; reward reasoning appropriate to this stage. Library metadata: ${JSON.stringify({ title: source.title, topic: source.topic, source: source.source, url: source.url })}. The Constitution is available through the library source. Identify the issue before selecting authority. Award constitutional authority marks only for a provision relevant to this issue; Article 2(4) must not receive credit unless the answer addresses inconsistency with the Constitution. DRILL: ${JSON.stringify(trainingDrill)}. STUDENT ANSWER: ${trainingAnswer.trim()}. Award marks for every valid point actually made, including a relevant source, fact/evidence, inference, issue, response to opposition, and clear structure. Separate verified authority from reasoning. Return the grading JSON exactly.` }] });
       const result = parseJsonAnswer(response.answer) as Record<string, unknown>;
       setTrainingResult(result);
       const historyItem: TrainingHistoryItem = { title: trainingDrill.title, score: Number(result.score ?? 0), maxScore: Number(result.max_score ?? 100), outcome: String(result.outcome ?? "needs_more_practice"), date: new Date().toISOString() };
@@ -608,7 +630,7 @@ export default function GamesHub({
       </div>
       {casePacket && <CasePacket packet={casePacket} />}
       {computerTurns.length > 0 && <div className="card card-pad debate-thread">{computerTurns.map((turn, index) => <article className={`debate-turn ${turn.role}`} key={`${turn.label}-${index}`}><span>{turn.label}</span><Markdown text={turn.text} /></article>)}</div>}
-      {computerActive && <div className="card card-pad arena-argument-form"><div className="section-label">Your {sideName(computerRole)} {phaseFor(computerTurns.filter((turn) => turn.role === "user").length)}</div><textarea rows={6} value={computerInput} onChange={(event) => setComputerInput(event.target.value)} placeholder="State your position, link it to an allowed source if you can, and explain your evidence…" /><button className="primary-button" onClick={() => void submitComputerTurn()} disabled={computerBusy || !computerInput.trim()}>{computerBusy ? "Computer is reading; your clock is paused…" : "Submit argument"}</button></div>}
+      {computerActive && <div className="card card-pad arena-argument-form"><div className="section-label">Your {sideName(computerRole)} {phaseFor(computerTurns.filter((turn) => turn.role === "user").length)}</div><SpeechDraft label="Your spoken or written argument" rows={6} value={computerInput} onChange={setComputerInput} placeholder="State your position, link it to an allowed source if you can, and explain your evidence…" /><button className="primary-button" onClick={() => void submitComputerTurn()} disabled={computerBusy || !computerInput.trim()}>{computerBusy ? "Computer is reading; your clock is paused…" : "Submit argument"}</button></div>}
       {computerResult && <div className="card card-pad game-evaluation"><div className="section-label">Final study judgment</div><Markdown text={computerResult} /><button className="secondary-button" onClick={startComputerCourt}><RefreshCw size={14} /> Retry this case</button></div>}
       {notice && <div className="connection-error game-notice">{notice}</div>}
     </section>}
@@ -620,7 +642,7 @@ export default function GamesHub({
         <div className="arena-invite-actions"><button className="primary-button" onClick={() => void startTrainingDrill()} disabled={!source || trainingBusy}>{trainingBusy ? "Preparing your next drill…" : trainingDrill ? "Try another small drill" : "Start beginner training"}</button>{trainingStep > 0 && <span className="chip">Step {trainingStep + 1}</span>}</div>
       </div>
       <div className="card card-pad arena-training-dashboard"><div><div className="section-label">Your training progress</div><h3>{trainingHistory.length ? `${trainingHistory.length} drill${trainingHistory.length === 1 ? "" : "s"} completed` : "Your first drill is waiting"}</h3></div><div className="arena-progress-stats"><div><strong>{trainingHistory.length ? `${Math.round(trainingHistory.reduce((sum, item) => sum + (item.score / Math.max(1, item.maxScore)) * 100, 0) / trainingHistory.length)}%` : "—"}</strong><span>Average score</span></div><div><strong>{trainingHistory.length ? `${Math.max(...trainingHistory.map((item) => Math.round((item.score / Math.max(1, item.maxScore)) * 100)))}%` : "—"}</strong><span>Best score</span></div><div><strong>{trainingHistory.filter((item) => item.outcome !== "needs_more_practice").length}</strong><span>Successful outcomes</span></div></div>{trainingHistory.length > 0 && <div className="arena-history-list">{trainingHistory.slice(0, 5).map((item, index) => <div className="arena-history-row" key={`${item.date}-${index}`}><span><strong>{item.title}</strong><small>{new Date(item.date).toLocaleDateString("en-GB")}</small></span><b>{item.score}/{item.maxScore}</b><em>{item.outcome.replace(/_/g, " ")}</em></div>)}</div>}</div>
-      {trainingDrill && <div className="card card-pad arena-training-card"><div className="section-label">{trainingDrill.level} · {trainingDrill.title}</div><h3>{trainingDrill.lesson}</h3><p><strong>Exercise:</strong> {trainingDrill.question}</p><p className="field-hint"><strong>What earns marks:</strong> {trainingDrill.success_criteria.join(" · ")}</p><p className="arena-training-hint"><strong>Hint:</strong> {trainingDrill.hint}</p><textarea rows={6} value={trainingAnswer} onChange={(event) => setTrainingAnswer(event.target.value)} placeholder="Write your answer in your own words. Try to name the issue, source, fact, and why it supports your side…" disabled={trainingBusy} /><button className="primary-button" onClick={() => void submitTrainingAnswer()} disabled={trainingBusy || !trainingAnswer.trim()}>{trainingBusy ? "Judge is marking your answer…" : "Submit for marks and judgment"}</button></div>}
+      {trainingDrill && <div className="card card-pad arena-training-card"><div className="section-label">{trainingDrill.level} · {trainingDrill.title}</div><h3>{trainingDrill.lesson}</h3><p><strong>Exercise:</strong> {trainingDrill.question}</p><p className="field-hint"><strong>What earns marks:</strong> {trainingDrill.success_criteria.join(" · ")}</p><p className="arena-training-hint"><strong>Hint:</strong> {trainingDrill.hint}</p><SpeechDraft label="Your spoken or written answer" rows={6} value={trainingAnswer} onChange={setTrainingAnswer} placeholder="Write or dictate your answer in your own words. Try to name the issue, source, fact, and why it supports your side…" /><button className="primary-button" onClick={() => void submitTrainingAnswer()} disabled={trainingBusy || !trainingAnswer.trim()}>{trainingBusy ? "Judge is marking your answer…" : "Submit for marks and judgment"}</button></div>}
       {trainingResult && <div className="card card-pad game-evaluation arena-training-result"><div className="section-label">Judge's outcome</div><div className="arena-training-score"><strong>{String(trainingResult.score ?? 0)} / {String(trainingResult.max_score ?? 100)}</strong><span>{String(trainingResult.outcome ?? "needs_more_practice")}</span></div><p>{String(trainingResult.judge_feedback ?? "Review the feedback and try the next drill.")}</p><div className="arena-marks-breakdown"><div className="section-label">Marks breakdown</div>{(Array.isArray(trainingResult.marks_earned) ? trainingResult.marks_earned : []).map((item, index) => { const mark = item as { point?: unknown; marks?: unknown; reason?: unknown }; return <div className="arena-mark-row" key={index}><div><strong>{String(mark.point ?? "Legal point")}</strong><span>{String(mark.reason ?? "")}</span></div><b>{String(mark.marks ?? 0)} marks</b></div>; })}</div><div className="arena-result-grid"><div><strong>What you did right</strong><ul>{(Array.isArray(trainingResult.what_you_did_right) ? trainingResult.what_you_did_right : []).map((item, index) => <li key={index}>{String(item)}</li>)}</ul></div><div><strong>What was missing</strong><ul>{(Array.isArray(trainingResult.what_was_missing) ? trainingResult.what_was_missing : []).map((item, index) => <li key={index}>{String(item)}</li>)}</ul></div></div><div className="arena-example-answer"><div className="section-label">What a stronger answer could look like</div><p>{String(trainingResult.example_answer ?? "The judge did not provide an example for this attempt. Try the next drill and focus on the missing points above.")}</p><small>This is a learning example, not the only correct answer.</small></div><p><strong>Legal accuracy:</strong> {String(trainingResult.legal_accuracy ?? "")}</p><p><strong>Next drill:</strong> {String(trainingResult.next_drill ?? "")}</p></div>}
       {notice && <div className="connection-error game-notice">{notice}</div>}
     </section>}
@@ -658,7 +680,7 @@ export default function GamesHub({
             <div className="arena-match-conversation card card-pad debate-thread">{pvpMessages.length ? pvpMessages.map((message) => <article className={`debate-turn ${message.user_id === userId ? "user" : "ai"}`} key={message.id}><span><i className={message.user_id === userId ? "arena-side-label" : "arena-side-label arena-opponent-label"}>{message.user_id === userId ? "YOU" : "OPPONENT"}</i> {message.display_name} · {message.phase}</span><p>{message.content}</p></article>) : <div className="arena-match-empty"><Swords size={28} /><strong>Game began</strong><span>Be the first to make your opening submission.</span></div>}</div>
             <aside className="arena-match-rail"><div className="arena-turn-status"><span className="game-kicker">THE FLOOR IS YOURS</span><strong>{room.status === "active" ? myTurn(room, userId) ? `Your ${sideName(myRole)} turn` : "Opponent’s turn" : room.status === "evaluating" ? "Judge is scoring" : "Result recorded"}</strong><span>Turn {Math.min(room.current_turn + 1, 6)} of 6 · {phaseFor(Math.min(room.current_turn, 5))}</span>{room.status === "active" && <span className="arena-clock">{formatTime(pvpRemaining)}</span>}<span>{room.status === "active" ? "Your clock pauses when your argument is accepted." : `Level: ${room.difficulty}`}</span></div>{runningObservation && <div className="arena-observation"><strong>COACH’S NOTE</strong><Markdown text={runningObservation} /></div>}{room.status === "active" && pvpRemaining === 0 && <button className="secondary-button" onClick={() => void advanceTimedOutTurn()} disabled={pvpBusy}>Advance timed-out turn</button>}{room.status === "finished" && room.evaluation && <div className="arena-match-result card card-pad"><div className="game-kicker"><Trophy size={14} /> FINAL SCORE</div><strong>{room.player_one_score} <span>—</span> {room.player_two_score}</strong><Markdown text={String(room.evaluation.summary || "Match evaluated.")} /><p><b>Authority & evidence:</b> {String(room.evaluation.authorityAssessment || "Only the packet sources count as verified authority.")} {String(room.evaluation.evidenceAssessment || "Reasoning and evidence were assessed separately.")}</p><p><b>Retry advice:</b> {String(room.evaluation.retryAdvice || "Identify the issue, link a source, and answer the strongest opposing point.")}</p></div>}</aside>
           </div>
-          {room.status === "active" && myTurn(room, userId) && pvpRemaining > 0 && <div className="arena-match-composer card card-pad"><label htmlFor="arena-live-submission">Your {sideName(myRole)} · {phaseFor(room.current_turn)}</label><textarea id="arena-live-submission" rows={4} value={pvpSubmission} onChange={(event) => setPvpSubmission(event.target.value)} placeholder="Make a focused submission. State the source, evidence, and inference separately…" /><button className="primary-button" onClick={() => void submitPvp()} disabled={pvpBusy || !pvpSubmission.trim()}>{pvpBusy ? "Submitting argument…" : "Submit argument"} <ArrowLeft size={15} /></button></div>}
+          {room.status === "active" && myTurn(room, userId) && pvpRemaining > 0 && <div className="arena-match-composer card card-pad"><label htmlFor="arena-live-submission">Your {sideName(myRole)} · {phaseFor(room.current_turn)}</label><SpeechDraft id="arena-live-submission" label={`Your ${sideName(myRole)} · ${phaseFor(room.current_turn)}`} rows={4} value={pvpSubmission} onChange={setPvpSubmission} placeholder="Speak or type a focused submission. State the source, evidence, and inference separately…" /><button className="primary-button" onClick={() => void submitPvp()} disabled={pvpBusy || !pvpSubmission.trim()}>{pvpBusy ? "Submitting argument…" : "Submit argument"} <ArrowLeft size={15} /></button></div>}
         </>}
       </div>}
       {pvpNotice && !room && <div className="connection-error game-notice">{pvpNotice}</div>}

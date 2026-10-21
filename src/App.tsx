@@ -205,7 +205,15 @@ const profileInitials = (name: string, email = "") =>
     .map((part) => part[0])
     .join("")
     .toUpperCase();
+type LearnerLevel = "llb-year-1" | "llb-year-2" | "llb-year-3" | "llb-year-4" | "masters" | "phd" | "prefer-not-to-say";
+const learnerLevels: { id: LearnerLevel; label: string }[] = [
+  { id: "llb-year-1", label: "LLB · First year" }, { id: "llb-year-2", label: "LLB · Second year" },
+  { id: "llb-year-3", label: "LLB · Third year" }, { id: "llb-year-4", label: "LLB · Fourth year" },
+  { id: "masters", label: "Masters / LL.M." }, { id: "phd", label: "PhD / doctoral" },
+  { id: "prefer-not-to-say", label: "Prefer not to say" },
+];
 type UserProfile = {
+  learnerLevel: LearnerLevel | "";
   displayName: string;
   role: string;
   avatarUrl: string;
@@ -238,9 +246,11 @@ function App() {
     "unknown",
   );
   const [recovering, setRecovering] = useState(false);
+  const [surveyOpen, setSurveyOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [pathKey, setPathKey] = useState(() => window.location.pathname);
   const [profile, setProfile] = useState<UserProfile>({
+    learnerLevel: "",
     displayName: "",
     role: "LLB · Year 1",
     avatarUrl: "",
@@ -319,13 +329,16 @@ function App() {
       const metadata = session?.user?.user_metadata ?? {};
       setUserEmail(session?.user?.email ?? null);
       setUserId(session?.user?.id ?? null);
+      const level = typeof metadata.learner_level === "string" && learnerLevels.some((item) => item.id === metadata.learner_level) ? metadata.learner_level as LearnerLevel : "";
+      setSurveyOpen(Boolean(session?.user && !level));
       setProfile({
+        learnerLevel: level,
         displayName:
           typeof metadata.display_name === "string"
             ? metadata.display_name
             : "",
         role:
-          typeof metadata.role === "string" ? metadata.role : "LLB · Year 1",
+          typeof metadata.role === "string" ? metadata.role : "Law student",
         avatarUrl:
           typeof metadata.avatar_url === "string" ? metadata.avatar_url : "",
         wallpaperUrl:
@@ -499,8 +512,7 @@ function App() {
   }, [notice]);
 
   const selected = units.find((u) => u.id === selectedUnit) ?? units[0];
-  const selectedA =
-    assignments.find((a) => a.id === selectedAssignment) ?? assignments[0];
+  const selectedA = assignments.find((a) => a.id === selectedAssignment);
   const filteredMaterials = useMemo(
     () =>
       materials.filter((m) =>
@@ -679,15 +691,27 @@ function App() {
       role: changes.role ?? profile.role,
       avatar_url: changes.avatarUrl ?? profile.avatarUrl,
       wallpaper_url: changes.wallpaperUrl ?? profile.wallpaperUrl,
+      learner_level: changes.learnerLevel ?? profile.learnerLevel,
     };
     const { error } = await supabase.auth.updateUser({ data: metadata });
     if (error) throw new Error(error.message);
     setProfile({
+      learnerLevel: metadata.learner_level as LearnerLevel | "",
       displayName: metadata.display_name,
       role: metadata.role,
       avatarUrl: metadata.avatar_url,
       wallpaperUrl: metadata.wallpaper_url,
     });
+  };
+  const saveLearnerLevel = async (level: LearnerLevel) => {
+    const selected = learnerLevels.find((item) => item.id === level)!;
+    try {
+      await saveProfile({ learnerLevel: level, role: selected.label });
+      setSurveyOpen(false);
+      setNotice(`Your workspace is now tailored for ${selected.label}.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not save your study level. Please try again.");
+    }
   };
   const uploadProfileAssetAndSave = async (
     kind: "avatar" | "wallpaper",
@@ -1040,6 +1064,7 @@ function App() {
           {view === "dashboard" && (
             <Home
               name={profile.displayName || userEmail?.split("@")[0] || "there"}
+              learnerLevel={profile.learnerLevel}
               lessons={lessons}
               todos={visibleTodos}
               assignments={assignments}
@@ -1126,6 +1151,7 @@ function App() {
           {view === "library" && (
             <LibraryPageReal
               materials={filteredMaterials}
+              learnerLevel={profile.learnerLevel}
               search={search}
               setSearch={setSearch}
               openCreate={() => setMaterialFormOpen(true)}
@@ -1210,7 +1236,7 @@ function App() {
               }}
             />
           )}
-          {view === "arena" && <GamesHub materials={materials} userId={userId} displayName={profile.displayName || userEmail?.split("@")[0] || "Player"} isAdmin={isAdmin} inviteCode={readDebateInviteCode(window.location.search)} />}
+          {view === "arena" && <GamesHub materials={materials} userId={userId} displayName={profile.displayName || userEmail?.split("@")[0] || "Player"} learnerLevel={profile.learnerLevel} isAdmin={isAdmin} inviteCode={readDebateInviteCode(window.location.search)} />}
           {view === "members" && <SectionedMembersPage members={members} />}
           {view === "dictionary" && <LegalDictionaryPage />}
           {view === "legal-process" && (
@@ -1230,7 +1256,7 @@ function App() {
                 title="Study assistant."
                 subtitle="Ask, summarise, brief cases and practise from your own materials."
               />
-              <StudyAssistant />
+              <StudyAssistant learnerLevel={profile.learnerLevel} />
               <LearningStudio />
             </Suspense>
           )}
@@ -1422,6 +1448,16 @@ function App() {
           onUpdated={(changes) => updateMaterial(editingMaterial, changes)}
         />
       )}
+      {surveyOpen && userEmail && (
+        <div className="survey-backdrop" role="presentation">
+          <section className="survey-card" role="dialog" aria-modal="true" aria-labelledby="learner-survey-title">
+            <span className="eyebrow">Make your workspace yours</span>
+            <h2 id="learner-survey-title">What level are you studying?</h2>
+            <p>This one-question check-in helps us prioritise the right library materials, practice level, and study guidance. Your answer stays on your profile and you can change it later.</p>
+            <div className="survey-options">{learnerLevels.map((item) => <button key={item.id} onClick={() => void saveLearnerLevel(item.id)}>{item.label}<span>Tailor resources and practice for this level</span></button>)}</div>
+          </section>
+        </div>
+      )}
       {assignmentFormOpen && (
         <AssignmentForm
           units={units}
@@ -1431,7 +1467,6 @@ function App() {
             try {
               const created = await repository.createAssignment(assignment);
               setAssignments((current) => [...current, created]);
-              setSelectedAssignment(created.id);
               setAssignmentFormOpen(false);
               setNotice(
                 "Assignment created. It now shows on everyone’s to-do list.",
@@ -3727,6 +3762,7 @@ function PracticeCoach() {
 
 function LibraryPageReal({
   materials,
+  learnerLevel,
   search,
   setSearch,
   openCreate,
@@ -3736,6 +3772,7 @@ function LibraryPageReal({
   onDelete,
 }: {
   materials: Material[];
+  learnerLevel: LearnerLevel | "";
   search: string;
   setSearch: (value: string) => void;
   openCreate: () => void;
@@ -3746,6 +3783,8 @@ function LibraryPageReal({
 }) {
   const [unitFilter, setUnitFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [yearFilter, setYearFilter] = useState(learnerLevel || "all");
+  useEffect(() => setYearFilter(learnerLevel || "all"), [learnerLevel]);
   const [sortBy, setSortBy] = useState("date-desc");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const units = [...new Set(materials.map((material) => material.unit).filter(Boolean))].sort((a, b) => a.localeCompare(b));
@@ -3753,6 +3792,7 @@ function LibraryPageReal({
   const visibleMaterials = [...materials]
     .filter((material) => unitFilter === "all" || material.unit === unitFilter)
     .filter((material) => typeFilter === "all" || material.type === typeFilter)
+    .filter((material) => yearFilter === "all" || !material.target_years?.length || material.target_years.includes(yearFilter))
     .sort((a, b) => {
       if (sortBy === "date-asc") return (Date.parse(a.date) || 0) - (Date.parse(b.date) || 0);
       if (sortBy === "title-asc") return a.title.localeCompare(b.title);
@@ -3800,6 +3840,13 @@ function LibraryPageReal({
             </select>
           </label>
           <label>
+            <span>Study level</span>
+            <select value={yearFilter} onChange={(event) => setYearFilter(event.target.value)}>
+              <option value="all">All cohorts</option>
+              {learnerLevels.filter((item) => item.id !== "prefer-not-to-say").map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+            </select>
+          </label>
+          <label>
             <span>Sort by</span>
             <select value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
               <option value="date-desc">Date · newest</option>
@@ -3830,7 +3877,7 @@ function LibraryPageReal({
               <tr key={material.id}>
                 <td>
                   <span className="material-title">{material.title}</span>
-                  <span className="material-sub">{material.author ? `By ${material.author} · ` : ""}{material.topic}</span>
+                  <span className="material-sub">{material.author ? `By ${material.author} · ` : ""}{material.topic}{material.target_years?.length ? ` · ${material.target_years.map((id) => learnerLevels.find((level) => level.id === id)?.label ?? id).join(", ")}` : " · All cohorts"}</span>
                 </td>
                 <td>
                   <span className="chip">
@@ -3919,11 +3966,7 @@ function AssignmentsPageReal({
           />
           <div className="row-list">
             {assignments.map((assignment) => (
-              <button
-                className="row assignment-row"
-                key={assignment.id}
-                onClick={() => setSelected(assignment.id)}
-              >
+              <div className="row assignment-row" key={assignment.id}>
                 <div className="type-mark">
                   {assignment.unit.slice(0, 2).toUpperCase()}
                 </div>
@@ -3937,7 +3980,8 @@ function AssignmentsPageReal({
                   <span className="chip">{assignment.status}</span>
                   <strong>{assignment.due}</strong>
                 </div>
-              </button>
+                <button className="secondary-button small-action" onClick={() => setSelected(selectedId === assignment.id ? "" : assignment.id)} aria-expanded={selectedId === assignment.id}>{selectedId === assignment.id ? "Hide assignment" : "View assignment"}</button>
+              </div>
             ))}
           </div>
           <button
@@ -4037,6 +4081,7 @@ function MaterialForm({
           url: initial.url ?? "",
           storage_path: initial.storage_path,
           owner_id: initial.owner_id,
+          target_years: initial.target_years ?? [],
         }
         : {
           title: "",
@@ -4051,6 +4096,7 @@ function MaterialForm({
           }),
           source: "Group 13",
           url: "",
+          target_years: [],
         },
   );
   const change = (key: keyof typeof form, value: string) =>
@@ -4206,6 +4252,11 @@ function MaterialForm({
             onChange={(event) => change("topic", event.target.value)}
           />
         </label>
+        <fieldset className="cohort-fieldset">
+          <legend>Who is this material for?</legend>
+          <p className="field-hint">Leave all unchecked to make it available to every cohort.</p>
+          <div className="cohort-options">{learnerLevels.filter((item) => item.id !== "prefer-not-to-say").map((item) => <label key={item.id}><input type="checkbox" checked={form.target_years?.includes(item.id) ?? false} onChange={(event) => setForm((current) => ({ ...current, target_years: event.target.checked ? [...(current.target_years ?? []), item.id] : (current.target_years ?? []).filter((id) => id !== item.id) }))} />{item.label}</label>)}</div>
+        </fieldset>
         <label>
           Source
           <input
@@ -4352,6 +4403,7 @@ function ProfileSettings({
 }) {
   const [name, setName] = useState(profile.displayName);
   const [role, setRole] = useState(profile.role);
+  const [learnerLevel, setLearnerLevel] = useState(profile.learnerLevel);
   const [busy, setBusy] = useState("");
   const completion =
     ([name.trim(), role.trim(), profile.avatarUrl].filter(Boolean).length / 3) *
@@ -4360,7 +4412,7 @@ function ProfileSettings({
     event.preventDefault();
     setBusy("profile");
     try {
-      await onSave({ displayName: name.trim(), role: role.trim() });
+      await onSave({ displayName: name.trim(), role: role.trim(), learnerLevel });
       setNotice("Profile saved.");
     } catch (error) {
       setNotice(
@@ -4425,14 +4477,13 @@ function ProfileSettings({
             />
           </label>
           <label>
-            Role or year
-            <input
-              required
-              value={role}
-              onChange={(event) => setRole(event.target.value)}
-              placeholder="e.g. LLB · Year 1"
-            />
+            Study level
+            <select value={learnerLevel} onChange={(event) => { const value = event.target.value as LearnerLevel; setLearnerLevel(value); setRole(learnerLevels.find((item) => item.id === value)?.label ?? role); }}>
+              <option value="">Choose a study level</option>
+              {learnerLevels.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+            </select>
           </label>
+          <label>Role or other detail (optional)<input value={role} onChange={(event) => setRole(event.target.value)} placeholder="e.g. research focus" /></label>
           <button
             className="primary-button"
             type="submit"

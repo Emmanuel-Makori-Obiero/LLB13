@@ -1,0 +1,15 @@
+# Cohort-aware learning design notes
+
+The platform treats year as a useful default for surfacing materials, not as a proxy for ability. Learners can change the Library cohort filter, and an untagged source remains broadly visible because its intended audience is unknown. Uploaders can explicitly tag one or more cohorts or leave a source available to everyone.
+
+Moi University’s published LLB course sequence provides a concrete Kenyan reference point: first year includes legal methods and writing, critical thinking, contract, tort, criminal law and constitutional theory; second year adds procedure, evidence, constitutional law, client counselling, professional ethics and ADR; third year includes property, equity, administrative and commercial law, trial advocacy, rights and clinical seminars; fourth year includes research papers, concentration/clinical seminars and externships, tax, jurisprudence and advanced electives [1]. Course labels and sequence vary between institutions, so this is used as a progression guide rather than a universal syllabus.
+
+Based on that progression, first-year AI drills should scaffold issue identification, legal vocabulary, reading cases, source hierarchy, basic IRAC/CREAC reasoning and concise writing. Second-year practice should add procedural application, evidence evaluation, client interviewing/counselling, ethics and dispute resolution. Third-year activities should emphasise comparative analysis, advocacy, negotiation, synthesis across authorities and clinical problem-solving. Fourth-year work should favour independent research design, advanced writing, externship reflection, nuanced authority evaluation and professional judgment. Masters and PhD users are directed toward graduate-level research questions, literature mapping, methodology, synthesis and careful limitations; the app does not assume a particular postgraduate programme. These are recommendations inferred from publicly listed course emphases, not a claim that every university follows the same curriculum.
+
+A 2024 learning-outcomes survey article highlights legal research, writing, issue spotting and analysis, investigation/evaluation, counselling, negotiation and client relationship skills as foundational competencies, and notes gaps in explicit coverage across surveyed US law schools [2]. CLE Kenya’s inspection guidance evaluates curriculum delivery and asks whether programmes provide clinics/clinical studies, research support, relevant resources and student support [3]. These sources support a competency-led adaptation across all years rather than merely hiding advanced content from junior students.
+
+## References
+
+[1]: https://law.mu.ac.ke/index.php/academics/bachelor-of-laws "Moi University Bachelor of Laws course structure"
+[2]: https://jle.aals.org/context/home/article/1820/viewcontent/AUWCL_JournalLegalEducation_Hamilton_Vol73_2024_6.5x9.75_2.pdf "Learning Outcomes that Law Schools Have Adopted"
+[3]: https://cle.or.ke/sites/default/files/2024-08/INSPECTION%20Criteria%20%26%20Guidelines%20for%20Legal%20Education%20Programmes.pdf "Council of Legal Education inspection criteria"

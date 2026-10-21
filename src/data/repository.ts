@@ -128,7 +128,7 @@ export async function uploadUserAsset(
 }
 
 const MATERIAL_COLUMNS =
-  "id,title,author,type,unit,topic,date,source,url,storage_path,owner_id,file_sha256";
+  "id,title,author,type,unit,topic,date,source,url,storage_path,owner_id,file_sha256,target_years";
 const DISCUSSION_COLUMNS =
   "id,title,day,time,leader,status,prep,topics,instant,created_by";
 
@@ -568,6 +568,7 @@ const supabaseRepository: Group13Repository = {
         date: material.date,
         source: material.source,
         url: material.url || null,
+        target_years: material.target_years ?? [],
       })
       .eq("id", id)
       .select(MATERIAL_COLUMNS)
