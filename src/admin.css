@@ -23,6 +23,18 @@
   background: #f4e5e1;
   border: 1px solid #e4c9c2;
 }
+.small-admin-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  color: #234d3c;
+  background: #e9f2ec;
+  border: 1px solid #b7c9bf;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
 .admin-stack {
   display: grid;
   gap: 18px;

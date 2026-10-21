@@ -9,6 +9,22 @@ export interface Entry {
   noSystem?: boolean;
 }
 
+export function combineProviderChains(
+  preferred: readonly Entry[],
+  fallback: readonly Entry[],
+): Entry[] {
+  const seen = new Set<string>();
+  const result: Entry[] = [];
+  for (const entry of [...preferred, ...fallback]) {
+    const baseUrl = entry.baseUrl.replace(/\/+$/, "");
+    const identity = `${entry.provider}\0${baseUrl}\0${entry.model}\0${entry.keyEnv}`;
+    if (seen.has(identity)) continue;
+    seen.add(identity);
+    result.push(baseUrl === entry.baseUrl ? entry : { ...entry, baseUrl });
+  }
+  return result;
+}
+
 const BASE = {
   gemini: ["https://generativelanguage.googleapis.com/v1beta/openai", "GEMINI_API_KEY"],
   nvidia: ["https://integrate.api.nvidia.com/v1", "NVIDIA_API_KEY"],

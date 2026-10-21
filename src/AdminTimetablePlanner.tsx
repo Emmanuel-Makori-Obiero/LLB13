@@ -162,14 +162,17 @@ const displayDate = (value: string) =>
     year: "numeric",
   });
 
-function timetableIssues(lessons: DraftLesson[]): string[] {
+function timetableIssues(
+  lessons: DraftLesson[],
+  options: { allowPast?: boolean } = {},
+): string[] {
   const issues: string[] = [];
   const dates = new Set<string>();
   const currentDate = new Date().toISOString().slice(0, 10);
   lessons.forEach((lesson) => {
     const date = new Date(`${lesson.lesson_date}T00:00:00`);
     const day = date.getDay();
-    if (lesson.lesson_date < currentDate) issues.push(`${displayDate(lesson.lesson_date)} is before today (${displayDate(currentDate)})`);
+    if (!options.allowPast && lesson.lesson_date < currentDate) issues.push(`${displayDate(lesson.lesson_date)} is before today (${displayDate(currentDate)})`);
     if (day === 0 || day === 6) issues.push(`${displayDate(lesson.lesson_date)} is a weekend date`);
     if (/communication\s+skills\s+for\s+lawyers/i.test(`${lesson.unit} ${lesson.topic}`)) issues.push("Communication Skills for Lawyers is not allowed");
     if (dates.has(lesson.lesson_date)) issues.push(`${displayDate(lesson.lesson_date)} has more than one lesson`);
@@ -452,7 +455,13 @@ export default function AdminTimetablePlanner({
         ...proposal.proposed_lessons.map((lesson) => lesson.unit),
       ]), units);
       if (!revised.length) throw new Error(response.answer || "The AI did not return a usable edited timetable.");
-      const issues = timetableIssues(revised);
+      const hasHistoricalSource = proposal.proposed_lessons.some(
+        (lesson) => lesson.lesson_date < new Date().toISOString().slice(0, 10),
+      );
+      const explicitlyHistorical = /\b(historical|history|past|previous)\b/i.test(editInstruction);
+      const issues = timetableIssues(revised, {
+        allowPast: hasHistoricalSource || explicitlyHistorical,
+      });
       if (issues.length) throw new Error(`The edited timetable is invalid: ${issues.join("; ")}. Try a more specific weekday request.`);
       const created = await repository.createTimetableProposal({
         title: data.title?.trim() || `${proposal.title} — edited`,

@@ -253,6 +253,7 @@ function App() {
   const [adminState, setAdminState] = useState<"unknown" | "yes" | "no">(
     "unknown",
   );
+  const [canManageAdmins, setCanManageAdmins] = useState(false);
   const [recovering, setRecovering] = useState(false);
   const [surveyOpen, setSurveyOpen] = useState(false);
   const [surveyLevel, setSurveyLevel] = useState<LearnerLevel | "">("");
@@ -419,11 +420,17 @@ function App() {
   useEffect(() => {
     if (!userEmail) {
       setAdminState("unknown");
+      setCanManageAdmins(false);
       return;
     }
     let active = true;
-    void repository.isSuperAdmin().then((result) => {
-      if (active) setAdminState(result ? "yes" : "no");
+    void Promise.all([
+      repository.isSuperAdmin(),
+      repository.isPrimaryAdmin(),
+    ]).then(([isAdmin, isPrimaryAdmin]) => {
+      if (!active) return;
+      setAdminState(isAdmin ? "yes" : "no");
+      setCanManageAdmins(isPrimaryAdmin);
     });
     return () => {
       active = false;
@@ -1393,6 +1400,7 @@ function App() {
               lessons={lessons}
               onTimetableApplied={setLessons}
               currentEmail={userEmail ?? ""}
+              canManageAdmins={canManageAdmins}
               setNotice={setNotice}
             />
           )}

@@ -14,7 +14,7 @@ import { recordProviderUsage } from "../_shared/usage.ts";
 export type Msg = { role: "system" | "user" | "assistant"; content: string };
 type ReasoningStyle = "openrouter" | "effort" | "none";
 
-import { DEFAULT_CHAIN, type Entry } from "./providers.ts";
+import { combineProviderChains, DEFAULT_CHAIN, type Entry } from "./providers.ts";
 
 function chain(feature?: string): Entry[] {
   const stageName = feature
@@ -35,15 +35,14 @@ function chain(feature?: string): Entry[] {
   };
   const stageChain = parse(stageName ? Deno.env.get(stageName) : undefined);
   const fallbackChain = parse(Deno.env.get("AI_CHAIN_JSON")) ?? DEFAULT_CHAIN;
-  if (!stageChain) return fallbackChain;
-  const identity = (entry: Entry) => `${entry.provider}\0${entry.baseUrl}\0${entry.model}\0${entry.keyEnv}`;
-  const preferred = new Set(stageChain.map(identity));
-  return [...stageChain, ...fallbackChain.filter((entry) => !preferred.has(identity(entry)))];
+  return combineProviderChains(stageChain ?? [], fallbackChain);
 }
 
 const cooldownUntil = new Map<string, number>(); // per warm isolate; good enough for a fallback breaker
+const routeCooldownUntil = new Map<string, number>();
 const preferredByFeature = new Map<string, string>();
 const id = (x: Entry) => `${x.provider}:${x.model}:${x.keyEnv}`;
+const routeId = (x: Entry) => `${x.provider}\0${x.baseUrl.replace(/\/+$/, "")}\0${x.model}`;
 
 function mergeSystem(msgs: Msg[]): Msg[] {
   const sys = msgs
@@ -137,16 +136,20 @@ export async function callChain(
   // endpoint. Do not spend the request deadline replaying that outage with every
   // sibling key. 429 is different: another key may belong to another quota project,
   // so quota failures continue to the next configured key.
-  const unavailableEntries = new Set<string>();
+  const unavailableRoutes = new Set<string>();
   for (const ent of orderedChain(opts.feature)) {
+    const route = routeId(ent);
+    if (unavailableRoutes.has(route)) {
+      attempts.push({ id: id(ent), status: "route_skipped" });
+      continue;
+    }
+    if ((routeCooldownUntil.get(route) ?? 0) > Date.now()) {
+      attempts.push({ id: id(ent), status: "route_cooldown" });
+      continue;
+    }
     const keys = secretKeys(ent.keyEnv);
     for (const [keyIndex, key] of keys.entries()) {
       const eid = `${id(ent)}#${keyIndex + 1}`;
-      const entryId = id(ent);
-      if (unavailableEntries.has(entryId)) {
-        attempts.push({ id: eid, status: "outage_skipped" });
-        continue;
-      }
       if ((cooldownUntil.get(eid) ?? 0) > Date.now()) {
         attempts.push({ id: eid, status: "cooldown" });
         continue;
@@ -199,8 +202,14 @@ export async function callChain(
             }
             const retryAfter = Number(res.headers.get("retry-after")) || 0;
             retryAfterMs = Math.max(retryAfterMs, retryAfter * 1000);
-            if (res.status === 500 || res.status === 502 || res.status === 503 || res.status === 504) {
-              unavailableEntries.add(entryId);
+            const routeUnavailable = res.status === 400 || res.status === 404 ||
+              res.status === 500 || res.status === 502 || res.status === 503 || res.status === 504;
+            if (routeUnavailable) {
+              const routeCooldown = res.status === 400 || res.status === 404
+                ? 30 * 60_000
+                : 45_000;
+              unavailableRoutes.add(route);
+              routeCooldownUntil.set(route, Date.now() + routeCooldown);
             }
             const cool = res.status === 429 ? Math.max(retryAfter * 1000, 60_000) : res.status === 401 || res.status === 403 ? 15 * 60_000 : res.status === 404 || res.status === 400 ? 30 * 60_000 : 45_000;
             cooldownUntil.set(eid, Date.now() + cool);
@@ -211,7 +220,8 @@ export async function callChain(
             break;
           } catch (err) {
             cooldownUntil.set(eid, Date.now() + 45_000);
-            unavailableEntries.add(entryId);
+            unavailableRoutes.add(route);
+            routeCooldownUntil.set(route, Date.now() + 45_000);
             attempts.push({ id: eid, status: err instanceof DOMException ? "timeout" : "network" });
             break;
           }

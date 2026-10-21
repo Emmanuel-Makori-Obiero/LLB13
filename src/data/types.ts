@@ -86,6 +86,8 @@ export type AdminAccount = {
   display_name: string;
   created_at: string;
   last_sign_in_at: string | null;
+  is_admin: boolean;
+  is_primary_admin: boolean;
 };
 
 export type Lesson = {

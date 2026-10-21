@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_CHAIN } from "../supabase/functions/ai/providers.ts";
+import { combineProviderChains, DEFAULT_CHAIN } from "../supabase/functions/ai/providers.ts";
 
 test("the AI provider chain uses current high-availability fallback model IDs", () => {
   const ids = DEFAULT_CHAIN.map(({ provider, model }) => `${provider}:${model}`);
@@ -20,4 +20,22 @@ test("the AI provider chain uses current high-availability fallback model IDs", 
     "openrouter:qwen/qwen3-32b:free",
   ]) assert.ok(!ids.includes(retired), `retired/invalid ID remains: ${retired}`);
   assert.equal(ids.indexOf("openrouter:openrouter/free") < ids.indexOf("groq:openai/gpt-oss-120b"), true, "dynamic free fallback should run before slower deep fallbacks");
+  const identities = DEFAULT_CHAIN.map(({ provider, baseUrl, model, keyEnv }) =>
+    `${provider}:${baseUrl}:${model}:${keyEnv}`,
+  );
+  assert.equal(new Set(identities).size, identities.length, "default chain must not contain duplicate routes");
+});
+
+test("configured duplicates are removed while alternate key sources are retained", () => {
+  const first = DEFAULT_CHAIN[0];
+  const duplicate = { ...first, baseUrl: `${first.baseUrl}/` };
+  const alternateKey = { ...first, keyEnv: `${first.keyEnv}_SECONDARY` };
+  const merged = combineProviderChains(
+    [first, duplicate, alternateKey],
+    [first, DEFAULT_CHAIN[1]],
+  );
+  assert.equal(merged.length, 3);
+  assert.equal(merged[0].keyEnv, first.keyEnv);
+  assert.equal(merged[1].keyEnv, alternateKey.keyEnv);
+  assert.equal(merged[2].model, DEFAULT_CHAIN[1].model);
 });

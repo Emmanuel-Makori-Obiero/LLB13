@@ -46,11 +46,13 @@ export type Group13Repository = {
   getMedia: () => Promise<MediaResource[]>;
   createMedia: (media: Omit<MediaResource, "id">) => Promise<MediaResource>;
   isSuperAdmin: () => Promise<boolean>;
+  isPrimaryAdmin: () => Promise<boolean>;
   deleteMaterial: (material: Material) => Promise<void>;
   createMeeting: (title: string, leader: string) => Promise<Discussion>;
   deleteMeeting: (id: string) => Promise<void>;
   deleteMyAccount: () => Promise<void>;
   adminListAccounts: () => Promise<AdminAccount[]>;
+  adminSetAccountAdmin: (id: string, enabled: boolean) => Promise<void>;
   adminRemoveAccount: (id: string) => Promise<void>;
   adminUpdateMember: (
     name: string,
@@ -645,6 +647,10 @@ const supabaseRepository: Group13Repository = {
     const { data, error } = await db().rpc("is_super_admin");
     return !error && data === true;
   },
+  isPrimaryAdmin: async () => {
+    const { data, error } = await db().rpc("is_primary_admin");
+    return !error && data === true;
+  },
   deleteMaterial: async (material) => {
     const client = db();
     if (material.storage_path) {
@@ -714,9 +720,16 @@ const supabaseRepository: Group13Repository = {
     await client.auth.signOut();
   },
   adminListAccounts: async () => {
-    const { data, error } = await db().rpc("admin_list_accounts");
+    const { data, error } = await db().rpc("admin_list_accounts_with_roles");
     if (error) throw new Error(`Could not load accounts: ${error.message}`);
     return (data ?? []) as AdminAccount[];
+  },
+  adminSetAccountAdmin: async (id, enabled) => {
+    const { error } = await db().rpc("admin_set_account_admin", {
+      target: id,
+      enabled,
+    });
+    if (error) throw new Error(`Could not update admin access: ${error.message}`);
   },
   adminRemoveAccount: async (id) => {
     await removeUserFiles(id);

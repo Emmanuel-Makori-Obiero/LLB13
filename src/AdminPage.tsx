@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Trash2, UserPlus } from "lucide-react";
+import { ShieldCheck, ShieldOff, Trash2, UserPlus } from "lucide-react";
 import { repository } from "./data/repository";
 import type { AdminAccount, Member, Unit } from "./data/types";
 import { unitReps } from "./data/types";
@@ -12,6 +12,7 @@ type Props = {
   units: Unit[];
   members: Member[];
   currentEmail: string;
+  canManageAdmins: boolean;
   setNotice: (notice: string) => void;
   onUnitAdded?: (unit: Unit) => void;
   onUnitRemoved?: (id: string) => void;
@@ -53,6 +54,7 @@ export default function AdminPage({
   units,
   members,
   currentEmail,
+  canManageAdmins,
   setNotice,
   onUnitAdded,
   onUnitRemoved,
@@ -135,6 +137,10 @@ export default function AdminPage({
   }, [loadAccounts]);
 
   const removeAccount = (account: AdminAccount) => {
+    if (account.is_primary_admin || (account.is_admin && !canManageAdmins)) {
+      setNotice("Only the primary admin can remove another admin account.");
+      return;
+    }
     if (
       !window.confirm(
         `Remove ${account.display_name || account.email}? Their login, to-dos, media and uploaded files will be deleted permanently.`,
@@ -147,6 +153,24 @@ export default function AdminPage({
         current.filter((item) => item.id !== account.id),
       );
     }, "Account removed.");
+  };
+
+  const toggleAccountAdmin = (account: AdminAccount) => {
+    if (!canManageAdmins || account.is_primary_admin) return;
+    const enabled = !account.is_admin;
+    const label = account.display_name || account.email;
+    const action = enabled ? "grant admin access to" : "remove admin access from";
+    if (!window.confirm(`Are you sure you want to ${action} ${label}?`)) return;
+    void run(async () => {
+      await repository.adminSetAccountAdmin(account.id, enabled);
+      setAccounts((current) =>
+        current.map((item) =>
+          item.id === account.id ? { ...item, is_admin: enabled } : item,
+        ),
+      );
+    }, enabled
+      ? `Admin access granted to ${account.email}. It takes effect after they refresh or sign in again.`
+      : `Admin access removed from ${account.email}.`);
   };
 
   const toggleUnit = (member: Member, unitName: string) => {
@@ -219,11 +243,10 @@ export default function AdminPage({
     <>
       <div className="page-heading">
         <div>
-          <div className="eyebrow">Super admin</div>
+          <div className="eyebrow">Administration</div>
           <h1>Oversight.</h1>
           <p className="subheading">
-            See every account, assign units, manage the roster, and remove
-            members. Signed in as {currentEmail}.
+            Manage accounts, timetables, units and the roster. Signed in as {currentEmail}.
           </p>
         </div>
       </div>
@@ -247,10 +270,15 @@ export default function AdminPage({
             <div className="connection-error">
               <strong>Could not load accounts</strong>
               <span>
-                {error} Run supabase/admin.sql in the Supabase SQL Editor.
+                {error}
               </span>
             </div>
           )}
+          <p className="field-hint">
+            {canManageAdmins
+              ? "Only you, as the primary admin, can grant or revoke admin access."
+              : "Admin access is managed by the primary admin."}
+          </p>
           <div className="row-list">
             {accounts.map((account) => {
               const isSelf =
@@ -270,16 +298,35 @@ export default function AdminPage({
                     </div>
                   </div>
                   <div className="row-end">
-                    {isSelf ? (
-                      <span className="chip green">You</span>
-                    ) : (
+                    {isSelf && <span className="chip green">You</span>}
+                    {account.is_primary_admin && (
+                      <span className="chip green">Primary admin</span>
+                    )}
+                    {account.is_admin && !account.is_primary_admin && (
+                      <span className="chip green">Admin</span>
+                    )}
+                    {!account.is_admin && !account.is_primary_admin && (
+                      <span className="chip">Member</span>
+                    )}
+                    {canManageAdmins && !account.is_primary_admin && (
+                      <button
+                        className={account.is_admin ? "small-danger" : "small-admin-action"}
+                        onClick={() => toggleAccountAdmin(account)}
+                        aria-label={`${account.is_admin ? "Remove admin access from" : "Make"} ${account.email}`}
+                      >
+                        {account.is_admin ? <ShieldOff size={12} /> : <ShieldCheck size={12} />}
+                        {account.is_admin ? "Remove admin" : "Make admin"}
+                      </button>
+                    )}
+                    {!isSelf && !account.is_primary_admin &&
+                    (canManageAdmins || !account.is_admin) ? (
                       <button
                         className="small-danger"
                         onClick={() => removeAccount(account)}
                       >
                         <Trash2 size={12} /> Remove
                       </button>
-                    )}
+                    ) : null}
                   </div>
                 </div>
               );
