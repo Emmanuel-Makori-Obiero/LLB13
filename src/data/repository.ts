@@ -128,7 +128,7 @@ export async function uploadUserAsset(
 }
 
 const MATERIAL_COLUMNS =
-  "id,title,author,type,unit,topic,date,source,url,storage_path,owner_id,file_sha256";
+  "id,title,author,type,unit,topic,date,source,url,storage_path,owner_id,file_sha256,target_years";
 const DISCUSSION_COLUMNS =
   "id,title,day,time,leader,status,prep,topics,instant,created_by";
 
@@ -484,7 +484,7 @@ const supabaseRepository: Group13Repository = {
     readRequired<Assignment>("assignments", async () =>
       supabase!
         .from("assignments")
-        .select("id,title,unit,due,status,owner,reviewer,brief")
+        .select("id,title,unit,due,status,owner,reviewer,brief,target_years")
         .order("due"),
     ),
   getDiscussions: () =>
@@ -568,6 +568,7 @@ const supabaseRepository: Group13Repository = {
         date: material.date,
         source: material.source,
         url: material.url || null,
+        target_years: material.target_years ?? [],
       })
       .eq("id", id)
       .select(MATERIAL_COLUMNS)
@@ -581,7 +582,7 @@ const supabaseRepository: Group13Repository = {
     const { data, error } = await supabase
       .from("assignments")
       .insert(record)
-      .select("id,title,unit,due,status,owner,reviewer,brief")
+      .select("id,title,unit,due,status,owner,reviewer,brief,target_years")
       .single();
     if (error) throw new Error(`Could not create assignment: ${error.message}`);
     return data as Assignment;

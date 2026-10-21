@@ -5,6 +5,7 @@ import StorytellButton from "./StorytellButton";
 import { askAI, importLibraryMaterial, type AIFeature, type AIResult } from "./lib/ai";
 import { listGuideSources, type SourceChoice } from "./lib/guidedStudy";
 import { downloadPdf, downloadWord } from "./export";
+import { materialVisibleToLevel } from "./lib/learnerAdaptation";
 import type { Assignment } from "./data/types";
 
 type Tool = { feature: AIFeature; label: string; description: string };
@@ -16,7 +17,7 @@ const tools: Tool[] = [
   { feature: "rw_citations", label: "Check citations", description: "Format the authorities you provide and flag missing details instead of inventing them." },
 ];
 
-export default function AssignmentHelperPage({ assignments }: { assignments: Assignment[] }) {
+export default function AssignmentHelperPage({ assignments, learnerLevel = "" }: { assignments: Assignment[]; learnerLevel?: string }) {
   const [sources, setSources] = useState<SourceChoice[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [assignmentId, setAssignmentId] = useState("");
@@ -30,7 +31,7 @@ export default function AssignmentHelperPage({ assignments }: { assignments: Ass
   const [importingSource, setImportingSource] = useState<string | null>(null);
   const [sourceFilter, setSourceFilter] = useState<"all" | "library" | "my">("all");
 
-  const librarySources = useMemo(() => sources.filter((source) => source.kind === "document" || source.kind === "material"), [sources]);
+  const librarySources = useMemo(() => sources.filter((source) => (source.kind === "document" || source.kind === "material") && (source.scope !== "library" || materialVisibleToLevel(source.target_years, learnerLevel))), [sources, learnerLevel]);
   const selectedSources = librarySources.filter((source) => source.kind === "document" && selected.includes(source.id));
   const visibleSources = useMemo(() => librarySources.filter((source) => sourceFilter === "all" || (sourceFilter === "library" ? source.scope === "library" : source.scope !== "library")), [librarySources, sourceFilter]);
   const selectedIds = selectedSources.map((source) => source.id);
@@ -40,7 +41,7 @@ export default function AssignmentHelperPage({ assignments }: { assignments: Ass
     if (source.kind !== "material" || !source.url || importingSource) return;
     setImportingSource(source.id); setNotice(`Preparing ${source.title} for the assignment helper…`);
     try {
-      const imported = await importLibraryMaterial({ title: source.title, url: source.url, citation: source.citation });
+      const imported = await importLibraryMaterial({ title: source.title, url: source.url, citation: source.citation, target_years: source.target_years ?? [] });
       await loadSources();
       setSelected((current) => [...current, imported.id]);
       setNotice(`${source.title} is now AI-readable and selected.`);

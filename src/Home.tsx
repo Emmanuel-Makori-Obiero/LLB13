@@ -1,139 +1,36 @@
-import { CalendarDays, CheckSquare, FileText, Library } from "lucide-react";
+import { ArrowRight, BookOpen, CalendarDays, CheckSquare, FileText, Gavel, Library, Sparkles } from "lucide-react";
 import type { Assignment, Lesson, Todo } from "./data/types";
 import LearningLoop from "./LearningLoop";
-
-type Props = {
-  name: string;
-  lessons: Lesson[];
-  todos: Todo[];
-  assignments: Assignment[];
-  userId: string | null;
-  setPage: (id: string) => void;
-};
+type Props = { name: string; learnerLevel: string; learningPreference: string; lessons: Lesson[]; todos: Todo[]; assignments: Assignment[]; userId: string | null; setPage: (id: string) => void };
 const today = () => new Date().toISOString().slice(0, 10);
 const hm = (t?: string | null) => (t ? t.slice(0, 5) : "");
-
-export default function Home({
-  name,
-  lessons,
-  todos,
-  assignments,
-  userId,
-  setPage,
-}: Props) {
+const levelCopy: Record<string, { label: string; focus: string; next: string }> = {
+  "llb-year-1": { label: "First year", focus: "Build a strong legal foundation", next: "Start with the key concepts, sources and facts in your current course. Ask for guided steps whenever a topic is new." },
+  "llb-year-2": { label: "Second year", focus: "Connect rules with context", next: "Practise applying course rules to facts and connect legal questions with their social, political and economic setting." },
+  "llb-year-3": { label: "Third year", focus: "Synthesize and communicate", next: "Work across supported authorities, consider national and wider legal contexts, and develop practical problem-solving." },
+  "llb-year-4": { label: "Fourth year", focus: "Research and reason independently", next: "Build independent research, contextual analysis, effective communication and practice-ready problem-solving." },
+  masters: { label: "Masters / LL.M.", focus: "Work at postgraduate depth", next: "Explore research questions, methodology, critical synthesis, and specialist materials." },
+  phd: { label: "PhD / doctoral", focus: "Shape an original contribution", next: "Focus on literature mapping, research design, evidence, and original scholarly argument." },
+};
+export default function Home({ name, learnerLevel, learningPreference, lessons, todos, assignments, userId, setPage }: Props) {
   const t = today();
   const todayLessons = lessons.filter((l) => l.lesson_date === t);
   const next = lessons.filter((l) => l.lesson_date > t).slice(0, 3);
-  const open = todos.filter((x) => !x.completed);
-  const dueSoon = assignments
-    .filter((a) => a.status !== "Completed")
-    .slice(0, 3);
+  const open = todos.filter((x) => !x.completed).slice(0, 4);
+  const dueSoon = assignments.filter((a) => a.status !== "Completed").slice(0, 3);
   const hour = new Date().getHours();
-  const greet =
-    hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-  return (
-    <>
-      <div className="page-head">
-        <div>
-          <h1 className="heading">
-            {greet}, {name}.
-          </h1>
-          <p className="subheading">Here is what matters today.</p>
-        </div>
-      </div>
-      <LearningLoop
-        assignments={assignments}
-        lessons={lessons}
-        userId={userId}
-        onOpenArena={() => setPage("arena")}
-      />
-      <div className="home-grid">
-        <div className="card card-pad">
-          <div className="section-label">Today’s lessons</div>
-          {todayLessons.length === 0 ? (
-            <p className="field-hint">No lessons today.</p>
-          ) : (
-            todayLessons.map((l) => (
-              <div className="home-line" key={l.id}>
-                <strong>{hm(l.start_time) || "Today"}</strong> {l.topic}
-                <span>{l.unit}</span>
-              </div>
-            ))
-          )}
-          {next.length > 0 && (
-            <>
-              <div className="section-label home-sub">Coming up</div>
-              {next.map((l) => (
-                <div className="home-line" key={l.id}>
-                  <strong>
-                    {new Date(l.lesson_date + "T00:00:00").toLocaleDateString(
-                      "en-GB",
-                      { weekday: "short", day: "numeric", month: "short" },
-                    )}
-                  </strong>{" "}
-                  {l.topic}
-                  <span>{l.unit}</span>
-                </div>
-              ))}
-            </>
-          )}
-          <button className="link-button" onClick={() => setPage("timetable")}>
-            Open timetable
-          </button>
-        </div>
-        <div className="card card-pad">
-          <div className="section-label">My to-do · {open.length} open</div>
-          {open.slice(0, 4).map((x) => (
-            <div className="home-line" key={x.id}>
-              {x.title}
-              {x.due && <span>Due {x.due}</span>}
-            </div>
-          ))}
-          {open.length === 0 && (
-            <p className="field-hint">You are all caught up.</p>
-          )}
-          <button className="link-button" onClick={() => setPage("todos")}>
-            See all
-          </button>
-        </div>
-        {dueSoon.length > 0 && (
-          <div className="card card-pad">
-            <div className="section-label">Assignments</div>
-            {dueSoon.map((a) => (
-              <div className="home-line" key={a.id}>
-                {a.title}
-                <span>
-                  {a.unit} · due {a.due}
-                </span>
-              </div>
-            ))}
-            <button
-              className="link-button"
-              onClick={() => setPage("assignments")}
-            >
-              Open assignments
-            </button>
-          </div>
-        )}
-      </div>
-      <div className="quick-row">
-        <button onClick={() => setPage("timetable")}>
-          <CalendarDays size={18} />
-          Timetable
-        </button>
-        <button onClick={() => setPage("todos")}>
-          <CheckSquare size={18} />
-          To-do
-        </button>
-        <button onClick={() => setPage("assignments")}>
-          <FileText size={18} />
-          Assignments
-        </button>
-        <button onClick={() => setPage("library")}>
-          <Library size={18} />
-          Library
-        </button>
-      </div>
-    </>
-  );
+  const greet = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const level = levelCopy[learnerLevel] ?? { label: "Law student", focus: "Your law learning space", next: "Choose your study level to tune your library and practice recommendations." };
+  const preferenceLabel = learningPreference === "guided" ? "Step-by-step support" : learningPreference === "challenge" ? "Challenge mode" : "Balanced support";
+  return <div className="home-dashboard">
+    <section className="home-welcome"><div className="home-welcome-copy"><span className="home-kicker"><Sparkles size={14} /> GROUP 13 · LAW LEARNING HUB</span><h1>{greet}, {name}.</h1><p>{level.next}</p><div className="home-welcome-actions"><button className="home-primary" onClick={() => setPage("library")}><Library size={16} /> Explore your library <ArrowRight size={15} /></button><span className="home-level-badge"><BookOpen size={14} /> {level.label}</span><span className="home-level-badge"><Sparkles size={14} /> {preferenceLabel}</span></div></div><div className="home-welcome-mark" aria-hidden="true"><Gavel size={58} /><span>13</span></div></section>
+    <section className="home-section-head"><div><span className="home-section-eyebrow">YOUR STUDY DESK</span><h2>{level.focus}</h2></div><button className="home-text-button" onClick={() => setPage("account")}>Update study level <ArrowRight size={14} /></button></section>
+    <div className="home-grid home-grid-organized">
+      <article className="home-panel"><div className="home-panel-head"><span className="home-panel-icon"><CalendarDays size={17} /></span><div><h3>Today & next</h3><small>{todayLessons.length} sessions today</small></div><button aria-label="Open timetable" onClick={() => setPage("timetable")}><ArrowRight size={16} /></button></div>{todayLessons.length ? todayLessons.map((lesson) => <div className="home-detail-row" key={lesson.id}><strong>{hm(lesson.start_time) || "Today"}</strong><div>{lesson.topic}<small>{lesson.unit}</small></div></div>) : <p className="home-empty-line">No classes today. Use the time for a short focused study block.</p>}{next.map((lesson) => <div className="home-detail-row" key={lesson.id}><strong>{new Date(lesson.lesson_date + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}</strong><div>{lesson.topic}<small>{lesson.unit}</small></div></div>)}<button className="home-panel-link" onClick={() => setPage("timetable")}>Open timetable <ArrowRight size={14} /></button></article>
+      <article className="home-panel"><div className="home-panel-head"><span className="home-panel-icon warm"><CheckSquare size={17} /></span><div><h3>My next steps</h3><small>{todos.filter((x) => !x.completed).length} to-dos open</small></div><button aria-label="Open to-do list" onClick={() => setPage("todos")}><ArrowRight size={16} /></button></div>{open.length ? open.map((item) => <div className="home-task-row" key={item.id}><span className="home-task-dot" /><div>{item.title}{item.due && <small>Due {item.due}</small>}</div></div>) : <p className="home-empty-line">You are all caught up. Pick a small goal for today.</p>}<button className="home-panel-link" onClick={() => setPage("todos")}>View all to-dos <ArrowRight size={14} /></button></article>
+      <article className="home-panel"><div className="home-panel-head"><span className="home-panel-icon clay"><FileText size={17} /></span><div><h3>Assignments</h3><small>{dueSoon.length} active to review</small></div><button aria-label="Open assignments" onClick={() => setPage("assignments")}><ArrowRight size={16} /></button></div>{dueSoon.length ? dueSoon.map((item) => <div className="home-task-row" key={item.id}><span className="home-task-dot clay-dot" /><div>{item.title}<small>{item.unit} · Due {item.due}</small></div></div>) : <p className="home-empty-line">No active assignments. You have room to get ahead.</p>}<button className="home-panel-link" onClick={() => setPage("assignments")}>View assignments <ArrowRight size={14} /></button></article>
+    </div>
+    <section className="home-quick-links" aria-label="Quick access"><button onClick={() => setPage("library")}><Library size={17} /><span><strong>Library</strong><small>Sources for your cohort</small></span><ArrowRight size={15} /></button><button onClick={() => setPage("arena")}><Gavel size={17} /><span><strong>Debate & games</strong><small>Practise your legal arguments</small></span><ArrowRight size={15} /></button><button onClick={() => setPage("assistant")}><Sparkles size={17} /><span><strong>Study assistant</strong><small>Get help with your next question</small></span><ArrowRight size={15} /></button></section>
+    <LearningLoop assignments={assignments} lessons={lessons} userId={userId} onOpenArena={() => setPage("arena")} />
+  </div>;
 }

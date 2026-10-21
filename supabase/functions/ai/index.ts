@@ -523,6 +523,30 @@ interface Source {
 }
 
 // deno-lint-ignore no-explicit-any
+async function documentAudienceTags(db: any, docs: any[]): Promise<Map<string, string[]>> {
+  const tags = new Map<string, string[]>();
+  const linkedIds = [...new Set(docs.map((doc) => doc.material_id).filter(Boolean).map(String))];
+  if (linkedIds.length) {
+    const { data: materials, error } = await db.from("materials").select("id,target_years").in("id", linkedIds).limit(200);
+    if (error) throw new Error("cohort filter failed");
+    for (const material of materials ?? []) tags.set(String(material.id), material.target_years ?? []);
+  }
+  const result = new Map<string, string[]>();
+  for (const doc of docs) result.set(String(doc.id), doc.material_id && tags.has(String(doc.material_id)) ? tags.get(String(doc.material_id))! : (doc.target_years ?? []));
+  return result;
+}
+
+async function filterRowsByLearnerLevel(db: any, rows: any[], learnerLevel?: string): Promise<any[]> {
+  if (!learnerLevel || !rows.length) return rows;
+  const ids = [...new Set(rows.map((row) => String(row.document_id)).filter(Boolean))];
+  if (!ids.length) return rows;
+  const { data, error } = await db.from("ai_documents").select("id,target_years,material_id").in("id", ids).limit(200);
+  if (error) throw new Error("cohort filter failed");
+  const audiences = await documentAudienceTags(db, data ?? []);
+  const visibleIds = new Set((data ?? []).filter((doc: any) => { const targetYears = audiences.get(String(doc.id)) ?? []; return !targetYears.length || targetYears.includes(learnerLevel); }).map((doc: any) => String(doc.id)));
+  return rows.filter((row) => visibleIds.has(String(row.document_id)));
+}
+
 async function retrieve(
   db: any,
   mode: Mode,
@@ -531,6 +555,7 @@ async function retrieve(
   docIds?: string[],
   part?: number,
   size = CHUNKS_PART,
+  learnerLevel?: string,
 ): Promise<Source[]> {
   const constitutionQuestion = (isConstitutionQuestion(query) || feature === "legal_process") && feature !== "notes";
   if (mode === "general" && !constitutionQuestion) return [];
@@ -540,7 +565,15 @@ async function retrieve(
   // tick a source or another agent initiated the request. Retrieval still sends
   // only relevant chunks, so the model can use all constitutional Articles over
   // time without stuffing the entire text into every prompt.
-  const selectedIds = [...(docIds ?? [])];
+  let selectedIds = [...(docIds ?? [])];
+  if (learnerLevel && selectedIds.length) {
+    const { data: selectedDocs, error } = await db.from("ai_documents").select("id,target_years,material_id").in("id", selectedIds).limit(20);
+    if (error) throw new Error("cohort filter failed");
+    const audiences = await documentAudienceTags(db, selectedDocs ?? []);
+    const allowed = new Set((selectedDocs ?? []).filter((doc: any) => { const targetYears = audiences.get(String(doc.id)) ?? []; return !targetYears.length || targetYears.includes(learnerLevel); }).map((doc: any) => String(doc.id)));
+    selectedIds = selectedIds.filter((id) => allowed.has(id));
+    if (docIds?.length && !selectedIds.length) return [];
+  }
   const constitutionIds: string[] = [];
   if (constitutionQuestion) {
     const { data: constitutionDocs } = await db
@@ -625,10 +658,10 @@ async function retrieve(
       q,
       p_scope: scope,
       p_doc_ids: selectedIds.length ? selectedIds : null,
-      p_limit: CHUNKS_PER_QUERY,
+      p_limit: learnerLevel ? CHUNKS_PER_QUERY * 4 : CHUNKS_PER_QUERY,
     });
     if (error) throw new Error("retrieval failed");
-    rows = data ?? [];
+    rows = await filterRowsByLearnerLevel(db, data ?? [], learnerLevel);
     // Broad natural-language searches can rank a table of contents or a later
     // cross-reference above the requested provision. When the student names
     // Article numbers, run a second exact-number pass against the Constitution
@@ -646,6 +679,7 @@ async function retrieve(
         });
         rows.push(...(exact ?? []));
       }
+      rows = await filterRowsByLearnerLevel(db, rows, learnerLevel);
     }
     // A single matching chunk can omit the definition or exception immediately
     // before/after it. Pull a small amount of adjacent text for book-like reading.
@@ -805,6 +839,7 @@ Deno.serve(async (req) => {
     docIds?: string[];
     part?: number;
     size?: number;
+    learnerLevel?: string;
   };
   try {
     body = await req.json();
@@ -830,6 +865,8 @@ Deno.serve(async (req) => {
   const size = Number.isInteger(body.size)
     ? Math.min(10, Math.max(3, body.size as number))
     : CHUNKS_PART;
+  const allowedLearnerLevels = new Set(["llb-year-1", "llb-year-2", "llb-year-3", "llb-year-4", "masters", "phd", "prefer-not-to-say"]);
+  const learnerLevel = typeof body.learnerLevel === "string" && allowedLearnerLevels.has(body.learnerLevel) ? body.learnerLevel : undefined;
   const docIds = Array.isArray(body.docIds)
     ? body.docIds.filter((x) => typeof x === "string").slice(0, 10)
     : undefined;
@@ -921,6 +958,7 @@ Deno.serve(async (req) => {
       docIds,
       part,
       size,
+      learnerLevel,
     );
   } catch {
     return json({ error: "Could not search your materials. Try again." }, 500);

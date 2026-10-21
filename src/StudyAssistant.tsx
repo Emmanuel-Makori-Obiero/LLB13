@@ -12,6 +12,7 @@ import {
   type AIResult,
 } from "./lib/ai";
 import { Markdown } from "./Markdown";
+import { materialVisibleToLevel } from "./lib/learnerAdaptation";
 import "./assistant.css";
 
 type Doc = {
@@ -21,6 +22,7 @@ type Doc = {
   citation: string | null;
   scope: string;
   created_at: string;
+  target_years?: string[] | null;
 };
 
 export type Task = {
@@ -348,7 +350,7 @@ export function Answer({ turn }: { turn: Turn }) {
   );
 }
 
-export function StudyAssistant() {
+export function StudyAssistant({ learnerLevel = "" }: { learnerLevel?: string }) {
   const [mode, setMode] = useState<AIMode>("auto");
   const [task, setTask] = useState<Task>(TASKS[0]);
   const [input, setInput] = useState("");
@@ -367,11 +369,12 @@ export function StudyAssistant() {
   const refresh = useCallback(async () => {
     if (!isSupabaseConfigured) return;
     try {
-      setDocs((await listMyMaterials()) as Doc[]);
+      const docs = (await listMyMaterials()) as Doc[];
+      setDocs(docs.filter((doc) => doc.scope !== "library" || materialVisibleToLevel(doc.target_years, learnerLevel)));
     } catch {
       setNote("Could not load your documents.");
     }
-  }, []);
+  }, [learnerLevel]);
 
   useEffect(() => {
     void refresh();

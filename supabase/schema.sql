@@ -34,7 +34,8 @@ create table if not exists public.assignments (
   status text not null default 'Not Started',
   owner text not null,
   reviewer text not null,
-  brief text not null
+  brief text not null,
+  target_years text[] not null default '{}'
 );
 
 create table if not exists public.discussions (
