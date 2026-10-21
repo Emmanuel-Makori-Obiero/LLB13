@@ -1,3 +1,28 @@
+export function shouldAutoRetrieveConstitution(
+  feature: string,
+  queryIsConstitutional: boolean,
+): boolean {
+  return queryIsConstitutional && feature !== "exam_analysis" && feature !== "notes";
+}
+
+export interface RetrievalLimits {
+  query: number;
+  neighbors: number;
+  total: number;
+}
+
+export function retrievalLimits(
+  feature: string,
+  defaults: RetrievalLimits,
+): RetrievalLimits {
+  if (feature !== "legal_process" && feature !== "legal_explain") return defaults;
+  return {
+    query: Math.min(defaults.query, 6),
+    neighbors: Math.min(defaults.neighbors, 6),
+    total: Math.min(defaults.total, 12),
+  };
+}
+
 export function selectDocumentChunkIndexes(
   totalChunks: number,
   maxChunks: number,

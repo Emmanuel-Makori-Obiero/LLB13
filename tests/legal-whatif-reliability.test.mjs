@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { boundedProviderTimeoutMs } from "../supabase/functions/ai/providers.ts";
+import { retrievalLimits, shouldAutoRetrieveConstitution } from "../supabase/functions/ai/retrieval.ts";
 import { hasLegalProcessSteps, LEGAL_WHATIF_SYSTEM_PROMPT, legalWhatIfSystemPrompt } from "../supabase/functions/ai/prompts.ts";
 
 const edge = readFileSync(new URL("../supabase/functions/ai/index.ts", import.meta.url), "utf8");
@@ -27,6 +28,20 @@ test("Legal what-if card validation rejects empty or missing steps before accept
   assert.equal(hasLegalProcessSteps({ title: "Process", steps: [] }), false);
   assert.equal(hasLegalProcessSteps({ title: "Process" }), false);
   assert.equal(hasLegalProcessSteps(null), false);
+});
+
+test("Legal what-ifs retrieve constitutional context only for constitutional queries and cap related chunks", () => {
+  assert.equal(shouldAutoRetrieveConstitution("legal_process", false), false);
+  assert.equal(shouldAutoRetrieveConstitution("legal_process", true), true);
+  assert.equal(shouldAutoRetrieveConstitution("legal_explain", false), false);
+  assert.equal(shouldAutoRetrieveConstitution("exam_analysis", true), false);
+  const defaults = { query: 12, neighbors: 12, total: 24 };
+  const bounded = { query: 6, neighbors: 6, total: 12 };
+  assert.deepEqual(retrievalLimits("legal_process", defaults), bounded);
+  assert.deepEqual(retrievalLimits("legal_explain", defaults), bounded);
+  assert.deepEqual(retrievalLimits("chat", defaults), defaults);
+  assert.match(edge, /feature !== "legal_process"[\s\S]*?feature !== "legal_explain"/);
+  assert.match(edge, /max_tokens: opts\.feature === "exam_analysis" \|\| opts\.feature === "legal_process"/);
 });
 
 test("Legal what-if calls get a 15–18 second bounded window while ordinary requests remain unchanged", () => {

@@ -3,7 +3,11 @@ import { EXTRA_FEATURES, handleExtra } from "./exam.ts";
 import { selectFastFailoverKey, secretKeyEntries } from "../_shared/keys.ts";
 import { reserveAiQuota } from "../_shared/quotas.ts";
 import { recordProviderUsage } from "../_shared/usage.ts";
-import { selectDocumentChunkIndexes } from "./retrieval.ts";
+import {
+  retrievalLimits,
+  selectDocumentChunkIndexes,
+  shouldAutoRetrieveConstitution,
+} from "./retrieval.ts";
 import {
   EXAM_ANALYSIS_SYSTEM_PROMPT,
   hasLegalProcessSteps,
@@ -190,7 +194,7 @@ export async function callChain(
           model: ent.model,
           messages: ent.noSystem ? mergeSystem(messages) : messages,
           temperature: opts.temperature ?? 0.2,
-          max_tokens: opts.feature === "exam_analysis"
+          max_tokens: opts.feature === "exam_analysis" || opts.feature === "legal_process"
             ? Math.min(ent.maxTokens ?? opts.maxTokens ?? 4096, 4096)
             : ent.maxTokens ?? opts.maxTokens ?? 4096,
         };
@@ -534,7 +538,7 @@ async function retrieve(
     const message = "Exam analysis requires exactly one selected paper. Select a single paper and retry.";
     throw Object.assign(new Error(message), { status: 400, publicMessage: message });
   }
-  const constitutionQuestion = feature !== "exam_analysis" && (isConstitutionQuestion(query) || feature === "legal_process") && feature !== "notes";
+  const constitutionQuestion = shouldAutoRetrieveConstitution(feature, isConstitutionQuestion(query));
   if (mode === "general" && !constitutionQuestion && feature !== "exam_analysis") return [];
 
   // The complete Constitution is indexed as a shared Library document. Add it
@@ -586,6 +590,11 @@ async function retrieve(
     citation: string | null;
     content: string;
   }[] = [];
+  const limits = retrievalLimits(feature, {
+    query: CHUNKS_PER_QUERY,
+    neighbors: 12,
+    total: 24,
+  });
 
   if (feature === "notes" && docIds?.length === 1 && part !== undefined) {
     // Notes walk through a document in order, CHUNKS_PART sections at a time, so nothing is skipped.
@@ -604,7 +613,12 @@ async function retrieve(
         citation: r.ai_documents?.citation,
         content: r.content,
       });
-  } else if (FEATURES[feature]?.docWide && selectedIds.length) {
+  } else if (
+    FEATURES[feature]?.docWide &&
+    feature !== "legal_process" &&
+    feature !== "legal_explain" &&
+    selectedIds.length
+  ) {
     // Most whole-document tasks sample a bounded slice. Exam analysis is stricter:
     // include every indexed section and reject papers above the cap rather than omit text.
     const per = Math.ceil(CHUNKS_DOC_WIDE / selectedIds.length);
@@ -657,7 +671,7 @@ async function retrieve(
       q,
       p_scope: scope,
       p_doc_ids: selectedIds.length ? selectedIds : null,
-      p_limit: learnerLevel ? CHUNKS_PER_QUERY * 4 : CHUNKS_PER_QUERY,
+      p_limit: learnerLevel ? limits.query * 4 : limits.query,
     });
     if (error) throw new Error("retrieval failed");
     rows = await filterRowsByLearnerLevel(db, data ?? [], learnerLevel);
@@ -683,7 +697,7 @@ async function retrieve(
     // A single matching chunk can omit the definition or exception immediately
     // before/after it. Pull a small amount of adjacent text for book-like reading.
     const contextRows: typeof rows = [];
-    for (const row of rows.slice(0, 12)) {
+    for (const row of rows.slice(0, limits.neighbors)) {
       const { data: nearby } = await db
         .from("ai_chunks")
         .select("document_id, idx, content, ai_documents(title, author, citation)")
@@ -702,7 +716,7 @@ async function retrieve(
     }
     const unique = new Map<string, typeof rows[number]>();
     for (const row of [...rows, ...contextRows]) unique.set(`${row.document_id}:${row.content}`, row);
-    rows = [...unique.values()].slice(0, 24);
+    rows = [...unique.values()].slice(0, limits.total);
   }
   if (feature === "exam_analysis" && !rows.length) {
     const message = "No readable indexed text is available for the selected paper. Check its upload or access permissions and retry.";
@@ -1134,7 +1148,7 @@ Deno.serve(async (req) => {
         error: typeof publicMessage === "string" ? publicMessage : requestTooLarge
           ? feature === "exam_analysis"
             ? "One or more providers rejected the exam-review request as too large (HTTP 413). The unrelated prompt overhead has been removed; the selected paper was not truncated. If this persists, shorten the student-answer text and retry."
-            : "One or more providers rejected the request as too large (HTTP 413). The Legal what-if prompt overhead has been removed; your question was not truncated. If this persists, shorten unnecessary scenario detail and retry."
+            : "One or more providers rejected the Legal what-if request as too large (HTTP 413). Your question was not truncated; the request uses bounded, relevant source context and output. If this persists, shorten unnecessary scenario detail and retry."
           : invalidCardResponse
             ? "The providers did not return a usable Legal what-if card structure. Invalid card replies were skipped and the other models were tried; switch to Normal explanation or retry Cards later."
           : "Each failed model was skipped and the same request was sent to the next fallback, but none of the configured models returned a result. Check provider keys, model IDs, and quota, then retry.",
