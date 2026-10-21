@@ -294,7 +294,8 @@ export async function importLibraryMaterial(source: { title: string; url?: strin
   const file = new File([blob], `${source.title.replace(/[^a-z0-9._-]+/gi, "-")}.${extension}`, { type: blob.type || "application/octet-stream" });
   const text = (await extractText(file)).trim();
   if (!text.length) throw new Error(`${source.title} has no readable text after OCR. Try a clearer scan.`);
-  return storeText(source.title, text, source.citation ?? undefined, "user", source.author ?? undefined);
+  const saved = await saveTextMaterial(source.title, text, source.citation ?? undefined, source.author ?? undefined);
+  return { ...saved, text };
 }
 
 /** Save plain text (e.g. a lecture transcript) as a document the AI can read.

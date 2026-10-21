@@ -162,8 +162,8 @@ export default function BookReader({ material, onClose }: Props) {
             </div>
           ) : frame ? (
             <div className="book-preview-wrap" style={{ height: `${readerHeight}px` }}>
-              {isPdf ? <PdfNotesReader sourceUrl={sourceUrl} title={material.title} height={readerHeight - 44} onMouseUp={captureSelection} /> : <iframe src={previewFrame} title={`Preview ${material.title}`} referrerPolicy="no-referrer" />}
-              <p className="reader-hint">Scanned PDF pages are shown as images first. When OCR finishes, select text directly on the page and save it as a highlight.</p>
+              {isPdf ? <PdfNotesReader sourceUrl={sourceUrl} previewUrl={previewFrame} title={material.title} height={readerHeight - 44} onMouseUp={captureSelection} /> : <iframe src={previewFrame} title={`Preview ${material.title}`} referrerPolicy="no-referrer" />}
+              <p className="reader-hint">Read the PDF in its normal preview. If it is a scanned document and you need selectable text, use “Scan for selectable text” above; scanning can take time on large books.</p>
             </div>
           ) : <div className="empty">This material has no valid preview link.</div>}
         </section>

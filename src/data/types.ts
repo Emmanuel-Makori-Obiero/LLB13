@@ -20,6 +20,7 @@ export type Material = {
   url?: string;
   storage_path?: string;
   owner_id?: string | null;
+  file_sha256?: string | null;
 };
 export type AssignmentStatus =
   | "Not Started"

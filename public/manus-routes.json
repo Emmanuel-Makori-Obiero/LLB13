@@ -49,6 +49,10 @@
       "title": "AI assignment helper"
     },
     {
+      "path": "/exam-review",
+      "title": "Exam paper review"
+    },
+    {
       "path": "/units",
       "title": "Units"
     },

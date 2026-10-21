@@ -128,13 +128,61 @@ export async function uploadUserAsset(
 }
 
 const MATERIAL_COLUMNS =
-  "id,title,author,type,unit,topic,date,source,url,storage_path,owner_id";
+  "id,title,author,type,unit,topic,date,source,url,storage_path,owner_id,file_sha256";
 const DISCUSSION_COLUMNS =
   "id,title,day,time,leader,status,prep,topics,instant,created_by";
 
 function db() {
   if (!supabase) throw new Error("Supabase is not configured.");
   return supabase;
+}
+
+const fileHashCache = new WeakMap<Blob, string>();
+async function sha256File(file: Blob): Promise<string> {
+  const cached = fileHashCache.get(file);
+  if (cached) return cached;
+  const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+  const fingerprint = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  fileHashCache.set(file, fingerprint);
+  return fingerprint;
+}
+
+export async function findLibraryMaterialDuplicate(file: File, title?: string, expectedHash?: string): Promise<Material | null> {
+  const client = db();
+  const fileHash = expectedHash ?? await sha256File(file);
+  const { data: exact, error: exactError } = await client
+    .from("materials")
+    .select(MATERIAL_COLUMNS)
+    .eq("file_sha256", fileHash)
+    .limit(1)
+    .maybeSingle();
+  if (exactError) throw new Error(`Could not check Library duplicates: ${exactError.message}`);
+  if (exact) return exact as Material;
+
+  // Compare likely same-name or same-title uploads created before file fingerprints existed.
+  const cleanTitle = title?.trim().toLocaleLowerCase();
+  const fileName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-").toLocaleLowerCase();
+  const { data: matches, error: matchesError } = await client
+    .from("materials")
+    .select(MATERIAL_COLUMNS)
+    .is("file_sha256", null)
+    .not("storage_path", "is", null)
+    .limit(500);
+  if (matchesError) throw new Error(`Could not check existing Library entries: ${matchesError.message}`);
+  for (const candidate of matches ?? []) {
+    const legacy = candidate as Material;
+    if (legacy.file_sha256 || !legacy.storage_path || !legacy.url) continue;
+    const sameTitle = cleanTitle && legacy.title.trim().toLocaleLowerCase() === cleanTitle;
+    const savedName = legacy.storage_path.split("/").pop()?.toLocaleLowerCase();
+    if (!sameTitle && savedName !== fileName) continue;
+    try {
+      const response = await fetch(legacy.url);
+      if (response.ok && await sha256File(await response.blob()) === fileHash) return legacy;
+    } catch {
+      // An inaccessible old file is not treated as a confirmed duplicate.
+    }
+  }
+  return null;
 }
 
 // Removes a person's stored files before their account is deleted; storage objects do not cascade with database rows.
@@ -461,25 +509,48 @@ const supabaseRepository: Group13Repository = {
   },
   createMaterial: async (material, file) => {
     if (!supabase) throw new Error("Supabase is not configured.");
-    let record = { id: crypto.randomUUID(), ...material };
+    const id = crypto.randomUUID();
+    const fileHash = file ? await sha256File(file) : null;
+    if (fileHash) {
+      const duplicate = await findLibraryMaterialDuplicate(file!, material.title, fileHash);
+      if (duplicate) throw new Error(`This exact file is already in the Library as “${duplicate.title}”. Open the existing entry instead.`);
+    }
+    const record = { id, ...material, file_sha256: fileHash };
     if (record.url && !/^https?:\/\//i.test(record.url.trim()))
       throw new Error("Links must start with http:// or https://");
+    if (!file && record.url?.trim()) {
+      const { data: duplicate, error: duplicateError } = await supabase
+        .from("materials")
+        .select(MATERIAL_COLUMNS)
+        .eq("url", record.url.trim())
+        .limit(1)
+        .maybeSingle();
+      if (duplicateError) throw new Error(`Could not check Library duplicates: ${duplicateError.message}`);
+      if (duplicate) throw new Error(`This link is already in the Library as “${duplicate.title}”. Open the existing entry instead.`);
+    }
+    let storagePath: string | null = null;
     if (file) {
       const path = `${record.id}/${file.name.replace(/[^a-zA-Z0-9._-]/g, "-")}`;
       await uploadStorageObject("materials", path, file);
-      record = {
-        ...record,
-        url: supabase.storage.from("materials").getPublicUrl(path).data
-          .publicUrl,
+      storagePath = path;
+      Object.assign(record, {
+        url: supabase.storage.from("materials").getPublicUrl(path).data.publicUrl,
         storage_path: path,
-      };
+      });
     }
     const { data, error } = await supabase
       .from("materials")
       .insert(record)
       .select(MATERIAL_COLUMNS)
       .single();
-    if (error) throw new Error(`Could not add material: ${error.message}`);
+    if (error) {
+      if (storagePath) await supabase.storage.from("materials").remove([storagePath]);
+      if (error.code === "23505" && file) {
+        const duplicate = await findLibraryMaterialDuplicate(file, material.title, fileHash ?? undefined);
+        if (duplicate) throw new Error(`This exact file is already in the Library as “${duplicate.title}”. Open the existing entry instead.`);
+      }
+      throw new Error(`Could not add material: ${error.message}`);
+    }
     return data as Material;
   },
   updateMaterial: async (id, material) => {

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, BookOpen, Clock3, Copy, Gavel, GraduationCap, Library, Play, RefreshCw, Share2, Swords, Trophy, Users } from "lucide-react";
 import type { Material } from "./data/types";
 import { askAI } from "./lib/ai";
+import { makeDebateInviteUrl } from "./lib/debate-links";
 import { searchKenyaLaw, type KenyaLawCaseResult } from "./lib/kenyaLaw";
 import { Markdown } from "./Markdown";
 import {
@@ -581,7 +582,7 @@ export default function GamesHub({
     }
   };
 
-  const inviteUrl = room ? `${window.location.origin}/arena?join=${encodeURIComponent(room.share_code)}` : "";
+  const inviteUrl = room ? makeDebateInviteUrl(window.location.origin, room.share_code) : "";
   const myRole = room ? room.player_one_id === userId ? room.player_one_role : room.player_two_role : null;
 
   return <>

@@ -60,6 +60,7 @@ import {
   X,
 } from "lucide-react";
 import {
+  findLibraryMaterialDuplicate,
   isSupabaseConfigured,
   repository,
   supabase,
@@ -107,6 +108,7 @@ const AssignmentHelperPage = lazy(() => import("./AssignmentHelperPage"));
 import { addYouTubeItem, loadPublicYouTubePlaylist, loadYouTubePlaylist, removeYouTubeItem, updateYouTubePlaylist, youtubePlaylistExportJson, youtubePlaylistExportText, type YouTubePlaylist } from "./lib/youtubePlaylist";
 import { useTheme, type Theme } from "./theme";
 import GamesHub from "./GamesHub";
+import { readDebateInviteCode } from "./lib/debate-links";
 import {
   analyzeImage,
   createFilmProject,
@@ -1208,7 +1210,7 @@ function App() {
               }}
             />
           )}
-          {view === "arena" && <GamesHub materials={materials} userId={userId} displayName={profile.displayName || userEmail?.split("@")[0] || "Player"} isAdmin={isAdmin} inviteCode={new URLSearchParams(window.location.search).get("join")} />}
+          {view === "arena" && <GamesHub materials={materials} userId={userId} displayName={profile.displayName || userEmail?.split("@")[0] || "Player"} isAdmin={isAdmin} inviteCode={readDebateInviteCode(window.location.search)} />}
           {view === "members" && <SectionedMembersPage members={members} />}
           {view === "dictionary" && <LegalDictionaryPage />}
           {view === "legal-process" && (
@@ -1239,7 +1241,41 @@ function App() {
                 title="Exam paper review."
                 subtitle="Upload any revision paper, understand the questions, and write your way through a new one."
               />
-              <ExamReviewPage />
+              <ExamReviewPage
+                materials={materials}
+                units={units}
+                onOpenLibrary={(materialId) => {
+                  const linkedMaterial = materials.find((item) => item.id === materialId);
+                  if (linkedMaterial) openReader(linkedMaterial);
+                  else setPage("library");
+                }}
+                onAddToLibrary={async (file, title, unit) => {
+                  const libraryTitle = title.replace(/\.[^.]+$/, "").trim() || title;
+                  const duplicate = await findLibraryMaterialDuplicate(file, libraryTitle);
+                  if (duplicate) {
+                    setMaterials((current) => current.some((item) => item.id === duplicate.id) ? current : [duplicate, ...current]);
+                    return duplicate;
+                  }
+                  const created = await repository.createMaterial({
+                    title: libraryTitle,
+                    author: profile.displayName || undefined,
+                    type: "Past paper",
+                    unit,
+                    topic: "Exam revision",
+                    date: new Date().toISOString().slice(0, 10),
+                    source: "Exam Review",
+                    url: "",
+                  }, file);
+                  setMaterials((current) => [created, ...current]);
+                  try {
+                    const indexed = await uploadLibraryMaterial(file, `Past paper · ${unit} · Exam Review`, created.author ?? undefined);
+                    setNotice(`Exam added to the shared Library and AI knowledge (${indexed.chunks} sections).`);
+                  } catch (indexError) {
+                    setNotice(`Exam added to the shared Library, but AI indexing failed: ${indexError instanceof Error ? indexError.message : "try indexing it again from the AI document area."}`);
+                  }
+                  return created;
+                }}
+              />
             </>
           )}
           {view === "guide" && (

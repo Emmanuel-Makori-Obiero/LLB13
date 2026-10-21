@@ -1,12 +1,20 @@
-import { useRef, useState } from "react";
-import { ClipboardCheck, FileSearch, Loader2, Sparkles, Upload } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ArrowUpRight, BookOpen, ClipboardCheck, FileSearch, Loader2, Sparkles, Upload } from "lucide-react";
 import { isSupabaseConfigured } from "./data/repository";
+import type { Material, Unit } from "./data/types";
 import { Markdown } from "./Markdown";
-import { askAI, uploadMaterial, type AIResult } from "./lib/ai";
+import { askAI, importLibraryMaterial, uploadMaterial, type AIResult } from "./lib/ai";
 import "./exam-review.css";
 
-type Paper = { id: string; title: string; text: string; chunks: number };
+type Paper = { id: string; title: string; text: string; chunks: number; libraryMaterialId?: string };
 type PaperQuestion = { question: string; modelAnswer: string; explanation: string; keyPoints: string[] };
+type Props = {
+  materials: Material[];
+  units: Unit[];
+  onAddToLibrary: (file: File, title: string, unit: string) => Promise<Material>;
+  onOpenLibrary: (materialId: string) => void;
+};
+
 function questionsFrom(result: AIResult): PaperQuestion[] {
   const data = result.data as { questions?: unknown[] } | null;
   if (Array.isArray(data?.questions)) {
@@ -27,9 +35,13 @@ function questionsFrom(result: AIResult): PaperQuestion[] {
     return [];
   }
 }
-export default function ExamReviewPage() {
+
+export default function ExamReviewPage({ materials, units, onAddToLibrary, onOpenLibrary }: Props) {
   const picker = useRef<HTMLInputElement>(null);
   const [paper, setPaper] = useState<Paper | null>(null);
+  const [sourceFile, setSourceFile] = useState<File | null>(null);
+  const [libraryPaperId, setLibraryPaperId] = useState("");
+  const [libraryUnit, setLibraryUnit] = useState("");
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState("");
   const [error, setError] = useState("");
@@ -37,9 +49,16 @@ export default function ExamReviewPage() {
   const [analysis, setAnalysis] = useState("");
   const [generated, setGenerated] = useState<PaperQuestion[]>([]);
   const [responses, setResponses] = useState<string[]>([]);
-  const [grading, setGrading] = useState("");
   const [gradeFeedback, setGradeFeedback] = useState("");
   const [questionCount, setQuestionCount] = useState(6);
+  const libraryPapers = materials.filter((material) => Boolean(material.url) && /paper|exam/i.test(`${material.title} ${material.type} ${material.topic}`));
+
+  useEffect(() => {
+    if (!libraryUnit && units.length) setLibraryUnit(units[0].name);
+  }, [libraryUnit, units]);
+  useEffect(() => {
+    if (!libraryPapers.some((material) => material.id === libraryPaperId)) setLibraryPaperId(libraryPapers[0]?.id ?? "");
+  }, [libraryPapers, libraryPaperId]);
 
   const uploadPaper = async (file?: File) => {
     if (!file || busy) return;
@@ -52,6 +71,7 @@ export default function ExamReviewPage() {
     try {
       const saved = await uploadMaterial(file);
       setPaper({ id: saved.id, title: file.name, text: saved.text, chunks: saved.chunks });
+      setSourceFile(file);
       setMyAnswers("");
       setProgress(`Paper ready · ${saved.chunks} sections added to your private AI knowledge base.`);
     } catch (cause) {
@@ -60,6 +80,51 @@ export default function ExamReviewPage() {
     } finally {
       setBusy(false);
       if (picker.current) picker.current.value = "";
+    }
+  };
+
+  const useLibraryPaper = async () => {
+    const source = libraryPapers.find((material) => material.id === libraryPaperId);
+    if (!source || busy) return;
+    setBusy(true);
+    setError("");
+    setProgress(`Opening “${source.title}” from the Library in your private study workspace…`);
+    setAnalysis("");
+    setGenerated([]);
+    setGradeFeedback("");
+    try {
+      const saved = await importLibraryMaterial({
+        title: source.title,
+        url: source.url,
+        citation: `${source.type} · ${source.unit} · ${source.topic}`,
+        author: source.author,
+      });
+      setPaper({ id: saved.id, title: source.title, text: saved.text, chunks: saved.chunks, libraryMaterialId: source.id });
+      setSourceFile(null);
+      setMyAnswers("");
+      setProgress(`Library paper ready · ${saved.chunks} sections added to your private AI knowledge base.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not open that Library paper. Check that its file link is available.");
+      setProgress("");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const addPaperToLibrary = async () => {
+    if (!paper || !sourceFile || busy) return;
+    setBusy(true);
+    setError("");
+    setProgress("Checking for an existing copy, then saving the original to the shared Library…");
+    try {
+      const linked = await onAddToLibrary(sourceFile, paper.title, libraryUnit || units[0]?.name || "General");
+      setPaper((current) => current ? { ...current, libraryMaterialId: linked.id } : current);
+      setProgress(`Linked to the shared Library as “${linked.title}”.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not add this paper to the shared Library.");
+      setProgress("");
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -107,7 +172,7 @@ export default function ExamReviewPage() {
       const questions = questionsFrom(result);
       if (!questions.length) throw new Error("The paper could not be converted into written questions. Try a clearer, text-readable paper and generate again.");
       setGenerated(questions.slice(0, questionCount));
-      setResponses(Array(questions.length).fill(""));
+      setResponses(Array(Math.min(questionCount, questions.length)).fill(""));
       setProgress(`${Math.min(questionCount, questions.length)} written-response questions generated from the uploaded paper's structure.`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not generate a practice paper.");
@@ -142,14 +207,20 @@ export default function ExamReviewPage() {
   };
 
   if (!isSupabaseConfigured) return <div className="card card-pad"><h2>Exam paper review</h2><p>Connect Supabase to save a paper to your private study knowledge base.</p></div>;
+
   return <main className="exam-review">
     <section className="exam-review-hero card card-pad">
       <div className="exam-review-copy"><span className="section-label"><ClipboardCheck size={14} /> INDEPENDENT REVISION WORKSPACE</span><h2>Understand the paper. Practise the reasoning.</h2><p>Upload a past paper, review model answers and corrections, or generate a new open-response paper that follows its visible structure. You write every answer yourself.</p></div>
       <div className="exam-review-upload"><button type="button" className="primary-button" disabled={busy} onClick={() => picker.current?.click()}>{busy && !paper ? <Loader2 size={15} className="exam-review-spin" /> : <Upload size={15} />} {paper ? "Replace exam paper" : "Upload an exam paper"}</button><input ref={picker} type="file" hidden accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" onChange={(event) => void uploadPaper(event.target.files?.[0])} /><small>PDF, DOCX, TXT or Markdown · text-readable papers work best</small></div>
     </section>
+    <section className="card card-pad exam-review-library-picker">
+      <div><span className="section-label"><BookOpen size={14} /> FROM YOUR LIBRARY</span><h3>Revise from a shared paper</h3><p>Open an existing Library paper for analysis; the review copy and your answers stay private.</p></div>
+      <div className="exam-review-library-picker-controls"><select aria-label="Select an exam or past paper from the Library" value={libraryPaperId} onChange={(event) => setLibraryPaperId(event.target.value)} disabled={busy || !libraryPapers.length}><option value="">{libraryPapers.length ? "Choose a Library paper…" : "No Library papers found"}</option>{libraryPapers.map((item) => <option key={item.id} value={item.id}>{item.title} · {item.unit}</option>)}</select><button type="button" className="secondary-button" disabled={busy || !libraryPaperId} onClick={() => void useLibraryPaper()}>{busy ? <Loader2 size={14} className="exam-review-spin" /> : <FileSearch size={14} />} Use selected paper</button></div>
+    </section>
     {(progress || error) && <div className={`exam-review-status ${error ? "error" : ""}`}>{busy && <Loader2 size={14} className="exam-review-spin" />}{error || progress}</div>}
     {!paper ? <section className="card card-pad exam-review-empty"><FileSearch size={30} /><h3>Start with any exam paper</h3><p>It can be your own paper or a past paper you are using to revise. On upload, readable text is saved as a private AI source so the review can refer back to it.</p></section> : <>
-      <section className="card card-pad exam-review-paper"><div><span className="section-label">PAPER IN YOUR PRIVATE KNOWLEDGE BASE</span><h3>{paper.title}</h3><p>{paper.chunks} indexed text sections · {paper.text.length.toLocaleString()} readable characters</p></div><span className="exam-review-private">Private to your account</span></section>
+      <section className="card card-pad exam-review-paper"><div><span className="section-label">PAPER IN YOUR PRIVATE KNOWLEDGE BASE</span><h3>{paper.title}</h3><p>{paper.chunks} indexed text sections · {paper.text.length.toLocaleString()} readable characters</p></div><div className="exam-review-paper-links"><span className="exam-review-private">{paper.libraryMaterialId ? "Linked to shared Library" : "Private to your account"}</span>{paper.libraryMaterialId && <button type="button" className="secondary-button" onClick={() => onOpenLibrary(paper.libraryMaterialId!)}><ArrowUpRight size={13} /> View in Library</button>}</div></section>
+      {sourceFile && !paper.libraryMaterialId && <section className="card card-pad exam-review-share"><div><span className="section-label"><BookOpen size={14} /> OPTIONAL SHARED COPY</span><h3>Add this exam to the Library?</h3><p>Sharing saves the original file in the class Library for other students. Your private review and answers remain private. Duplicate files link to the existing Library entry instead.</p></div><div className="exam-review-share-actions">{units.length > 0 && <label className="exam-review-field">Unit<select value={libraryUnit} onChange={(event) => setLibraryUnit(event.target.value)}>{units.map((unit) => <option key={unit.id} value={unit.name}>{unit.name}</option>)}</select></label>}<button type="button" className="secondary-button" disabled={busy} onClick={() => void addPaperToLibrary()}>{busy ? <Loader2 size={14} className="exam-review-spin" /> : <BookOpen size={14} />} Add to shared Library</button></div></section>}
       <div className="exam-review-columns">
         <section className="card card-pad"><div className="section-label"><FileSearch size={14} /> REVIEW THIS PAPER</div><h3>Get question-by-question feedback</h3><p className="field-hint">Optionally paste your answers below, labelled with the question numbers. The reviewer will summarize each question, propose an answer, and explain where your answer may be incomplete or wrong.</p><label className="exam-review-field">Your answers<textarea rows={9} value={myAnswers} onChange={(event) => setMyAnswers(event.target.value)} placeholder="Question 1: …\n\nQuestion 2: …" /></label><button type="button" className="primary-button" disabled={busy} onClick={() => void analyzePaper()}>{busy ? <Loader2 size={14} className="exam-review-spin" /> : <Sparkles size={14} />} Analyze questions and answers</button></section>
         <section className="card card-pad"><div className="section-label"><ClipboardCheck size={14} /> ADAPTIVE PRACTICE</div><h3>Generate a similar paper</h3><p className="field-hint">Use the uploaded paper's visible structure and source. Generated questions are new and written-response—no answer choices.</p><label className="exam-review-field exam-review-count">Questions<select value={questionCount} onChange={(event) => setQuestionCount(Number(event.target.value))}><option value={3}>3 questions</option><option value={6}>6 questions</option><option value={8}>8 questions</option></select></label><button type="button" className="secondary-button" disabled={busy} onClick={() => void generatePaper()}>{busy ? <Loader2 size={14} className="exam-review-spin" /> : <Sparkles size={14} />} Generate paper</button></section>
