@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildLearnerInstruction, initialDebateDifficulty, isPersonalizedStudyFeature, materialVisibleToLevel, personalizeMessages, shouldShowAdaptationSurvey } from '../src/lib/learnerAdaptation.ts';
+import { buildLearnerInstruction, defaultLearningPreference, initialDebateDifficulty, isPersonalizedStudyFeature, materialVisibleToLevel, personalizeMessages, shouldShowAdaptationSurvey } from '../src/lib/learnerAdaptation.ts';
 
 test('UON LLB stage guidance does not fabricate year-by-year subject sequences', () => {
   const text = buildLearnerInstruction({ learnerLevel: 'llb-year-2', learningPreference: 'balanced' });
@@ -47,6 +47,13 @@ test('survey is shown only to signed-in learners missing a level or support pref
   assert.equal(shouldShowAdaptationSurvey(false, { learnerLevel: '', learningPreference: '' }), false);
   assert.equal(shouldShowAdaptationSurvey(true, { learnerLevel: 'llb-year-1', learningPreference: '' }), true);
   assert.equal(shouldShowAdaptationSurvey(true, { learnerLevel: 'llb-year-2', learningPreference: 'guided' }), false);
+});
+
+test('year selection can be saved without forcing a second form choice', () => {
+  assert.equal(defaultLearningPreference(''), 'balanced');
+  assert.equal(defaultLearningPreference(undefined), 'balanced');
+  assert.equal(defaultLearningPreference('guided'), 'guided');
+  assert.equal(defaultLearningPreference('challenge'), 'challenge');
 });
 
 test('game difficulty defaults reflect a declared level and remain user-tunable', () => {

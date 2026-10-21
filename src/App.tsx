@@ -97,7 +97,7 @@ import FloatingLawyerAgent from "./FloatingLawyerAgent";
 import { ResearchWriter } from "./ResearchWriter";
 import { TranscriptAI } from "./TranscriptAI";
 import { askAI, extractText, setLearnerAdaptation, uploadLibraryMaterial, type AIFeature } from "./lib/ai";
-import { materialVisibleToLevel } from "./lib/learnerAdaptation";
+import { defaultLearningPreference, materialVisibleToLevel } from "./lib/learnerAdaptation";
 import { Markdown } from "./Markdown";
 import GrowthPage from "./GrowthPage";
 import PracticeRoom from "./PracticeRoom";
@@ -346,7 +346,7 @@ function App() {
       const learnerProfile: import("./lib/learnerAdaptation").LearningProfile = { learnerLevel: level as import("./lib/learnerAdaptation").LearnerLevel, learningPreference: preference as import("./lib/learnerAdaptation").LearningPreference };
       setLearnerAdaptation(learnerProfile);
       setSurveyLevel(level);
-      setSurveyPreference(preference);
+      setSurveyPreference(defaultLearningPreference(preference));
       setSurveyOpen(Boolean(session?.user && (!level || !preference)));
       setProfile({
         learnerLevel: level,
@@ -705,13 +705,15 @@ function App() {
   };
   const saveProfile = async (changes: Partial<UserProfile>) => {
     if (!supabase) return;
+    const selectedLevel = changes.learnerLevel ?? profile.learnerLevel;
+    const selectedPreference = changes.learningPreference ?? profile.learningPreference;
     const metadata = {
       display_name: changes.displayName ?? profile.displayName,
       role: changes.role ?? profile.role,
       avatar_url: changes.avatarUrl ?? profile.avatarUrl,
       wallpaper_url: changes.wallpaperUrl ?? profile.wallpaperUrl,
-      learner_level: changes.learnerLevel ?? profile.learnerLevel,
-      learning_preference: changes.learningPreference ?? profile.learningPreference,
+      learner_level: selectedLevel,
+      learning_preference: selectedLevel ? defaultLearningPreference(selectedPreference) : selectedPreference,
     };
     const { error } = await supabase.auth.updateUser({ data: metadata });
     if (error) throw new Error(error.message);
@@ -724,6 +726,9 @@ function App() {
       wallpaperUrl: metadata.wallpaper_url,
     });
     setLearnerAdaptation({ learnerLevel: metadata.learner_level as LearnerLevel | "", learningPreference: metadata.learning_preference as LearningPreference | "" });
+    setSurveyLevel(metadata.learner_level as LearnerLevel | "");
+    setSurveyPreference(defaultLearningPreference(metadata.learning_preference as LearningPreference | ""));
+    setSurveyOpen(Boolean(userId && (!metadata.learner_level || !metadata.learning_preference)));
   };
   const saveAdaptationSurvey = async () => {
     if (!surveyLevel || !surveyPreference) return;
@@ -1480,7 +1485,7 @@ function App() {
           <section className="survey-card" role="dialog" aria-modal="true" aria-labelledby="learner-survey-title">
             <span className="eyebrow">Make your workspace yours · 1 of 2</span>
             <h2 id="learner-survey-title">What are you studying?</h2>
-            <p>Choose a programme level. This gives the study assistant a starting point—not an assumption about your ability. You can change it in Profile settings.</p>
+            <p>Choose your programme level. Balanced support is preselected, so you can save your year now and change the support style or study level later in Profile settings.</p>
             <div className="survey-options">{learnerLevels.map((item) => <button type="button" key={item.id} aria-pressed={surveyLevel === item.id} className={surveyLevel === item.id ? "selected" : ""} onClick={() => setSurveyLevel(item.id)}>{item.label}<span>{item.id === "prefer-not-to-say" ? "We will not infer a course or stage" : "Set relevant study context"}</span></button>)}</div>
             <div className="survey-style">
               <span className="eyebrow">2 · How would you like help?</span>
@@ -4448,6 +4453,12 @@ function ProfileSettings({
   const [learnerLevel, setLearnerLevel] = useState(profile.learnerLevel);
   const [learningPreference, setLearningPreference] = useState(profile.learningPreference);
   const [busy, setBusy] = useState("");
+  useEffect(() => {
+    setName(profile.displayName);
+    setRole(profile.role);
+    setLearnerLevel(profile.learnerLevel);
+    setLearningPreference(profile.learningPreference);
+  }, [profile.displayName, profile.role, profile.learnerLevel, profile.learningPreference]);
   const completion =
     ([name.trim(), role.trim(), profile.avatarUrl].filter(Boolean).length / 3) *
     100;
@@ -4525,6 +4536,7 @@ function ProfileSettings({
               <option value="">Choose a study level</option>
               {learnerLevels.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
             </select>
+            <span className="field-hint">Save your profile to apply this level to the dashboard, learning tools and year-filtered Library.</span>
           </label>
           <label>How should study help be tailored?
             <select value={learningPreference} onChange={(event) => setLearningPreference(event.target.value as LearningPreference)}>
