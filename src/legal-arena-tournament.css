@@ -25,3 +25,5 @@
 /* Let the live play area occupy more of the full-screen match view. */
 .arena-match-shell.live .arena-match-main{min-height:clamp(300px,45vh,640px)}
 @media(max-width:760px){.arena-match-shell.live .arena-match-main{min-height:clamp(280px,42vh,520px)}}
+
+.arena-match-motion{display:grid;gap:6px;padding:14px 18px;border:1px solid rgba(99,209,149,.6);border-left:4px solid #62d295;background:rgba(31,70,50,.62)}.arena-match-motion span{color:#9fe5bd;font-size:9px;font-weight:800;letter-spacing:.14em}.arena-match-motion strong{color:#fff;font-size:clamp(16px,2vw,22px);line-height:1.4;overflow-wrap:anywhere}
