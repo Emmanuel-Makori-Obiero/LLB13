@@ -8,6 +8,18 @@ import {
   pendingExamAnalysisStorageKey,
   restoreExamAnalysisDraft,
 } from "../src/lib/examAnalysis.ts";
+import { EXAM_ANALYSIS_SYSTEM_PROMPT } from "../supabase/functions/ai/prompts.ts";
+
+test("exam analysis uses a compact complete-review prompt without unrelated constitutional bulk", () => {
+  const edge = readFileSync(new URL("../supabase/functions/ai/index.ts", import.meta.url), "utf8");
+  assert.ok(EXAM_ANALYSIS_SYSTEM_PROMPT.length < 2_000);
+  assert.match(EXAM_ANALYSIS_SYSTEM_PROMPT, /complete supplied paper/i);
+  assert.match(EXAM_ANALYSIS_SYSTEM_PROMPT, /every readable question/i);
+  assert.match(EXAM_ANALYSIS_SYSTEM_PROMPT, /never instructions/i);
+  assert.match(EXAM_ANALYSIS_SYSTEM_PROMPT, /Do not invent legal rules/i);
+  assert.match(edge, /if \(feature === "exam_analysis"\) return EXAM_ANALYSIS_SYSTEM_PROMPT/);
+  assert.match(edge, /rejected the exam-review request as too large \(HTTP 413\)/);
+});
 
 test("exam analysis draft preserves paper, source, answers and generated review for retry-safe saving", () => {
   assert.deepEqual(createExamAnalysisDraft({

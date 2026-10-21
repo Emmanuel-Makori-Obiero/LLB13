@@ -4,6 +4,7 @@ import { selectFastFailoverKey, secretKeyEntries } from "../_shared/keys.ts";
 import { reserveAiQuota } from "../_shared/quotas.ts";
 import { recordProviderUsage } from "../_shared/usage.ts";
 import { selectDocumentChunkIndexes } from "./retrieval.ts";
+import { EXAM_ANALYSIS_SYSTEM_PROMPT } from "./prompts.ts";
 
 // ===== providers (fallback chain) =====
 // Free-tier fallback chain. Every provider speaks the OpenAI chat-completions format.
@@ -712,6 +713,7 @@ function systemPrompt(
   hasSources: boolean,
   feature: string,
 ): string {
+  if (feature === "exam_analysis") return EXAM_ANALYSIS_SYSTEM_PROMPT;
   const base = `You are the Group 13 Hub legal learning coach for law students. Default jurisdiction: ${JURISDICTION} unless the student says otherwise.
 
 NON-NEGOTIABLE RULES
@@ -1106,10 +1108,14 @@ Deno.serve(async (req) => {
     const status = Number((err as { status?: unknown }).status);
     const safeStatus = Number.isInteger(status) && status >= 400 && status < 600 ? status : 503;
     const publicMessage = (err as { publicMessage?: unknown }).publicMessage;
+    const attempts = (err as { attempts?: unknown }).attempts;
+    const requestTooLarge = Array.isArray(attempts) && attempts.some((attempt) => (attempt as { status?: unknown }).status === "413");
     return json(
       {
-        error: typeof publicMessage === "string" ? publicMessage : "Each failed model was skipped and the same request was sent to the next fallback, but none of the configured models returned a result. Check provider keys, model IDs, and quota, then retry.",
-        attempts: (err as { attempts?: unknown }).attempts ?? [],
+        error: typeof publicMessage === "string" ? publicMessage : requestTooLarge
+          ? "One or more providers rejected the exam-review request as too large (HTTP 413). The unrelated prompt overhead has been removed; the selected paper was not truncated. If this persists, shorten the student-answer text and retry."
+          : "Each failed model was skipped and the same request was sent to the next fallback, but none of the configured models returned a result. Check provider keys, model IDs, and quota, then retry.",
+        attempts: attempts ?? [],
         retry_after_seconds: Math.ceil(Number((err as { retryAfterMs?: number }).retryAfterMs ?? 0) / 1000),
       },
       safeStatus,
