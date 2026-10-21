@@ -14,73 +14,7 @@ import { recordProviderUsage } from "../_shared/usage.ts";
 export type Msg = { role: "system" | "user" | "assistant"; content: string };
 type ReasoningStyle = "openrouter" | "effort" | "none";
 
-export interface Entry {
-  provider: string;
-  baseUrl: string;
-  keyEnv: string;
-  model: string;
-  reasoning: ReasoningStyle;
-  maxTokens?: number; // thinking models need room for reasoning + answer
-  noSystem?: boolean; // model rejects the system role: merge it into the first user turn
-}
-
-const BASE = {
-  gemini: [
-    "https://generativelanguage.googleapis.com/v1beta/openai",
-    "GEMINI_API_KEY",
-  ],
-  nvidia: ["https://integrate.api.nvidia.com/v1", "NVIDIA_API_KEY"],
-  openrouter: ["https://openrouter.ai/api/v1", "OPENROUTER_API_KEY"],
-  groq: ["https://api.groq.com/openai/v1", "GROQ_API_KEY"],
-  cerebras: ["https://api.cerebras.ai/v1", "CEREBRAS_API_KEY"],
-  mistral: ["https://api.mistral.ai/v1", "MISTRAL_API_KEY"],
-} as const;
-
-const e = (
-  p: keyof typeof BASE,
-  model: string,
-  reasoning: ReasoningStyle = "none",
-  noSystem = false,
-  maxTokens?: number,
-): Entry => ({
-  provider: p,
-  baseUrl: BASE[p][0],
-  keyEnv: BASE[p][1],
-  model,
-  reasoning,
-  noSystem,
-  maxTokens,
-});
-
-// Ordered strongest-reasoning-first, spread across providers so one quota running dry never stalls the chain.
-export const DEFAULT_CHAIN: Entry[] = [
-  e("gemini", "gemini-3.6-flash", "effort", false, 16000),
-  // Reach an independent provider immediately if the primary Gemini endpoint
-  // is rate-limited, unavailable, or slow; do not exhaust every Gemini model first.
-  e("groq", "openai/gpt-oss-120b", "effort"),
-  e("groq", "llama-3.1-8b-instant"),
-  e("gemini", "gemini-3.5-flash", "effort", false, 16000),
-  e("gemini", "gemini-2.5-flash", "effort", false, 12000),
-  e("gemini", "gemini-2.5-flash-lite", "effort", false, 8000),
-  e("cerebras", "gpt-oss-120b", "effort"),
-  e("openrouter", "deepseek/deepseek-v4-flash:free", "openrouter"),
-  e("openrouter", "nvidia/nemotron-3-ultra-550b-a55b:free", "openrouter"),
-  e("nvidia", "z-ai/glm-5.2"), // verify exact IDs at build.nvidia.com
-  e("mistral", "mistral-large-latest"),
-  e("openrouter", "openai/gpt-oss-120b:free", "openrouter"),
-  e("openrouter", "inclusionai/ring-2.6-1t:free", "openrouter"),
-  e("openrouter", "arcee-ai/trinity-large-thinking:free", "openrouter"),
-  e("openrouter", "nvidia/nemotron-3-super-120b-a12b:free", "openrouter"),
-  e("openrouter", "qwen/qwen3-next-80b-a3b-instruct:free", "openrouter"),
-  e("openrouter", "qwen/qwen3-32b:free", "openrouter"),
-  e("openrouter", "deepseek/deepseek-r1-0528:free", "openrouter"),
-  e("groq", "llama-3.3-70b-versatile"),
-  e("openrouter", "meta-llama/llama-3.3-70b-instruct:free", "openrouter"),
-  e("openrouter", "google/gemma-4-31b-it:free", "openrouter", true),
-  e("openrouter", "google/gemma-3-27b-it:free", "openrouter", true),
-  e("gemini", "gemini-3.5-flash-lite", "effort", false, 16000),
-  e("openrouter", "openrouter/free", "openrouter"), // last resort: OpenRouter picks any live free model
-];
+import { DEFAULT_CHAIN, type Entry } from "./providers.ts";
 
 function chain(feature?: string): Entry[] {
   const stageName = feature
