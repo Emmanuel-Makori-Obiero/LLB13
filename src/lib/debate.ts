@@ -130,6 +130,18 @@ export async function getDebateRoom(id: string) {
   return data as DebateRoom;
 }
 
+export async function listDebateRoomsForUser(userId: string) {
+  const { data, error } = await db()
+    .from("debate_rooms")
+    .select("*")
+    .or(`player_one_id.eq.${userId},player_two_id.eq.${userId}`)
+    .neq("status", "cancelled")
+    .order("created_at", { ascending: false })
+    .limit(25);
+  if (error) throw new Error(error.message || "Could not load your debate history.");
+  return (data ?? []) as DebateRoom[];
+}
+
 export async function listDebateMessages(roomId: string) {
   const { data, error } = await db()
     .from("debate_messages")

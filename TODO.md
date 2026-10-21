@@ -24,3 +24,10 @@
 - A failed save leaves the generated analysis visible, reports that it was not saved, restores an account-keyed tab draft after navigation or refresh, warns on page exit, and provides an idempotent retry; the UI never shows success until Supabase confirms.
 - No exam paper or analysis is silently copied into the shared Library. Run typecheck, all tests and production build; verify the live table, grants and owner policy without mutating real analysis data.
 - Exam analysis uses document-wide retrieval for exactly one selected paper instead of embedding the full paper twice in one request; it includes every indexed chunk up to the explicit 24-chunk cap and rejects larger papers rather than silently sampling. Submitted answers are preserved up to the visible 17,000-character limit; a 10,000-character paper receives the longer bounded timeout.
+
+## Legal Arena debate persistence and legal-scope quality
+- Signed-in participants can return to a list of up to 25 saved debate rooms; the app automatically restores an in-progress room once per visit and offers explicit reopen/review controls for other rooms.
+- Invite-link opening/sharing is not represented as a join. A join is acknowledged only after the invitee signs in, selects the opposing side, and successfully invokes the secured join operation; the host sees the participant name, side, and live status, including through polling when realtime notifications are unavailable.
+- Keep the legal motion visible throughout the match and persist the generated court question—not a broad topic label—as the room motion.
+- Case generation accepts legal topics only, cites only provided verified Kenya Law results, requires all six balanced case-packet sections, rejects irrelevant Boolean/search/computer jargon, and retries an invalid draft once before discarding it.
+- Constrain case-setter, live-opponent/commentator, and final-evaluator prompts to material legal issues, evidence, authority, inference, procedure, and remedies. Validate with the full test suite, project check, and production build.

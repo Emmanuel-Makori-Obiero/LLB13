@@ -61,7 +61,7 @@ Group 13 becomes a quiet legal study workspace: the music queue is a movable, re
 2. Games Hub is visible from navigation and preserves the existing AI judge/practice tools.
 3. Grounded AI Case Debate lets a user choose uploaded/library material, choose 10 or 20 minutes, submit opening/rebuttal/closing turns, receive concise AI counterarguments, and receive a final rubric evaluation with source warnings.
 4. Choices game generates a branching Kenyan-law scenario from selected material, records choices, shows consequences, and gives a grounded debrief.
-5. PVP Debate has a real session model and realtime message flow so two signed-in users can join a shared room, choose a timer, exchange structured turns, and request an AI evaluation of the recorded debate. It must not claim a room is live when realtime/database setup is unavailable.
+5. PVP Debate has a real session model and realtime message flow so two signed-in users can join a shared room, choose a timer, exchange structured turns, and request an AI evaluation of the recorded debate. It must not claim a room is live when realtime/database setup is unavailable. Rooms are persistent and participant-scoped: users can restore in-progress rooms and reopen results after navigating away. An invitee counts as joined only after the secured join operation succeeds, and the host sees an explicit participant/side confirmation. Keep the actual court motion visible throughout the room.
 
 ### Project structure
 
@@ -75,7 +75,7 @@ Group 13 becomes a quiet legal study workspace: the music queue is a movable, re
 
 ### Grounding and safety decisions
 
-AI prompts must identify the selected source IDs and use the existing `materials`/`library` modes. The UI must show source basis and warnings, distinguish generated hypotheticals from legal authorities, and state that scores are practice feedback rather than legal advice. PVP evaluation must only use stored debate messages and selected sources. No user secret or provider key is placed in the frontend.
+AI prompts must identify the selected source IDs and use the existing `materials`/`library` modes. The UI must show source basis and warnings, distinguish generated hypotheticals from legal authorities, and state that scores are practice feedback rather than legal advice. PVP evaluation must only use stored debate messages and selected sources. Case setting, live opponents, and final evaluation must stay focused on material legal issues, evidence, verified authority, inference, procedure, and remedies; reject fabricated unrelated Boolean/search/computer-support narratives. No user secret or provider key is placed in the frontend.
 
 
 ## Requested admin and reliability improvements

@@ -27,6 +27,7 @@ export type AIFeature =
   | "irac"
   | "essay_feedback"
   | "arena_judgment"
+  | "arena_case"
   | "study_plan"
   | "kaizen_check"
   | "timetable_proposal"

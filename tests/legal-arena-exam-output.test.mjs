@@ -6,6 +6,8 @@ import { normalizePracticeExam } from "../src/lib/practiceExam.ts";
 const games = readFileSync(new URL("../src/GamesHub.tsx", import.meta.url), "utf8");
 const examPage = readFileSync(new URL("../src/ExamReviewPage.tsx", import.meta.url), "utf8");
 const arenaCss = readFileSync(new URL("../src/legal-arena-tournament.css", import.meta.url), "utf8");
+const aiIndex = readFileSync(new URL("../supabase/functions/ai/index.ts", import.meta.url), "utf8");
+const aiPrompts = readFileSync(new URL("../supabase/functions/ai/prompts.ts", import.meta.url), "utf8");
 
 const q = (number, marks = 20) => ({
   number,
@@ -38,7 +40,12 @@ test("valid question marks are proportionally normalized to exactly 100", () => 
 test("live debate always renders the motion and the bot is instructed to stay on the legal issue", () => {
   assert.match(games, /DEBATE MOTION/);
   assert.match(games, /room\.motion\?\.trim\(\)/);
-  assert.match(games, /Do not turn a library title, topic or metadata into a product complaint or technical-support dispute/);
+  assert.match(games, /feature: "arena_case"/);
+  assert.match(games, /validateGeneratedCasePacket/);
+  assert.match(games, /motion: casePacket\.question/);
+  assert.match(aiPrompts, /STRICT LEGAL SCOPE:[\s\S]*Boolean operators, truncation, indexing/);
+  assert.match(aiIndex, /LIVE LEGAL ADVOCACY ONLY:[\s\S]*Boolean operators/);
+  assert.match(aiIndex, /Never invent authority, facts, software\/search features/);
   assert.match(games, /Do not introduce product features, software search behavior, Boolean operators, truncation, indexing or interface details/);
   assert.match(games, /disregard them and focus on the legal cause of action, rights\/duties, relevant evidence and remedy/);
   assert.match(arenaCss, /\.arena-match-motion/);

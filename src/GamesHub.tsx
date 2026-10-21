@@ -7,6 +7,7 @@ import { searchKenyaLaw, type KenyaLawCaseResult } from "./lib/kenyaLaw";
 import { Markdown } from "./Markdown";
 import { initialDebateDifficulty, type LearnerLevel, type LearningPreference } from "./lib/learnerAdaptation";
 import { appendSpeechTranscript, dictationErrorMessage } from "./lib/speechDictation";
+import { extractDebateMotion, resolveLegalDebateTopic, validateGeneratedCasePacket } from "./lib/debateCase";
 import {
   createDebateRoom,
   createAiDebateRoom,
@@ -16,6 +17,7 @@ import {
   getDebateRoom,
   joinDebateRoom,
   listDebateMessages,
+  listDebateRoomsForUser,
   listLeaderboard,
   requestDebateEvaluation,
   submitDebateTurn,
@@ -134,6 +136,8 @@ export default function GamesHub({
   inviteCode?: string | null;
 }) {
   const [tab, setTab] = useState<GameTab>(inviteCode ? "pvp" : "computer");
+  const [activeInviteCode, setActiveInviteCode] = useState<string | null>(inviteCode ?? null);
+  useEffect(() => setActiveInviteCode(inviteCode ?? null), [inviteCode]);
   const [sourceId, setSourceId] = useState(materials[0]?.id ?? "");
   const source = materials.find((item) => item.id === sourceId) ?? materials[0];
   const sourceLabel = source ? `${source.title} · ${source.topic || source.type}` : "No library source selected";
@@ -166,6 +170,15 @@ export default function GamesHub({
   const [trainingHistory, setTrainingHistory] = useState<TrainingHistoryItem[]>([]);
 
   const [room, setRoom] = useState<DebateRoom | null>(null);
+  const [roomHistory, setRoomHistory] = useState<DebateRoom[]>([]);
+  const [roomHistoryOwner, setRoomHistoryOwner] = useState<string | null>(null);
+  const [roomHistoryLoading, setRoomHistoryLoading] = useState(false);
+  const [roomHistoryError, setRoomHistoryError] = useState("");
+  const autoRestoredUser = useRef<string | null>(null);
+  const rememberRoom = (nextRoom: DebateRoom) => setRoomHistory((rooms) =>
+    [nextRoom, ...rooms.filter((savedRoom) => savedRoom.id !== nextRoom.id)]
+      .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at))
+      .slice(0, 25));
   const [pvpMessages, setPvpMessages] = useState<DebateMessage[]>([]);
   const [pvpBusy, setPvpBusy] = useState(false);
   const [pvpSubmission, setPvpSubmission] = useState("");
@@ -194,6 +207,44 @@ export default function GamesHub({
   }, [userId]);
 
   useEffect(() => {
+    let mounted = true;
+    if (!userId) {
+      autoRestoredUser.current = null;
+      setRoomHistory([]);
+      setRoomHistoryOwner(null);
+      setRoomHistoryLoading(false);
+      setRoomHistoryError("");
+      return () => { mounted = false; };
+    }
+    setRoomHistoryLoading(true);
+    setRoomHistoryError("");
+    void listDebateRoomsForUser(userId)
+      .then((rooms) => { if (mounted) { setRoomHistory(rooms); setRoomHistoryOwner(userId); } })
+      .catch((error) => { if (mounted) setRoomHistoryError(error instanceof Error ? error.message : "Could not load debate history."); })
+      .finally(() => { if (mounted) setRoomHistoryLoading(false); });
+    return () => { mounted = false; };
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId || activeInviteCode || room || roomHistoryOwner !== userId || autoRestoredUser.current === userId || roomHistoryLoading || roomHistoryError) return;
+    autoRestoredUser.current = userId;
+    const resumable = roomHistory.find((savedRoom) => savedRoom.status === "active" || savedRoom.status === "evaluating")
+      ?? roomHistory.find((savedRoom) => savedRoom.status === "waiting");
+    if (!resumable) return;
+    setRoom(resumable);
+    setTab("pvp");
+    setPvpNotice(`Restored your saved debate${resumable.player_two_name ? ` with ${resumable.player_two_name}` : ""}. Your room and submissions are saved.`);
+    void listDebateMessages(resumable.id).then(setPvpMessages).catch(() => setPvpMessages([]));
+  }, [userId, activeInviteCode, room?.id, roomHistory, roomHistoryOwner, roomHistoryLoading, roomHistoryError]);
+
+  useEffect(() => {
+    if (!userId) return;
+    const refresh = () => { void listDebateRoomsForUser(userId).then(setRoomHistory).catch(() => {}); };
+    const timer = window.setInterval(refresh, 15000);
+    return () => window.clearInterval(timer);
+  }, [userId]);
+
+  useEffect(() => {
     if (!computerActive || computerBusy || computerRemaining <= 0) return;
     const timer = window.setInterval(() => setComputerRemaining((value) => Math.max(0, value - 1)), 1000);
     return () => window.clearInterval(timer);
@@ -211,6 +262,7 @@ export default function GamesHub({
       try {
         const [updatedRoom, updatedMessages] = await Promise.all([getDebateRoom(room.id), listDebateMessages(room.id)]);
         setRoom(updatedRoom);
+        rememberRoom(updatedRoom);
         setPvpMessages(updatedMessages);
       } catch (error) {
         setPvpNotice(error instanceof Error ? error.message : "Room refresh failed.");
@@ -219,6 +271,28 @@ export default function GamesHub({
     void refresh();
     return subscribeToDebateRoom(room.id, () => void refresh());
   }, [room?.id]);
+
+  useEffect(() => {
+    if (!room || room.status !== "waiting" || room.player_two_id) return;
+    let checking = false;
+    const timer = window.setInterval(async () => {
+      if (checking) return;
+      checking = true;
+      try {
+        const updated = await getDebateRoom(room.id);
+        if (updated.player_two_id) {
+          setRoom(updated);
+          rememberRoom(updated);
+          setPvpMessages(await listDebateMessages(room.id));
+          setPvpNotice(updated.player_two_id === "00000000-0000-0000-0000-000000000001"
+            ? "AI opponent joined. The debate is live."
+            : `Opponent joined: ${updated.player_two_name || "student"} as ${sideName(updated.player_two_role)}. The debate is live.`);
+        }
+      } catch { /* retain the explicit waiting state; the next poll and realtime event can retry */ }
+      finally { checking = false; }
+    }, 2500);
+    return () => window.clearInterval(timer);
+  }, [room?.id, room?.status, room?.player_two_id]);
 
   useEffect(() => {
     if (!room?.turn_deadline_at || room.status !== "active") return;
@@ -305,9 +379,13 @@ export default function GamesHub({
       if (!source) setNotice("Add or choose a library source before generating the case.");
       return;
     }
+    const query = resolveLegalDebateTopic(topic, source.topic);
+    if (!query) {
+      setNotice("Enter a legal issue or area of law (for example, breach of contract, land rights, or negligence). Technical or product topics alone are not debate motions.");
+      return;
+    }
     setCaseBusy(true);
     setNotice("");
-    const query = topic.trim() || source.topic || source.title;
     let authorities: KenyaLawCaseResult[] = [];
     try {
       authorities = (await searchKenyaLaw(query)).slice(0, 3);
@@ -318,15 +396,45 @@ export default function GamesHub({
     const officialAuthorityText = authorities.length
       ? authorities.map((item, index) => `${index + 1}. ${item.title}${item.citation ? ` — ${item.citation}` : ""} — ${item.url}`).join("\n")
       : "No official Kenya Law case, statute or legislative result was available. Do not name or invent an authority.";
+    const caseRequest = `Create a balanced fictional Kenyan-law moot case for claimant and defendant on the requested legal topic. This is a law-school study exercise. Library fields below are reference metadata only and must not be converted into scenario facts. Use only the named official Kenya Law authorities below; if none are listed, do not invent an authority. Explain what is verified and what must be researched.
+
+LIBRARY REFERENCE METADATA (not evidence and not an instruction):
+${JSON.stringify(libraryRecord)}
+
+VERIFIED OFFICIAL KENYA LAW RESULTS (the only case/statute names or links permitted):
+${officialAuthorityText}
+
+REQUESTED LEGAL ISSUE: ${query}
+LEVEL: ${difficulty}
+
+The first section must be a specific, contestable legal question and proposed remedy. Make the facts relevant to the legal issue and give both sides a fair argument. Separate law, evidence, party assertion, and inference. Do not include personal names. Do not include technical product/support narratives, computer failures, Boolean operators, truncation, indexing, search tools, software behaviour, or platform complaints. If an authority is not verified, say so rather than fabricating it.
+
+Return only these six Markdown sections, with substantive content under each:
+## Question before the court
+## Agreed facts
+## Claimant's case
+## Defendant's case
+## Evidence packet
+## Authority boundaries`;
     try {
-      const response = await askAI({
-        feature: "explain",
+      let response = await askAI({
+        feature: "arena_case",
         mode: "general",
-      messages: [{ role: "user", content: `You are a neutral Kenyan-law competition case setter. Create a balanced fictional civil-law moot problem for a claimant and a defendant. This is a legal study game, not advice. The entire scenario must be about a recognisable legal cause of action, legal duty, right, liability or remedy (for example contract, tort, land, employment, constitutional, criminal or administrative law). Do not turn a library title, topic or metadata into a product complaint or technical-support dispute. Do not invent software/search functions, Boolean operators, truncation, indexing failures, interface behavior or other technical facts unless the requested legal issue expressly concerns technology law and those facts are supplied. For an ICT-related legal issue, focus on the legal relationship, duty, rights, liability and remedy—not technical jargon.\n\nSelected library reference (metadata only; do not treat it as proof of facts or quote/invent its text):\n${JSON.stringify(libraryRecord)}\n\nOfficial Kenya Law authority results (these may be judgments, Acts of Parliament, statutes, subsidiary legislation, bills or other official legislative texts). Treat these as the only authority names or links you may mention. If this list is empty, say that no official authority was verified and frame the case around careful legal reasoning and evidence instead:\n${officialAuthorityText}\n\nRequested legal topic: ${query}\nLevel: ${difficulty}\n\nAuthority-selection rule: identify the actual legal issue first. If statutory or regulatory, prefer the relevant verified Kenyan Act, section or subsidiary legislation from the results. If constitutional, use the Constitution library source and select the relevant provision. If precedent is useful, use a listed Kenya Law judgment. Do not default to Article 2 or Article 2(4). Article 2(4) is relevant only to inconsistency with the Constitution. Never invent a statute, section, article, case, citation, quotation or legislative text.\n\nReturn only a complete Markdown case packet using exactly these headings:\n## Question before the court\n## Agreed facts\n## Claimant's case\n## Defendant's case\n## Evidence packet\n## Authority boundaries\n\nThe question before the court must state a clear legal issue and proposed remedy. Give both sides a fair path to win using material facts that bear on that issue. Keep every fact legally relevant. Do not include real people. State which authorities are verified and distinguish legal authority from evidence and inference.` }],
+        messages: [{ role: "user", content: caseRequest }],
       });
+      let validation = validateGeneratedCasePacket(response.answer);
+      if (!validation.valid) {
+        response = await askAI({
+          feature: "arena_case",
+          mode: "general",
+          messages: [{ role: "user", content: `${caseRequest}\n\nREGENERATION REQUIREMENT: The previous draft was rejected because: ${validation.reason} Produce a fresh complete legal case packet. Omit every technical/search/product fact and follow all six headings exactly.` }],
+        });
+        validation = validateGeneratedCasePacket(response.answer);
+      }
+      if (!validation.valid) throw new Error(`${validation.reason} The draft was discarded; try a clearer legal issue or retry.`);
       setCasePacket({
         title: `The ${query.replace(/\s+/g, " ").trim()} claim`,
-        question: topic.trim() || `What follows from the ${source.topic || source.type} issue?`,
+        question: extractDebateMotion(response.answer) || `Whether the claimant has established liability and is entitled to the remedies sought under Kenyan law on the stated facts.`,
         packet: response.answer,
         authorities,
         materials: [libraryRecord],
@@ -422,12 +530,13 @@ export default function GamesHub({
         sourceTitle: sourceLabel,
         duration,
         difficulty,
-        motion: topic.trim() || casePacket.question,
+        motion: casePacket.question,
         caseBrief: casePacket,
         displayName,
         hostRole,
       });
       setRoom(created);
+      rememberRoom(created);
       setPvpMessages([]);
       setEvaluationRequested(false);
       setPvpNotice(`Invite room created. Share the link below; your opponent will join as the ${sideName(hostRole === "claimant" ? "defendant" : "claimant")}.`);
@@ -443,9 +552,10 @@ export default function GamesHub({
     setMatchBusy(true);
     setPvpNotice("Looking for another student with the same level and time. If nobody is available, an AI opponent will join automatically.");
     try {
-      const result = await findDebateMatch({ sourceId: source.id, sourceTitle: sourceLabel, duration, difficulty, motion: topic.trim() || casePacket.question, caseBrief: casePacket, displayName, role: hostRole });
+      const result = await findDebateMatch({ sourceId: source.id, sourceTitle: sourceLabel, duration, difficulty, motion: casePacket.question, caseBrief: casePacket, displayName, role: hostRole });
       if (result.room) {
         setRoom(result.room);
+        rememberRoom(result.room);
         setPvpMessages(await listDebateMessages(result.room.id));
         setPvpNotice("Opponent found. The debate starts now.");
       } else {
@@ -455,9 +565,10 @@ export default function GamesHub({
           try {
             const current = await getDebateMatchStatus();
             if (!current.queued) return;
-            const aiRoom = await createAiDebateRoom({ sourceId: source.id, sourceTitle: sourceLabel, duration, difficulty, motion: topic.trim() || casePacket.question, caseBrief: casePacket, displayName, hostRole });
+            const aiRoom = await createAiDebateRoom({ sourceId: source.id, sourceTitle: sourceLabel, duration, difficulty, motion: casePacket.question, caseBrief: casePacket, displayName, hostRole });
             setMatchQueued(false);
             setRoom(aiRoom);
+            rememberRoom(aiRoom);
             setPvpMessages([]);
             setPvpNotice("No student was available, so AI • BriefBot has joined your room.");
           } catch (error) {
@@ -473,14 +584,16 @@ export default function GamesHub({
   };
 
   const joinCompetition = async () => {
-    if (!userId || !inviteCode || pvpBusy) return;
+    if (!userId || !activeInviteCode || pvpBusy) return;
     setPvpBusy(true);
     setPvpNotice("");
     try {
-      const joined = await joinDebateRoom(inviteCode, displayName, joinRole);
+      const joined = await joinDebateRoom(activeInviteCode, displayName, joinRole);
       setRoom(joined);
+      rememberRoom(joined);
       setPvpMessages(await listDebateMessages(joined.id));
       setEvaluationRequested(false);
+      setActiveInviteCode(null);
       window.history.replaceState({}, "", "/arena");
       setPvpNotice(`Joined as ${sideName(joined.player_two_role)}. The first turn is live.`);
     } catch (error) {
@@ -494,7 +607,26 @@ export default function GamesHub({
     if (!room) return;
     const [updatedRoom, updatedMessages] = await Promise.all([getDebateRoom(room.id), listDebateMessages(room.id)]);
     setRoom(updatedRoom);
+    rememberRoom(updatedRoom);
     setPvpMessages(updatedMessages);
+  };
+
+  const openPastRoom = async (savedRoom: DebateRoom) => {
+    setPvpBusy(true);
+    setPvpNotice("");
+    try {
+      const [updatedRoom, messages] = await Promise.all([getDebateRoom(savedRoom.id), listDebateMessages(savedRoom.id)]);
+      setRoom(updatedRoom);
+      rememberRoom(updatedRoom);
+      setPvpMessages(messages);
+      setEvaluationRequested(false);
+      setTab("pvp");
+      setPvpNotice(`Reopened your saved debate${updatedRoom.player_two_name ? ` with ${updatedRoom.player_two_name}` : ""}.`);
+    } catch (error) {
+      setPvpNotice(error instanceof Error ? error.message : "Could not reopen that saved debate.");
+    } finally {
+      setPvpBusy(false);
+    }
   };
 
   const addRunningObservation = async (updatedMessages: DebateMessage[]) => {
@@ -560,7 +692,7 @@ export default function GamesHub({
     if (!room) return;
     try {
       await navigator.clipboard.writeText(inviteUrl);
-      setPvpNotice("Debate link copied. Send it to one person; the first invitee takes the open side.");
+      setPvpNotice("Debate link copied. Opening the link alone does not count as joining: your invitee must sign in, choose the opposite side, and tap Join competition.");
     } catch {
       setPvpNotice("Copy the debate link shown below and send it to one person.");
     }
@@ -573,7 +705,7 @@ export default function GamesHub({
     }
     try {
       await navigator.share({ title: "Join my Legal Arena debate", text: "I have started a one-on-one legal debate. Join me on the open side.", url: inviteUrl });
-      setPvpNotice("Debate invite shared. Your opponent can join from the link.");
+      setPvpNotice("Invite shared. The room will show Opponent joined only after they sign in, choose the opposite side, and tap Join competition.");
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") return;
       await copyInvite();
@@ -659,8 +791,8 @@ export default function GamesHub({
     </section>}
 
     {tab === "pvp" && <section className="game-room">
-      {!room && inviteCode && <div className="card card-pad arena-invite-card"><div className="game-kicker"><Users size={14} /> Two-seat event room</div><h2>Choose your side.</h2><p>This room has one open seat. Select proposer or opposer; once both seats are filled, the server starts the turn clock and records every submission.</p><label>Join as<select value={joinRole} onChange={(event) => setJoinRole(event.target.value as DebateRole)}><option value="claimant">Proposer</option><option value="defendant">Opposer</option></select></label><button className="primary-button" onClick={() => void joinCompetition()} disabled={!userId || pvpBusy}>{pvpBusy ? "Joining room…" : "Join competition"}</button>{!userId && <p className="field-hint">Sign in first so the room can protect both sides' submissions.</p>}</div>}
-      {!room && !inviteCode && <div className="card card-pad arena-case-builder">
+      {!room && activeInviteCode && <div className="card card-pad arena-invite-card"><div className="game-kicker"><Users size={14} /> Two-seat event room</div><h2>Choose your side.</h2><p>This room has one open seat. Select proposer or opposer; once both seats are filled, the server starts the turn clock and records every submission. You are not counted as joined until you press <strong>Join competition</strong>.</p><label>Join as<select value={joinRole} onChange={(event) => setJoinRole(event.target.value as DebateRole)}><option value="claimant">Proposer</option><option value="defendant">Opposer</option></select></label><button className="primary-button" onClick={() => void joinCompetition()} disabled={!userId || pvpBusy}>{pvpBusy ? "Joining room…" : "Join competition"}</button>{!userId && <p className="field-hint">Sign in first so the room can protect both sides' submissions.</p>}</div>}
+      {!room && !activeInviteCode && <div className="card card-pad arena-case-builder">
         <div><div className="game-kicker"><Users size={14} /> Open hosting</div><h2>Create a PVP competition.</h2><p><strong>How to host:</strong> choose your side, generate a motion and balanced case packet, create the two-seat room, then send the invite link. The joiner chooses the other open side. Each submitted argument ends that side's clock and starts the other side's clock.</p></div>
         <div className="arena-rules-grid"><div className="arena-rule"><strong>AI motion setter</strong>The issue or theme becomes a balanced fictional Kenyan-law motion grounded in the selected sources.</div><div className="arena-rule"><strong>Two seats only</strong>The host occupies one side and the invitee chooses the other; a third participant cannot join.</div><div className="arena-rule"><strong>Server-enforced judge</strong>Timers, turns, final AI scoring, and leaderboard updates are protected by Supabase functions.</div></div>
         <div className="arena-form-grid">
@@ -678,6 +810,10 @@ export default function GamesHub({
           <div className={`arena-match-status ${room.status}`}><i />{room.status === "waiting" ? "WAITING FOR ONE OPPONENT" : room.status === "active" ? "MATCH LIVE" : room.status === "evaluating" ? "SCORING" : "RESULT RECORDED"}</div>
         </header>
         <div className="arena-match-motion" role="note" aria-label="Debate motion"><span>DEBATE MOTION</span><strong>{room.motion?.trim() || room.case_brief?.question?.trim?.() || room.source_title}</strong></div>
+        <div className={`arena-join-confirmation ${room.player_two_id ? "joined" : "waiting"}`} role="status" aria-live="polite">
+          <strong>{!room.player_two_id ? "No opponent has joined yet" : room.player_two_id === "00000000-0000-0000-0000-000000000001" ? "AI opponent joined" : `Opponent joined: ${room.player_two_name || "student"}`}</strong>
+          <span>{!room.player_two_id ? "The invite link being opened or shared does not count as a join. This changes after the invitee signs in and presses Join competition." : room.status === "waiting" ? "The invitee is confirmed; the debate is starting." : `${sideName(room.player_two_role)} · ${room.status === "active" ? "Debate live" : room.status === "evaluating" ? "Judge scoring" : "Participant recorded"}`}</span>
+        </div>
         {pvpNotice && <div className="arena-match-notice">{pvpNotice}</div>}
         <section className="arena-match-scoreboard" aria-label="Debate participants">
           <div className={`arena-match-player ${room.status === "active" && myTurn(room, userId) ? "your-turn" : ""}`}><span className="arena-match-player-label">PROPOSER</span><strong>{room.player_one_role === "claimant" ? room.player_one_name : room.player_two_name || "Waiting for opponent"}</strong><small>{room.player_one_role === "claimant" ? "Supports the motion" : "Challenges the motion"}</small></div>
@@ -696,6 +832,23 @@ export default function GamesHub({
         </>}
       </div>}
       {pvpNotice && !room && <div className="connection-error game-notice">{pvpNotice}</div>}
+      {!room && !activeInviteCode && userId && <section className="card card-pad arena-debate-history" aria-label="Saved debate history">
+        <div><div className="game-kicker"><BookOpen size={14} /> YOUR LEGAL ARENA RECORD</div><h2>Your debate history</h2><p>Rooms and submissions are saved to your account. Reopen an ongoing debate or review a completed result from any device.</p></div>
+        {roomHistoryLoading && <p className="field-hint">Loading your saved debates…</p>}
+        {roomHistoryError && <p className="connection-error">Could not load debate history: {roomHistoryError}</p>}
+        {!roomHistoryLoading && !roomHistoryError && roomHistory.length === 0 && <p className="field-hint">No saved debates yet. Create or join a room and it will appear here.</p>}
+        {roomHistory.length > 0 && <div className="arena-debate-history-list">{roomHistory.map((savedRoom) => {
+          const isHost = savedRoom.player_one_id === userId;
+          const opponent = isHost ? (savedRoom.player_two_name || "Waiting for invitee") : savedRoom.player_one_name;
+          const role = isHost ? savedRoom.player_one_role : savedRoom.player_two_role;
+          const status = savedRoom.status === "waiting" ? "Waiting" : savedRoom.status === "active" ? "Live" : savedRoom.status === "evaluating" ? "Scoring" : savedRoom.status === "finished" ? "Complete" : "Cancelled";
+          return <button type="button" className="arena-debate-history-row" key={savedRoom.id} onClick={() => void openPastRoom(savedRoom)} disabled={pvpBusy}>
+            <span className="arena-debate-history-copy"><strong>{savedRoom.motion || savedRoom.case_brief?.question || savedRoom.source_title}</strong><small>{opponent} · {sideName(role)} · {new Date(savedRoom.created_at).toLocaleString("en-GB")}</small></span>
+            <span className={`arena-debate-history-status ${savedRoom.status}`}>{status}</span>
+            <span className="arena-debate-history-action">{savedRoom.status === "finished" ? "Review result" : "Reopen debate"}</span>
+          </button>;
+        })}</div>}
+      </section>}
       <div className="card card-pad leaderboard-card"><div className="game-kicker"><Trophy size={14} /> LIVE STUDENT STANDINGS</div><h2>Top 15 advocates</h2><p>Ranked by points from completed debates. Student accounts and AI opponents are both shown; AI opponents are identified clearly.</p>{leaderboardError ? <p className="field-hint">{leaderboardError}</p> : <div className="leaderboard-list">{leaderboard.slice(0, 15).map((entry, index) => <div className="leaderboard-row" key={entry.user_id}><strong>#{index + 1} {entry.display_name}{entry.is_bot ? " · AI opponent" : ""}</strong><span>{entry.points} points · {entry.wins} wins · {entry.matches} debates{entry.is_bot ? " · Practice AI" : entry.tagline ? ` · ${entry.tagline}` : ""}</span></div>)}{!leaderboard.length && <p className="field-hint">Finish a debate to appear on the universal leaderboard.</p>}</div>}</div>
     </section>}
 
