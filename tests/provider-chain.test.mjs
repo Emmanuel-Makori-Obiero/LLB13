@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { combineProviderChains, DEFAULT_CHAIN, shouldTryAnotherKey } from "../supabase/functions/ai/providers.ts";
+import { newestKeySlotsFirst } from "../supabase/functions/_shared/keys.ts";
 
 test("the AI provider chain uses current high-availability fallback model IDs", () => {
   const ids = DEFAULT_CHAIN.map(({ provider, model }) => `${provider}:${model}`);
@@ -40,6 +41,15 @@ test("configured duplicates are removed while alternate key sources are retained
   assert.equal(merged[0].keyEnv, first.keyEnv);
   assert.equal(merged[1].keyEnv, alternateKey.keyEnv);
   assert.equal(merged[2].model, DEFAULT_CHAIN[1].model);
+});
+
+test("newer numbered provider keys are tried before older and legacy key slots", () => {
+  const entries = [
+    { slot: 0, value: "legacy" },
+    { slot: 1, value: "older" },
+    { slot: 7, value: "newest" },
+  ];
+  assert.deepEqual(newestKeySlotsFirst(entries).map(({ slot }) => slot), [7, 1, 0]);
 });
 
 test("provider timeouts and server/model errors move to another route instead of rotating sibling keys", () => {

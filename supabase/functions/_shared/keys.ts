@@ -13,6 +13,10 @@ export function secretKeyEntries(baseName: string): SecretKeyEntry[] {
   return entries;
 }
 
+export function newestKeySlotsFirst(entries: readonly SecretKeyEntry[]): SecretKeyEntry[] {
+  return [...entries].sort((left, right) => right.slot - left.slot);
+}
+
 export function secretKeys(baseName: string): string[] {
   return secretKeyEntries(baseName).map((entry) => entry.value);
 }

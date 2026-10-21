@@ -1,6 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { EXTRA_FEATURES, handleExtra } from "./exam.ts";
-import { secretKeys } from "../_shared/keys.ts";
+import { newestKeySlotsFirst, secretKeyEntries } from "../_shared/keys.ts";
 import { reserveAiQuota } from "../_shared/quotas.ts";
 import { recordProviderUsage } from "../_shared/usage.ts";
 
@@ -147,14 +147,16 @@ export async function callChain(
       attempts.push({ id: id(ent), status: "route_cooldown" });
       continue;
     }
-    const keys = secretKeys(ent.keyEnv);
+    const keys = newestKeySlotsFirst(secretKeyEntries(ent.keyEnv));
     if (!keys.length) {
       attempts.push({ id: id(ent), status: "missing_key" });
       continue;
     }
-    for (const [keyIndex, key] of keys.entries()) {
+    for (const keyEntry of keys) {
       if (unavailableRoutes.has(route)) break;
-      const eid = `${id(ent)}#${keyIndex + 1}`;
+      const key = keyEntry.value;
+      const slotLabel = keyEntry.slot > 0 ? `#${keyEntry.slot}` : "#legacy";
+      const eid = `${id(ent)}${slotLabel}`;
       if ((cooldownUntil.get(eid) ?? 0) > Date.now()) {
         attempts.push({ id: eid, status: "cooldown" });
         continue;
