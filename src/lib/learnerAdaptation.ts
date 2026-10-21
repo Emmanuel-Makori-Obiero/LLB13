@@ -9,7 +9,7 @@ export function defaultLearningPreference(preference?: LearningPreference | null
 }
 
 const PERSONALIZED_STUDY_FEATURES = new Set([
-  "chat", "explain", "summarize", "book_contents", "topic_summary", "book_recommendation", "case_brief",
+  "chat", "exam_analysis", "explain", "summarize", "book_contents", "topic_summary", "book_recommendation", "case_brief",
   "irac", "essay_feedback", "arena_judgment", "study_plan", "kaizen_check", "moot", "moot_judge", "moot_guide",
   "arena_training", "choices_game", "kmun", "kmun_guide", "quiz", "flashcards", "notes", "rw_question",
   "rw_outline", "rw_draft", "rw_improve", "rw_critique", "rw_citations", "rw_validate", "rw_bookends",

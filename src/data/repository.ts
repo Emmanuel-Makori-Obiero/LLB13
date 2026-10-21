@@ -191,8 +191,11 @@ export async function findLibraryMaterialDuplicate(file: File, title?: string, e
   return null;
 }
 
-// Removes a person's stored files before their account is deleted; storage objects do not cascade with database rows.
-async function removeUserFiles(userId: string, strict = false) {
+type UserStorageFiles = { materials: string[]; media: string[]; profiles: string[] };
+
+// Storage objects do not cascade with database rows. Collect paths read-only so
+// the authoritative account-removal RPC can run before any cross-account delete.
+async function collectUserFiles(userId: string, strict = false): Promise<UserStorageFiles> {
   const client = db();
   const failIfStrict = (message: string) => {
     if (strict) throw new Error(message);
@@ -202,36 +205,42 @@ async function removeUserFiles(userId: string, strict = false) {
     .select("storage_path")
     .eq("owner_id", userId);
   if (materialsError) failIfStrict(`Could not prepare account file cleanup: ${materialsError.message}`);
-  const paths = (rows ?? [])
+  const materials = (rows ?? [])
     .map((row) => row.storage_path as string | null)
     .filter((path): path is string => Boolean(path));
-  if (paths.length) {
-    const { error } = await client.storage.from("materials").remove(paths);
-    if (error) failIfStrict(`Could not remove account materials: ${error.message}`);
-  }
 
   const { data: mediaRows, error: mediaError } = await client
     .from("media_assets")
     .select("storage_path")
     .eq("owner_id", userId);
   if (mediaError) failIfStrict(`Could not prepare account media cleanup: ${mediaError.message}`);
-  const mediaPaths = (mediaRows ?? [])
+  const media = (mediaRows ?? [])
     .map((row) => row.storage_path as string | null)
     .filter((path): path is string => Boolean(path));
-  if (mediaPaths.length) {
-    const { error } = await client.storage.from("media").remove(mediaPaths);
-    if (error) failIfStrict(`Could not remove account media: ${error.message}`);
-  }
 
   const { data: images, error: profileError } = await client.storage.from("profiles").list(userId);
   if (profileError) failIfStrict(`Could not prepare profile image cleanup: ${profileError.message}`);
-  if (images?.length)
-    {
-      const { error } = await client.storage
-      .from("profiles")
-      .remove(images.map((image) => `${userId}/${image.name}`));
-      if (error) failIfStrict(`Could not remove profile images: ${error.message}`);
-    }
+  const profiles = (images ?? []).map((image) => `${userId}/${image.name}`);
+  return { materials, media, profiles };
+}
+
+async function removeUserFiles(files: UserStorageFiles, strict = false) {
+  const client = db();
+  const failIfStrict = (message: string) => {
+    if (strict) throw new Error(message);
+  };
+  if (files.materials.length) {
+    const { error } = await client.storage.from("materials").remove(files.materials);
+    if (error) failIfStrict(`Could not remove account materials: ${error.message}`);
+  }
+  if (files.media.length) {
+    const { error } = await client.storage.from("media").remove(files.media);
+    if (error) failIfStrict(`Could not remove account media: ${error.message}`);
+  }
+  if (files.profiles.length) {
+    const { error } = await client.storage.from("profiles").remove(files.profiles);
+    if (error) failIfStrict(`Could not remove profile images: ${error.message}`);
+  }
 }
 
 async function readRequired<T>(
@@ -718,7 +727,14 @@ const supabaseRepository: Group13Repository = {
     } = await client.auth.getUser();
     if (!user)
       throw new Error("Please sign in again before deleting your account.");
-    await removeUserFiles(user.id, true);
+    const { data: isPrimaryAdmin, error: roleError } = await client.rpc("is_primary_admin");
+    if (roleError) throw new Error(`Could not verify account deletion eligibility: ${roleError.message}`);
+    if (isPrimaryAdmin !== false) {
+      if (isPrimaryAdmin) throw new Error("The primary admin account cannot be deleted from the app.");
+      throw new Error("Could not verify account deletion eligibility. Please try again.");
+    }
+    const files = await collectUserFiles(user.id, true);
+    await removeUserFiles(files, true);
     const { error } = await client.rpc("delete_my_account");
     if (error) throw new Error(error.message);
     await client.auth.signOut();
@@ -736,9 +752,11 @@ const supabaseRepository: Group13Repository = {
     if (error) throw new Error(`Could not update admin access: ${error.message}`);
   },
   adminRemoveAccount: async (id) => {
-    await removeUserFiles(id);
-    const { error } = await db().rpc("admin_remove_account", { target: id });
+    const client = db();
+    const files = await collectUserFiles(id);
+    const { error } = await client.rpc("admin_remove_account", { target: id });
     if (error) throw new Error(error.message);
+    await removeUserFiles(files);
   },
   adminUpdateMember: async (name, changes) => {
     const { data, error } = await db()

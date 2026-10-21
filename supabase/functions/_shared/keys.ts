@@ -6,7 +6,10 @@ export function secretKeyEntries(baseName: string): SecretKeyEntry[] {
   const seen = new Set<string>();
   for (let index = 1; index <= 20; index += 1) {
     const value = Deno.env.get(`${baseName}_${index}`)?.trim();
-    if (value && !seen.has(value)) { entries.push({ slot: index, value }); seen.add(value); }
+    if (value && !seen.has(value)) {
+      entries.push({ slot: index, value });
+      seen.add(value);
+    }
   }
   const legacy = Deno.env.get(baseName)?.trim();
   if (legacy && !seen.has(legacy)) entries.push({ slot: 0, value: legacy });
@@ -17,8 +20,15 @@ export function newestKeySlotsFirst(entries: readonly SecretKeyEntry[]): SecretK
   return [...entries].sort((left, right) => right.slot - left.slot);
 }
 
-export function fastFailoverKeys(entries: readonly SecretKeyEntry[]): SecretKeyEntry[] {
-  return newestKeySlotsFirst(entries).slice(0, 1);
+/** Select exactly one key for this route; successive model routes can advance the cursor. */
+export function selectFastFailoverKey(
+  entries: readonly SecretKeyEntry[],
+  attemptIndex = 0,
+): SecretKeyEntry | null {
+  const ordered = newestKeySlotsFirst(entries);
+  if (!ordered.length) return null;
+  const index = ((Math.trunc(attemptIndex) % ordered.length) + ordered.length) % ordered.length;
+  return ordered[index] ?? null;
 }
 
 export function secretKeys(baseName: string): string[] {

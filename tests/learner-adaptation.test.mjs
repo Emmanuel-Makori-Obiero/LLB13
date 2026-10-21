@@ -72,6 +72,6 @@ test('cohort tags distinguish year-specific items while untagged items stay shar
 });
 
 test('educational AI surfaces are all personalized; counselling, scheduling and extraction stay outside the study layer', () => {
-  for (const feature of ['chat', 'quiz', 'flashcards', 'moot', 'choices_game', 'rw_draft', 'rw_citations', 'legal_process', 'arena_training', 'podcast_script', 'video_script', 'quality_check']) assert.equal(isPersonalizedStudyFeature(feature), true, feature);
+  for (const feature of ['chat', 'exam_analysis', 'quiz', 'flashcards', 'moot', 'choices_game', 'rw_draft', 'rw_citations', 'legal_process', 'arena_training', 'podcast_script', 'video_script', 'quality_check']) assert.equal(isPersonalizedStudyFeature(feature), true, feature);
   for (const feature of ['counsellor', 'personal_timetable_proposal', 'timetable_proposal', 'extract_assignments', 'book_metadata']) assert.equal(isPersonalizedStudyFeature(feature), false, feature);
 });

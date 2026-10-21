@@ -31,7 +31,7 @@ Deliver a navigable, responsive academic operating system shell for Group 13 wit
 8. Settings: live Supabase connection state and schema checklist.
 
 ## Supabase setup
-Run `supabase/schema.sql` in the Supabase SQL Editor. The current browser read policies are intentionally open for the first slice; add authentication and tighten policies before using real private student data. Realtime can later target `discussions`, discussion notes, and notifications.
+Apply `supabase/migrations/001_ai.sql` first so `ai_documents` exists, then run `supabase/schema.sql` for the core workspace and synchronized baseline `admin_users`/`exam_analyses` tables. Apply the remaining ordered migrations afterward; they remain authoritative for admin RPCs, private-history grants and source-ownership policy. Do not rely on `schema.sql` alone for AI document persistence or RLS. Realtime can later target `discussions`, discussion notes, and notifications.
 
 ## Verification
 - Run `npm run check`.
@@ -83,7 +83,7 @@ AI prompts must identify the selected source IDs and use the existing `materials
 - Keep the existing React/TypeScript SPA, Supabase repository boundary, and editorial Group 13 dashboard design.
 - Extend the current server-verified administrator identity to additional verified accounts. Preserve the original primary administrator as the only account that can grant or revoke admin roles; all admins may use the existing admin dashboard and timetable controls.
 - Let admins directly update and edit existing shared timetable lessons and revise saved proposals. Preserve RLS authorization and ensure older proposals can be edited without losing their history.
-- Normalize configured AI fallback chains so duplicate provider/model entries do not cause repeated futile calls. Use the newest configured key once per model route, cap each provider request at eight seconds, and on any terminal error advance immediately to the next model/provider with the same full request. Retain independent fallbacks and actionable, non-secret attempt diagnostics.
+- Normalize configured AI fallback chains so duplicate provider/model entries do not cause repeated futile calls. Use one key per model attempt, rotate to the next configured key slot on subsequent models for the same provider, cap ordinary provider calls at eight seconds and allow a longer but bounded timeout for large document analysis. On terminal failure, immediately send the same request to the next route and retain actionable, non-secret diagnostics.
 
 
 ## Exam paper review persistence
@@ -91,3 +91,4 @@ AI prompts must identify the selected source IDs and use the existing `materials
 - Keep exam-review data behind the existing typed Supabase repository; save only a successful review result and its paper title, source-document reference, and the student's supplied answers.
 - Store each review in an owner-scoped table with row-level security; never add it to the shared Library automatically.
 - Automatically save after AI completion, expose recent saved reviews for reopening, and retain a failed-to-save result in account-keyed tab storage with an idempotent retry instead of claiming it was saved.
+- Give paper analysis its own document-wide retrieval path for exactly one selected source, include every indexed section up to 24 chunks, and reject larger papers with a clear split-and-retry message instead of silently sampling. Keep 10,000-character papers intact, preserve student answers up to the visible 17,000-character limit without truncation, and apply a longer bounded provider timeout to these requests.

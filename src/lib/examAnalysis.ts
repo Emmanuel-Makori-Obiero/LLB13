@@ -1,5 +1,8 @@
 import type { ExamAnalysisDraft } from "../data/types";
 
+export const MAX_EXAM_ANSWER_CHARS = 17_000;
+export const MAX_EXAM_ANALYSIS_CHUNKS = 24;
+
 export function createExamAnalysisDraft(input: {
   paperTitle: string;
   sourceDocumentId?: string | null;
@@ -8,14 +11,18 @@ export function createExamAnalysisDraft(input: {
 }, id: string = crypto.randomUUID()): ExamAnalysisDraft {
   const paperTitle = input.paperTitle.trim();
   const analysis = input.analysis.trim();
+  const studentAnswers = input.studentAnswers.trim();
   if (!id.trim()) throw new Error("An exam-analysis save ID is required.");
   if (!paperTitle) throw new Error("The exam paper needs a title before its analysis can be saved.");
   if (!analysis) throw new Error("An empty exam analysis cannot be saved.");
+  if (studentAnswers.length > MAX_EXAM_ANSWER_CHARS) {
+    throw new Error(`Student answers exceed the ${MAX_EXAM_ANSWER_CHARS.toLocaleString()}-character limit; no text was discarded.`);
+  }
   return {
     id,
     paper_title: paperTitle,
     source_document_id: input.sourceDocumentId || null,
-    student_answers: input.studentAnswers.trim(),
+    student_answers: studentAnswers,
     analysis,
   };
 }

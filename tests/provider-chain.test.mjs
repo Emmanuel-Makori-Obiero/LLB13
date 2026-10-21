@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { boundedProviderTimeoutMs, combineProviderChains, DEFAULT_CHAIN, modelRouteCooldownMs } from "../supabase/functions/ai/providers.ts";
-import { fastFailoverKeys, newestKeySlotsFirst } from "../supabase/functions/_shared/keys.ts";
+import { boundedProviderTimeoutMs, combineProviderChains, DEFAULT_CHAIN, modelRouteCooldownMs, reasoningAttemptVariants } from "../supabase/functions/ai/providers.ts";
+import { newestKeySlotsFirst, selectFastFailoverKey } from "../supabase/functions/_shared/keys.ts";
 
 test("the AI provider chain uses current high-availability fallback model IDs", () => {
   const ids = DEFAULT_CHAIN.map(({ provider, model }) => `${provider}:${model}`);
@@ -45,15 +45,15 @@ test("configured duplicates are removed while alternate key sources are retained
   assert.equal(merged[2].model, DEFAULT_CHAIN[1].model);
 });
 
-test("newer numbered provider keys are tried before older and legacy key slots", () => {
+test("one model attempt uses one key, and later provider models rotate through newer slots first", () => {
   const entries = [
     { slot: 0, value: "legacy" },
     { slot: 1, value: "older" },
     { slot: 7, value: "newest" },
   ];
   assert.deepEqual(newestKeySlotsFirst(entries).map(({ slot }) => slot), [7, 1, 0]);
-  assert.deepEqual(fastFailoverKeys(entries), [{ slot: 7, value: "newest" }]);
-  assert.equal(fastFailoverKeys(entries).length, 1, "only one key is used before model failover");
+  assert.deepEqual([0, 1, 2, 3].map((index) => selectFastFailoverKey(entries, index)?.slot), [7, 1, 0, 7]);
+  assert.equal(selectFastFailoverKey([], 0), null);
 });
 
 test("failed model routes cool down for later requests without delaying current-request failover", () => {
@@ -63,9 +63,22 @@ test("failed model routes cool down for later requests without delaying current-
   assert.equal(modelRouteCooldownMs(503), 45_000);
 });
 
-test("provider call timeout is bounded between three and eight seconds", () => {
+test("ordinary provider calls are bounded between three and eight seconds", () => {
   assert.equal(boundedProviderTimeoutMs(20_000), 8_000);
   assert.equal(boundedProviderTimeoutMs(6_000), 6_000);
   assert.equal(boundedProviderTimeoutMs(1_000), 3_000);
   assert.equal(boundedProviderTimeoutMs(Number.NaN), 8_000);
+});
+
+test("large document requests get a longer but bounded model window", () => {
+  assert.equal(boundedProviderTimeoutMs(undefined, 10_000), 15_000);
+  assert.equal(boundedProviderTimeoutMs(8_000, 10_000), 15_000);
+  assert.equal(boundedProviderTimeoutMs(30_000, 10_000), 18_000);
+});
+
+test("exam analysis makes exactly one reasoning-mode attempt per model route", () => {
+  assert.deepEqual(reasoningAttemptVariants("exam_analysis", "effort"), [false]);
+  assert.deepEqual(reasoningAttemptVariants("exam_analysis", "openrouter"), [false]);
+  assert.deepEqual(reasoningAttemptVariants("chat", "effort"), [true, false]);
+  assert.deepEqual(reasoningAttemptVariants("chat", "none"), [false]);
 });

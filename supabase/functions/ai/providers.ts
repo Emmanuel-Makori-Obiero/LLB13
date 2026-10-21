@@ -32,8 +32,22 @@ export function modelRouteCooldownMs(status: number, retryAfterSeconds = 0): num
   return 45_000;
 }
 
-export function boundedProviderTimeoutMs(configured: number): number {
-  return Number.isFinite(configured) ? Math.min(8_000, Math.max(3_000, configured)) : 8_000;
+export function boundedProviderTimeoutMs(configured: number | undefined, inputChars = 0): number {
+  const isLargeDocumentRequest = inputChars >= 8_000;
+  const ceiling = isLargeDocumentRequest ? 18_000 : 8_000;
+  const fallback = isLargeDocumentRequest ? 15_000 : 8_000;
+  const floor = isLargeDocumentRequest ? 15_000 : 3_000;
+  const requested = Number.isFinite(configured) ? configured as number : fallback;
+  return Math.min(ceiling, Math.max(floor, requested));
+}
+
+export function reasoningAttemptVariants(
+  feature: string | undefined,
+  reasoning: Entry["reasoning"],
+  fast = false,
+): boolean[] {
+  if (feature === "exam_analysis" || reasoning === "none" || fast) return [false];
+  return [true, false];
 }
 
 const BASE = {

@@ -1,8 +1,9 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { EXTRA_FEATURES, handleExtra } from "./exam.ts";
-import { fastFailoverKeys, secretKeyEntries } from "../_shared/keys.ts";
+import { selectFastFailoverKey, secretKeyEntries } from "../_shared/keys.ts";
 import { reserveAiQuota } from "../_shared/quotas.ts";
 import { recordProviderUsage } from "../_shared/usage.ts";
+import { selectDocumentChunkIndexes } from "./retrieval.ts";
 
 // ===== providers (fallback chain) =====
 // Free-tier fallback chain. Every provider speaks the OpenAI chat-completions format.
@@ -14,7 +15,7 @@ import { recordProviderUsage } from "../_shared/usage.ts";
 export type Msg = { role: "system" | "user" | "assistant"; content: string };
 type ReasoningStyle = "openrouter" | "effort" | "none";
 
-import { boundedProviderTimeoutMs, combineProviderChains, DEFAULT_CHAIN, modelRouteCooldownMs, type Entry } from "./providers.ts";
+import { boundedProviderTimeoutMs, combineProviderChains, DEFAULT_CHAIN, modelRouteCooldownMs, reasoningAttemptVariants, type Entry } from "./providers.ts";
 
 function chain(feature?: string): Entry[] {
   const stageName = feature
@@ -128,13 +129,18 @@ export async function callChain(
   const started = Date.now();
   // Bound each model call so a stalled provider cannot block the next fallback.
   const deadline = opts.deadlineMs ?? Number(Deno.env.get("AI_DEADLINE_MS") ?? 110_000);
-  const configuredPerCall = opts.perCallMs ?? Number(Deno.env.get("AI_PER_CALL_MS") ?? 8_000);
-  const perCall = boundedProviderTimeoutMs(configuredPerCall);
+  const inputChars = messages.reduce((total, message) => total + message.content.length, 0);
+  const envPerCallMs = Deno.env.get("AI_PER_CALL_MS");
+  const configuredPerCall = opts.perCallMs ?? (envPerCallMs ? Number(envPerCallMs) : undefined);
+  const perCall = boundedProviderTimeoutMs(configuredPerCall, inputChars);
   const attempts: Attempt[] = [];
   let retryAfterMs = 0;
-  // Use one newest key for each route; any terminal failure skips sibling keys and
-  // advances to the next model/provider with the same request messages.
+  // Use one key per model attempt, rotate slots across later routes for that provider,
+  // and advance immediately with the same request after a terminal failure.
   const unavailableRoutes = new Set<string>();
+  // Key cursors are request-local: each new request begins with the newest
+  // available key, then advances across later model routes in this chain.
+  const keyCursors = new Map<string, number>();
   for (const ent of orderedChain(opts.feature)) {
     const route = routeId(ent);
     if (unavailableRoutes.has(route)) {
@@ -145,88 +151,97 @@ export async function callChain(
       attempts.push({ id: id(ent), status: "route_cooldown" });
       continue;
     }
-    const keys = fastFailoverKeys(secretKeyEntries(ent.keyEnv));
+    const keys = secretKeyEntries(ent.keyEnv);
     if (!keys.length) {
       attempts.push({ id: id(ent), status: "missing_key" });
       continue;
     }
-    for (const keyEntry of keys) {
-      if (unavailableRoutes.has(route)) break;
-      const key = keyEntry.value;
-      const slotLabel = keyEntry.slot > 0 ? `#${keyEntry.slot}` : "#legacy";
-      const eid = `${id(ent)}${slotLabel}`;
-      if ((cooldownUntil.get(eid) ?? 0) > Date.now()) {
-        attempts.push({ id: eid, status: "cooldown" });
-        continue;
-      }
-      if (Date.now() - started > deadline - 8_000) {
-        attempts.push({ id: eid, status: "deadline" });
-        break;
-      }
-      // Prefer provider-enforced JSON for structured features. If a compatible
-      // provider rejects response_format, retry that same provider without it.
-      for (const withJsonFormat of opts.json ? [true, false] : [false]) {
-        let retryWithoutJsonFormat = false;
-        for (const withReasoning of ent.reasoning === "none" || opts.fast ? [false] : [true, false]) {
-          const body: Record<string, unknown> = {
-            model: ent.model,
-            messages: ent.noSystem ? mergeSystem(messages) : messages,
-            temperature: opts.temperature ?? 0.2,
-            max_tokens: ent.maxTokens ?? opts.maxTokens ?? 4096,
-          };
-          if (withJsonFormat) body.response_format = { type: "json_object" };
-          if (withReasoning) {
-            if (ent.reasoning === "openrouter") body.reasoning = { effort: "high" };
-            if (ent.reasoning === "effort") body.reasoning_effort = "high";
-          }
-          try {
-            const res = await fetch(`${ent.baseUrl}/chat/completions`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}`, ...(ent.provider === "openrouter" ? { "X-Title": "Group 13 Hub" } : {}) },
-              body: JSON.stringify(body),
-              signal: AbortSignal.timeout(Math.min(perCall, Math.max(5_000, deadline - (Date.now() - started)))),
-            });
-            if (res.ok) {
-              const data = await res.json();
-              const text = clean(data?.choices?.[0]?.message?.content ?? "");
-              if (text) {
-                attempts.push({ id: eid, status: "ok" });
-                if (opts.feature) preferredByFeature.set(opts.feature, id(ent));
-                return { text, provider: ent.provider, model: ent.model, attempts };
-              }
-              if (withReasoning) continue;
-              attempts.push({ id: eid, status: "empty" });
-              cooldownUntil.set(eid, Date.now() + 60_000);
-              break;
-            }
-            if (res.status === 400 && withReasoning) continue;
-            if (res.status === 400 && withJsonFormat) {
-              attempts.push({ id: eid, status: "json_mode_unsupported" });
-              retryWithoutJsonFormat = true;
-              break;
-            }
-            const retryAfter = Number(res.headers.get("retry-after")) || 0;
-            retryAfterMs = Math.max(retryAfterMs, retryAfter * 1000);
-            const cool = modelRouteCooldownMs(res.status, retryAfter);
-            unavailableRoutes.add(route);
-            routeCooldownUntil.set(route, Date.now() + cool);
-            cooldownUntil.set(eid, Date.now() + cool);
-            let detail: string | undefined;
-            if (Deno.env.get("AI_DEBUG")) detail = (await res.text().catch(() => "")).slice(0, 240);
-            else await res.body?.cancel();
-            attempts.push({ id: eid, status: String(res.status), ...(detail ? { detail } : {}) });
-            break;
-          } catch (err) {
-            cooldownUntil.set(eid, Date.now() + 45_000);
-            unavailableRoutes.add(route);
-            routeCooldownUntil.set(route, Date.now() + 45_000);
-            attempts.push({ id: eid, status: err instanceof DOMException ? "timeout" : "network" });
-            break;
-          }
+    const cursor = keyCursors.get(ent.keyEnv) ?? 0;
+    const keyEntry = selectFastFailoverKey(keys, cursor);
+    if (!keyEntry) {
+      attempts.push({ id: id(ent), status: "missing_key" });
+      continue;
+    }
+    keyCursors.set(ent.keyEnv, cursor + 1);
+    const key = keyEntry.value;
+    const slotLabel = keyEntry.slot > 0 ? `#${keyEntry.slot}` : "#legacy";
+    const eid = `${id(ent)}${slotLabel}`;
+    if ((cooldownUntil.get(eid) ?? 0) > Date.now()) {
+      attempts.push({ id: eid, status: "cooldown" });
+      unavailableRoutes.add(route);
+      continue;
+    }
+    if (Date.now() - started > deadline - 8_000) {
+      attempts.push({ id: eid, status: "deadline" });
+      break;
+    }
+    // Prefer provider-enforced JSON for structured features. If a compatible
+    // provider rejects response_format, retry that same provider without it.
+    for (const withJsonFormat of opts.json ? [true, false] : [false]) {
+      let retryWithoutJsonFormat = false;
+      for (const withReasoning of reasoningAttemptVariants(opts.feature, ent.reasoning, opts.fast)) {
+        const body: Record<string, unknown> = {
+          model: ent.model,
+          messages: ent.noSystem ? mergeSystem(messages) : messages,
+          temperature: opts.temperature ?? 0.2,
+          max_tokens: opts.feature === "exam_analysis"
+            ? Math.min(ent.maxTokens ?? opts.maxTokens ?? 4096, 4096)
+            : ent.maxTokens ?? opts.maxTokens ?? 4096,
+        };
+        if (withJsonFormat) body.response_format = { type: "json_object" };
+        if (withReasoning) {
+          if (ent.reasoning === "openrouter") body.reasoning = { effort: "high" };
+          if (ent.reasoning === "effort") body.reasoning_effort = "high";
         }
-        if (retryWithoutJsonFormat) continue;
-        break;
+        try {
+          const res = await fetch(`${ent.baseUrl}/chat/completions`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}`, ...(ent.provider === "openrouter" ? { "X-Title": "Group 13 Hub" } : {}) },
+            body: JSON.stringify(body),
+            signal: AbortSignal.timeout(Math.min(perCall, Math.max(5_000, deadline - (Date.now() - started)))),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const text = clean(data?.choices?.[0]?.message?.content ?? "");
+            if (text) {
+              attempts.push({ id: eid, status: "ok" });
+              if (opts.feature) preferredByFeature.set(opts.feature, id(ent));
+              return { text, provider: ent.provider, model: ent.model, attempts };
+            }
+            if (withReasoning) continue;
+            attempts.push({ id: eid, status: "empty" });
+            cooldownUntil.set(eid, Date.now() + 60_000);
+            unavailableRoutes.add(route);
+            routeCooldownUntil.set(route, Date.now() + 60_000);
+            break;
+          }
+          if (res.status === 400 && withReasoning) continue;
+          if (res.status === 400 && withJsonFormat) {
+            attempts.push({ id: eid, status: "json_mode_unsupported" });
+            retryWithoutJsonFormat = true;
+            break;
+          }
+          const retryAfter = Number(res.headers.get("retry-after")) || 0;
+          retryAfterMs = Math.max(retryAfterMs, retryAfter * 1000);
+          const cool = modelRouteCooldownMs(res.status, retryAfter);
+          unavailableRoutes.add(route);
+          routeCooldownUntil.set(route, Date.now() + cool);
+          cooldownUntil.set(eid, Date.now() + cool);
+          let detail: string | undefined;
+          if (Deno.env.get("AI_DEBUG")) detail = (await res.text().catch(() => "")).slice(0, 240);
+          else await res.body?.cancel();
+          attempts.push({ id: eid, status: String(res.status), ...(detail ? { detail } : {}) });
+          break;
+        } catch (err) {
+          cooldownUntil.set(eid, Date.now() + 45_000);
+          unavailableRoutes.add(route);
+          routeCooldownUntil.set(route, Date.now() + 45_000);
+          attempts.push({ id: eid, status: err instanceof DOMException ? "timeout" : "network" });
+          break;
+        }
       }
+      if (retryWithoutJsonFormat) continue;
+      break;
     }
   }
   throw Object.assign(new Error("All AI providers are busy or unavailable"), { attempts, retryAfterMs });
@@ -261,6 +276,10 @@ const FEATURES: Record<
 > = {
   chat: {
     task: "Answer the student's question rigorously and clearly. Use headings only when they help.",
+  },
+  exam_analysis: {
+    docWide: true,
+    task: "Review the selected exam paper question by question. Use the full selected source, preserve numbering, distinguish study guidance from an official marking scheme, and flag unsupported law or citations instead of inventing them. Keep the overall summary short and each answer focused so every readable question is covered.",
   },
   explain: {
     task: "Explain the concept step by step in plain language: start with a direct explanation, then the rule, rationale, a worked example, and common exam traps. Do not start with a question and do not add a quiz, recall question, or exercise unless the student explicitly asks for one.",
@@ -499,22 +518,33 @@ async function retrieve(
   size = CHUNKS_PART,
   learnerLevel?: string,
 ): Promise<Source[]> {
-  const constitutionQuestion = (isConstitutionQuestion(query) || feature === "legal_process") && feature !== "notes";
-  if (mode === "general" && !constitutionQuestion) return [];
+  const requestedIds = [...new Set((docIds ?? []).filter((value) => typeof value === "string" && value.trim()).map((value) => value.trim()))];
+  if (feature === "exam_analysis" && requestedIds.length !== 1) {
+    const message = "Exam analysis requires exactly one selected paper. Select a single paper and retry.";
+    throw Object.assign(new Error(message), { status: 400, publicMessage: message });
+  }
+  const constitutionQuestion = feature !== "exam_analysis" && (isConstitutionQuestion(query) || feature === "legal_process") && feature !== "notes";
+  if (mode === "general" && !constitutionQuestion && feature !== "exam_analysis") return [];
 
   // The complete Constitution is indexed as a shared Library document. Add it
   // automatically for constitutional questions, even when the student did not
   // tick a source or another agent initiated the request. Retrieval still sends
   // only relevant chunks, so the model can use all constitutional Articles over
   // time without stuffing the entire text into every prompt.
-  let selectedIds = [...(docIds ?? [])];
+  let selectedIds = requestedIds;
   if (learnerLevel && selectedIds.length) {
     const { data: selectedDocs, error } = await db.from("ai_documents").select("id,target_years,material_id").in("id", selectedIds).limit(20);
     if (error) throw new Error("cohort filter failed");
     const audiences = await documentAudienceTags(db, selectedDocs ?? []);
     const allowed = new Set((selectedDocs ?? []).filter((doc: any) => { const targetYears = audiences.get(String(doc.id)) ?? []; return !targetYears.length || targetYears.includes(learnerLevel); }).map((doc: any) => String(doc.id)));
     selectedIds = selectedIds.filter((id) => allowed.has(id));
-    if (docIds?.length && !selectedIds.length) return [];
+    if (docIds?.length && !selectedIds.length) {
+      if (feature === "exam_analysis") {
+        const message = "The selected paper is unavailable for this account or learner level. Choose a paper you can access and retry.";
+        throw Object.assign(new Error(message), { status: 422, publicMessage: message });
+      }
+      return [];
+    }
   }
   const constitutionIds: string[] = [];
   if (constitutionQuestion) {
@@ -564,27 +594,43 @@ async function retrieve(
         content: r.content,
       });
   } else if (FEATURES[feature]?.docWide && selectedIds.length) {
-    // Whole-document tasks: sample chunks evenly across each chosen document so the end isn't cut off.
+    // Most whole-document tasks sample a bounded slice. Exam analysis is stricter:
+    // include every indexed section and reject papers above the cap rather than omit text.
     const per = Math.ceil(CHUNKS_DOC_WIDE / selectedIds.length);
     for (const id of selectedIds) {
-      const { data: idx } = await db
+      const { data: idx, error: indexError } = await db
         .from("ai_chunks")
         .select("id")
         .eq("document_id", id)
         .order("idx")
         .limit(3000);
-      if (!idx?.length) continue;
-      const step = Math.max(1, Math.floor(idx.length / per));
-      const pick = idx
-        .filter((_: unknown, i: number) => i % step === 0)
-        .slice(0, per)
-        .map((r: { id: number }) => r.id);
-      const { data } = await db
+      if (indexError && feature === "exam_analysis") {
+        const message = "Could not verify every section of the selected paper. No partial review was generated; please retry.";
+        throw Object.assign(new Error(message), { status: 503, publicMessage: message });
+      }
+      if (!idx?.length) {
+        if (feature === "exam_analysis") {
+          const message = "The selected paper has no readable indexed text. Upload a text-readable PDF, DOCX, TXT, or Markdown file and retry.";
+          throw Object.assign(new Error(message), { status: 422, publicMessage: message });
+        }
+        continue;
+      }
+      const indexes = selectDocumentChunkIndexes(idx.length, per, feature === "exam_analysis");
+      const pick = indexes.map((index) => (idx[index] as { id: number }).id);
+      const { data: selectedChunks, error: chunksError } = await db
         .from("ai_chunks")
-        .select("document_id, idx, content, ai_documents(title, author, citation)")
+        .select("id, document_id, idx, content, ai_documents(title, author, citation)")
         .in("id", pick)
         .order("idx");
-      for (const r of data ?? [])
+      if (chunksError && feature === "exam_analysis") {
+        const message = "Could not retrieve every section of the selected paper. No partial review was generated; please retry.";
+        throw Object.assign(new Error(message), { status: 503, publicMessage: message });
+      }
+      if (feature === "exam_analysis" && (selectedChunks?.length ?? 0) !== pick.length) {
+        const message = "The complete text of the selected paper could not be retrieved. No partial review was generated; check access or upload the paper again.";
+        throw Object.assign(new Error(message), { status: 422, publicMessage: message });
+      }
+      for (const r of selectedChunks ?? [])
         rows.push({
           document_id: r.document_id,
           title: r.ai_documents?.title,
@@ -646,6 +692,10 @@ async function retrieve(
     const unique = new Map<string, typeof rows[number]>();
     for (const row of [...rows, ...contextRows]) unique.set(`${row.document_id}:${row.content}`, row);
     rows = [...unique.values()].slice(0, 24);
+  }
+  if (feature === "exam_analysis" && !rows.length) {
+    const message = "No readable indexed text is available for the selected paper. Check its upload or access permissions and retry.";
+    throw Object.assign(new Error(message), { status: 422, publicMessage: message });
   }
   return rows.map((r, i) => ({
     tag: `S${i + 1}`,
@@ -902,8 +952,11 @@ Deno.serve(async (req) => {
       size,
       learnerLevel,
     );
-  } catch {
-    return json({ error: "Could not search your materials. Try again." }, 500);
+  } catch (err) {
+    const status = Number((err as { status?: unknown }).status);
+    const safeStatus = Number.isInteger(status) && status >= 400 && status < 600 ? status : 500;
+    const publicMessage = (err as { publicMessage?: unknown }).publicMessage;
+    return json({ error: typeof publicMessage === "string" ? publicMessage : "Could not search your materials. Try again." }, safeStatus);
   }
 
   const hasExplicitDocuments = Boolean(docIds?.length);
@@ -1050,13 +1103,16 @@ Deno.serve(async (req) => {
       attempts: r.attempts,
     });
   } catch (err) {
+    const status = Number((err as { status?: unknown }).status);
+    const safeStatus = Number.isInteger(status) && status >= 400 && status < 600 ? status : 503;
+    const publicMessage = (err as { publicMessage?: unknown }).publicMessage;
     return json(
       {
-        error: "Each failed model was skipped and the same request was sent to the next fallback, but none of the configured models returned a result. Check provider keys, model IDs, and quota, then retry.",
+        error: typeof publicMessage === "string" ? publicMessage : "Each failed model was skipped and the same request was sent to the next fallback, but none of the configured models returned a result. Check provider keys, model IDs, and quota, then retry.",
         attempts: (err as { attempts?: unknown }).attempts ?? [],
         retry_after_seconds: Math.ceil(Number((err as { retryAfterMs?: number }).retryAfterMs ?? 0) / 1000),
       },
-      503,
+      safeStatus,
     );
   }
 });

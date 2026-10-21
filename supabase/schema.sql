@@ -1,5 +1,6 @@
 -- Group 13 Hub starter schema for Supabase.
--- Run this in Supabase SQL Editor, then add the two VITE_SUPABASE_* values locally.
+-- Apply supabase/migrations/001_ai.sql first (it creates ai_documents), then run this file.
+-- Add the two VITE_SUPABASE_* values locally after setup.
 
 create table if not exists public.units (
   id text primary key,
@@ -83,6 +84,28 @@ create table if not exists public.media_resources (
   is_public boolean not null default true
 );
 
+-- Delegated roles are managed only through the primary-admin-checked RPCs in
+-- 20261021090825_multi_admin_roles.sql; authenticated clients get no table access.
+create table if not exists public.admin_users (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  granted_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+-- Private, owner-scoped review history. Its source may be the owner's private
+-- paper or a shared Library paper, but the analysis and answers stay private.
+create table if not exists public.exam_analyses (
+  id uuid primary key default gen_random_uuid(),
+  owner uuid not null references auth.users(id) on delete cascade,
+  paper_title text not null check (length(btrim(paper_title)) > 0),
+  source_document_id uuid references public.ai_documents(id) on delete set null,
+  student_answers text not null default '',
+  analysis text not null check (length(btrim(analysis)) > 0),
+  created_at timestamptz not null default now()
+);
+create index if not exists exam_analyses_owner_created_idx
+  on public.exam_analyses (owner, created_at desc);
+
 alter table public.units enable row level security;
 alter table public.materials enable row level security;
 alter table public.assignments enable row level security;
@@ -90,6 +113,8 @@ alter table public.discussions enable row level security;
 alter table public.members enable row level security;
 alter table public.todos enable row level security;
 alter table public.media_resources enable row level security;
+alter table public.admin_users enable row level security;
+alter table public.exam_analyses enable row level security;
 
 -- All workspace data requires a signed-in Supabase Auth user.
 drop policy if exists "Group 13 units are readable" on public.units;
@@ -112,6 +137,21 @@ create policy "Group 13 members are readable" on public.members for select to au
 create policy "Users can manage their own todos" on public.todos for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
 create policy "Users can manage media resources" on public.media_resources for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
 create policy "Public media resources are readable by everyone" on public.media_resources for select to anon, authenticated using (is_public = true);
+revoke all on table public.admin_users from public, anon, authenticated;
+drop policy if exists "Users manage own exam analyses" on public.exam_analyses;
+create policy "Users manage own exam analyses" on public.exam_analyses for all to authenticated
+  using (owner = auth.uid())
+  with check (
+    owner = auth.uid()
+    and (
+      source_document_id is null
+      or exists (
+        select 1 from public.ai_documents d
+        where d.id = source_document_id
+          and (d.scope = 'library' or d.owner = auth.uid())
+      )
+    )
+  );
 
 insert into storage.buckets (id, name, public)
 values ('materials', 'materials', true)
@@ -135,6 +175,7 @@ grant update on table public.assignments to authenticated;
 grant insert on table public.materials, public.assignments to authenticated;
 grant select, insert, update, delete on table public.todos, public.media_resources to authenticated;
 grant select on table public.media_resources to anon;
+grant select, insert, update, delete on table public.exam_analyses to authenticated;
 
 /* Demo seed data intentionally disabled. Add your own units, members, materials,
    assignments, and discussions through Supabase or the app. */

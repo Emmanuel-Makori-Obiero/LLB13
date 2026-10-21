@@ -16,6 +16,7 @@ function db() {
 export type AIMode = "materials" | "library" | "auto" | "general";
 export type AIFeature =
   | "chat"
+  | "exam_analysis"
   | "explain"
   | "summarize"
   | "book_contents"

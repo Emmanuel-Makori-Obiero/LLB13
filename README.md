@@ -17,7 +17,7 @@ On a deployed HTTPS URL, open the site on a phone and choose **Add to Home scree
 
 ## Supabase setup
 
-For a **new, empty Supabase project only**, apply [`supabase/schema.sql`](supabase/schema.sql) in the SQL Editor. Do **not** run it on the existing LLB13 production database or blindly apply the legacy migration files. Its live migration history has been separately audited; see [the production audit](docs/supabase-production-audit-2026-10-04.md) before changing the database.
+For a **new, empty Supabase project only**, use the complete schema-and-migration setup; `schema.sql` alone does not install all current app features. First apply [`supabase/migrations/001_ai.sql`](supabase/migrations/001_ai.sql), then [`supabase/schema.sql`](supabase/schema.sql), then apply the remaining migrations under `supabase/migrations` in their established order. The later migrations add required timetable/representative fields, AI document metadata and cohort fields, admin RPCs, quotas, and private exam-history policies. For an existing project, apply only unapplied forward migrations after checking Supabase migration history. Do **not** run `schema.sql` on the existing LLB13 production database or blindly replay the legacy migration files; see [the production audit](docs/supabase-production-audit-2026-10-04.md) before changing production.
 
 For local development, copy `.env.example` to `.env.local`, add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`, and restart `npm run dev`.
 
