@@ -411,11 +411,17 @@ Deno.serve(async (req) => {
   if (text.length > 100000) return json({ error: "This script is over the supported limit of about 70 minutes. Shorten it or generate it as separate episodes." }, 400);
   const turns = speechTurns(text);
   const plainText = turns.map((turn) => turn.text).join("\n");
-  try {
-    const quota = await reserveAiQuota(admin, auth.user.id, "podcast");
-    if (!quota.allowed) return json({ error: `Hourly podcast limit reached (${quota.quota}). Try again later.`, retry_after_seconds: quota.retry_after_seconds }, 429);
-  } catch (error) {
-    return json({ error: error instanceof Error ? error.message : "AI quota service is unavailable." }, 503);
+  // Administrators may use the configured ElevenLabs account without the
+  // platform's hourly podcast quota. ElevenLabs' own account limits, billing,
+  // and API-key restrictions still apply, and every request remains logged.
+  const adminElevenLabsBypass = adminMayUsePremiumVoice && elevenLabsKeys.length > 0;
+  if (!adminElevenLabsBypass) {
+    try {
+      const quota = await reserveAiQuota(admin, auth.user.id, "podcast");
+      if (!quota.allowed) return json({ error: `Hourly podcast limit reached (${quota.quota}). Try again later.`, retry_after_seconds: quota.retry_after_seconds }, 429);
+    } catch (error) {
+      return json({ error: error instanceof Error ? error.message : "AI quota service is unavailable." }, 503);
+    }
   }
   if (!(adminMayUsePremiumVoice && elevenLabsKeys.length) && !(geminiEnabled && geminiKeys.length) && (adminMayUsePremiumVoice && providerLanguage === "en" && openAIEnabled && openAIKeys.length) === false && !(providerLanguage === "en" && hfFallbackEnabled && hfTokens.length)) {
     return json({ error: language === "sw" ? "Kiswahili audio needs ELEVENLABS_API_KEY_1 or GEMINI_API_KEY_1 in Supabase Edge Function secrets." : "No speech provider is configured. Add an ElevenLabs or Gemini API key; OpenAI TTS is also available when OPENAI_API_KEY_1 is configured." }, 503);
