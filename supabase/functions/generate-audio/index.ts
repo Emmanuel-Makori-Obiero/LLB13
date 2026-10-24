@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { secretKeys } from "../_shared/keys.ts";
+import { newestKeySlotsFirst, secretKeyEntries, secretKeys } from "../_shared/keys.ts";
 import { reserveAiQuota } from "../_shared/quotas.ts";
 import { recordProviderUsage } from "../_shared/usage.ts";
 
@@ -135,7 +135,7 @@ async function generateElevenLabsAudio(
           method: "POST",
           headers: { "xi-api-key": key, "Content-Type": "application/json", Accept: "audio/mpeg" },
           body: JSON.stringify(body),
-          signal: AbortSignal.timeout(60_000),
+          signal: AbortSignal.timeout(35_000),
         });
         if (generated.ok) break;
         const detail = (await generated.text()).slice(0, 500);
@@ -389,7 +389,9 @@ Deno.serve(async (req) => {
   const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const hfTokens = secretKeys("HF_TOKEN");
   const geminiKeys = secretKeys("GEMINI_API_KEY");
-  const elevenLabsKeys = secretKeys("ELEVENLABS_API_KEY");
+  // Prefer the newest numbered account first, so ELEVENLABS_API_KEY_2 is used
+  // before key 1 when configured; older keys remain automatic fallback.
+  const elevenLabsKeys = newestKeySlotsFirst(secretKeyEntries("ELEVENLABS_API_KEY")).map((entry) => entry.value);
   const openAIKeys = secretKeys("OPENAI_API_KEY");
   const geminiEnabled = Deno.env.get("GEMINI_TTS_ENABLED")?.toLowerCase() !== "false";
   const openAIEnabled = Deno.env.get("OPENAI_TTS_ENABLED")?.toLowerCase() !== "false";
