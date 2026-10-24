@@ -222,7 +222,10 @@ function combineWav(parts: Uint8Array[]): Uint8Array {
 async function generateGeminiAudio(text: string, keys: string[], model: string, hostGender: VoiceGender, tutorGender: VoiceGender): Promise<AudioResult> {
   const turns = speechTurns(text);
   if (!turns.length) throw new Error("The podcast script contains no speakable text.");
-  const chunks = chunkSpeechTurns(turns);
+  // Gemini returns uncompressed WAV. Keep each response small so the JSON,
+  // base64 string, decoded bytes, and accumulated output stay below the Edge
+  // Function memory limit during long learning episodes.
+  const chunks = chunkSpeechTurns(turns, 1000);
   const outputs: Uint8Array[] = [];
   for (const chunk of chunks) {
   const multiSpeaker = chunk.some((turn) => turn.speaker === "TUTOR");
