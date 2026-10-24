@@ -126,7 +126,10 @@ async function generateElevenLabsAudio(
     };
     let generated: Response | null = null;
     const failures: string[] = [];
-    for (const key of keys) {
+    // Spread chunks across configured keys first, then fall through to the
+    // remaining keys. One exhausted account should not block a long episode.
+    const orderedKeys = keys.map((_, offset) => keys[(index + offset) % keys.length]);
+    for (const key of orderedKeys) {
       try {
         generated = await fetch("https://api.elevenlabs.io/v1/text-to-dialogue?output_format=mp3_44100_128", {
           method: "POST",
@@ -136,7 +139,10 @@ async function generateElevenLabsAudio(
         });
         if (generated.ok) break;
         const detail = (await generated.text()).slice(0, 500);
-        failures.push(`ElevenLabs ${generated.status}: ${detail}`);
+        const quotaMessage = /quota_exceeded|quota exceeded|credits remaining/i.test(detail)
+          ? "quota exhausted for this key; trying the next configured ElevenLabs key"
+          : detail;
+        failures.push(`ElevenLabs ${generated.status}: ${quotaMessage}`);
       } catch (error) {
         failures.push(error instanceof Error ? error.message : String(error));
       }
