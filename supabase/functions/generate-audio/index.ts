@@ -135,7 +135,7 @@ async function generateElevenLabsAudio(
           method: "POST",
           headers: { "xi-api-key": key, "Content-Type": "application/json", Accept: "audio/mpeg" },
           body: JSON.stringify(body),
-          signal: AbortSignal.timeout(120_000),
+          signal: AbortSignal.timeout(60_000),
         });
         if (generated.ok) break;
         const detail = (await generated.text()).slice(0, 500);
@@ -229,7 +229,7 @@ async function generateGeminiAudio(text: string, keys: string[], model: string, 
         method: "POST",
         headers: { "x-goog-api-key": key, "Content-Type": "application/json" },
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(120_000),
+        signal: AbortSignal.timeout(60_000),
       });
       const raw = await response.text();
       let payload: unknown;
@@ -287,7 +287,7 @@ async function generateOpenAIAudio(
               ? "Speak as a thoughtful, clear Kenyan law tutor: natural, warm, precise, and conversational."
               : "Speak as a warm, clear podcast host using natural Kenyan English, with an engaging conversational pace.",
           }),
-          signal: AbortSignal.timeout(120_000),
+          signal: AbortSignal.timeout(60_000),
         });
         if (generated.ok) break;
         turnFailures.push(`OpenAI TTS ${generated.status}: ${(await generated.text()).slice(0, 500)}`);
@@ -325,7 +325,7 @@ async function generateHuggingFaceAudio(text: string, tokens: string[], model: s
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "audio/wav, audio/*, application/json" },
         body: JSON.stringify({ inputs: text, options: { wait_for_model: true } }),
-        signal: AbortSignal.timeout(120_000),
+        signal: AbortSignal.timeout(60_000),
       });
       if (generated.ok) break;
       lastDetail = (await generated.text()).slice(0, 1200);

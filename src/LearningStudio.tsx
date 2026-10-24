@@ -79,7 +79,25 @@ export default function LearningStudio({ learnerLevel = "" }: { learnerLevel?: s
   const [audioMimeType, setAudioMimeType] = useState(saved.audioMimeType ?? "audio/mpeg");
   const [audioProvider, setAudioProvider] = useState<string | null>(saved.audioProvider ?? null);
   const [audioNote, setAudioNote] = useState("");
+  const [audioProgress, setAudioProgress] = useState(0);
+  const [audioElapsedSeconds, setAudioElapsedSeconds] = useState(0);
+  const [audioStage, setAudioStage] = useState("");
   const audioRequestId = useRef(0);
+  useEffect(() => {
+    if (!audioBusy) return;
+    const startedAt = Date.now();
+    const tick = () => {
+      const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+      setAudioElapsedSeconds(elapsed);
+      // This is honest indeterminate progress: it advances while providers
+      // work but never claims completion before the playable file exists.
+      setAudioProgress(Math.min(92, 8 + Math.round(Math.log1p(elapsed) * 18)));
+      setAudioStage(elapsed < 8 ? "Preparing speech chunks…" : elapsed < 30 ? "Trying the configured voice providers…" : elapsed < 90 ? "Rendering and combining the audio…" : "Still rendering a long episode — you can keep this page open…");
+    };
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [audioBusy]);
   useEffect(() => {
     try {
       window.localStorage.setItem(STUDIO_STORAGE_KEY, JSON.stringify({ topic, selected, mode, spokenLanguage, scriptLanguage, presenterStyle, presenterName, guideName, presenterGender, guideGender, script, slide, audioUrl, audioMimeType, audioProvider } satisfies StudioDraft));
@@ -153,6 +171,9 @@ export default function LearningStudio({ learnerLevel = "" }: { learnerLevel?: s
     const scriptSnapshot = script;
     const languageSnapshot = scriptLanguage || spokenLanguage;
     setAudioBusy(true);
+    setAudioProgress(4);
+    setAudioElapsedSeconds(0);
+    setAudioStage("Preparing speech chunks…");
     setAudioUrl(null);
     setAudioProvider(null);
     setAudioNote("Creating fluent voice audio…");
@@ -162,11 +183,14 @@ export default function LearningStudio({ learnerLevel = "" }: { learnerLevel?: s
       setAudioUrl(result.signed_url);
       setAudioMimeType(result.mime_type || "audio/mpeg");
       setAudioProvider(result.asset?.provider || null);
+      setAudioProgress(100);
+      setAudioStage("Playable audio is ready.");
       setAudioNote("Audio is ready and saved in Media archive. Listen below, download it, or open Media to play and share it with Group 13.");
       logPodcastAudioActivity("podcast_audio_generated");
     } catch (e) {
       logPodcastAudioActivity("podcast_audio_failed");
       if (requestId === audioRequestId.current) setAudioNote(e instanceof Error ? e.message : "Could not create audio.");
+      if (requestId === audioRequestId.current) { setAudioProgress(0); setAudioStage("Audio generation stopped."); }
     } finally {
       if (requestId === audioRequestId.current) setAudioBusy(false);
     }
@@ -573,6 +597,7 @@ export default function LearningStudio({ learnerLevel = "" }: { learnerLevel?: s
               </div>
                 <p className="field-hint">Build learning episode creates the script; generate audio to make a playable file. Members use Google Gemini TTS and, if configured, Hugging Face; only the administrator can use ElevenLabs or OpenAI TTS. Provider quotas and pricing depend on the configured account, so audio may still use paid quota.</p>
                 {audioNote && <p className="field-hint">{audioNote}</p>}
+                {audioBusy && <div className="studio-audio-progress" role="status" aria-live="polite"><div className="studio-audio-progress-top"><strong>{audioStage}</strong><span>{audioElapsedSeconds}s</span></div><div className="studio-audio-progress-track"><span style={{ width: `${audioProgress}%` }} /></div><small>Long scripts are processed in chunks. If a paid provider is out of quota, the next configured provider is tried automatically.</small></div>}
                 {audioUrl && <div className="studio-audio-download"><audio controls preload="metadata" src={audioUrl} aria-label="Generated podcast audio player" onError={() => setAudioNote("The player could not load this audio. Regenerate it to create a fresh playback link.")} /><button className="secondary-button" onClick={() => void downloadGeneratedAudio()}><Download size={13} /> Download audio</button><span className="field-hint">Voice: {audioProviderLabel(audioProvider)}</span></div>}
               {mode === "video" && (
                 <>
