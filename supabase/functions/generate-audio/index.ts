@@ -196,11 +196,37 @@ function decodeBase64(encoded: string): Uint8Array {
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 }
 
+function wavPayload(bytes: Uint8Array): Uint8Array {
+  let offset = 12;
+  while (offset + 8 <= bytes.length) {
+    const size = bytes[offset + 4] | (bytes[offset + 5] << 8) | (bytes[offset + 6] << 16) | (bytes[offset + 7] << 24);
+    if (String.fromCharCode(...bytes.slice(offset, offset + 4)) === "data") return bytes.slice(offset + 8, offset + 8 + size);
+    offset += 8 + size + (size % 2);
+  }
+  return bytes.slice(44);
+}
+
+function combineWav(parts: Uint8Array[]): Uint8Array {
+  const payloads = parts.map(wavPayload);
+  const payloadLength = payloads.reduce((sum, part) => sum + part.length, 0);
+  const output = new Uint8Array(44 + payloadLength);
+  output.set(parts[0].slice(0, 44), 0);
+  let offset = 44;
+  for (const payload of payloads) { output.set(payload, offset); offset += payload.length; }
+  const view = new DataView(output.buffer);
+  view.setUint32(4, output.length - 8, true);
+  view.setUint32(40, payloadLength, true);
+  return output;
+}
+
 async function generateGeminiAudio(text: string, keys: string[], model: string, hostGender: VoiceGender, tutorGender: VoiceGender): Promise<AudioResult> {
   const turns = speechTurns(text);
   if (!turns.length) throw new Error("The podcast script contains no speakable text.");
-  const multiSpeaker = turns.some((turn) => turn.speaker === "TUTOR");
-  const content = turns.map((turn) => ({
+  const chunks = chunkSpeechTurns(turns);
+  const outputs: Uint8Array[] = [];
+  for (const chunk of chunks) {
+  const multiSpeaker = chunk.some((turn) => turn.speaker === "TUTOR");
+  const content = chunk.map((turn) => ({
     type: "text",
     text: turn.text,
     ...(multiSpeaker ? {
@@ -247,12 +273,15 @@ async function generateGeminiAudio(text: string, keys: string[], model: string, 
       if (bytes.length < 44 || String.fromCharCode(...bytes.slice(0, 4)) !== "RIFF" || String.fromCharCode(...bytes.slice(8, 12)) !== "WAVE") {
         throw new Error("Gemini returned audio without a valid WAV header.");
       }
-      return { bytes, mimeType: "audio/wav", provider: "gemini-tts", model, requestUnits: 1, voices: multiSpeaker ? 2 : 1 };
+      outputs.push(bytes);
+      break;
     } catch (error) {
       failures.push(error instanceof Error ? error.message : String(error));
     }
   }
-  throw new Error(failures.slice(-3).join("; ") || "Gemini TTS did not return audio.");
+  }
+  if (outputs.length !== chunks.length) throw new Error(failures.slice(-3).join("; ") || "Gemini TTS did not return audio.");
+  return { bytes: outputs.length === 1 ? outputs[0] : combineWav(outputs), mimeType: "audio/wav", provider: chunks.length === 1 ? "gemini-tts" : "gemini-tts-chunked", model, requestUnits: chunks.length, voices: new Set(turns.map((turn) => turn.speaker)).size };
 }
 
 async function generateOpenAIAudio(
@@ -445,12 +474,14 @@ Deno.serve(async (req) => {
     await admin.storage.from("media").remove([storagePath]);
     return json({ error: `Could not record generated audio: ${error.message}` }, 500);
   }
-  await admin.from("platform_activity_events").insert({ user_id: auth.user.id, event_type: "podcast_audio_generated", details: { provider: audio.provider } });
-  await recordProviderUsage(admin, {
+  // Telemetry is non-critical and must never turn a successful file into a 500.
+  try { await admin.from("platform_activity_events").insert({ user_id: auth.user.id, event_type: "podcast_audio_generated", details: { provider: audio.provider } }); } catch { /* non-blocking */ }
+  try { await recordProviderUsage(admin, {
     userId: auth.user.id, category: "podcast", provider: audio.provider, model: audio.model,
     requestUnits: audio.requestUnits, inputUnits: text.length, unitLabel: "characters",
     details: { language, voices: audio.voices },
-  });
+  }); } catch { /* non-blocking */ }
   const signed = await admin.storage.from("media").createSignedUrl(storagePath, 3600);
-  return json({ asset, signed_url: signed.data?.signedUrl ?? null, mime_type: audio.mimeType });
+  if (signed.error || !signed.data?.signedUrl) return json({ error: `Audio was generated but could not be opened: ${signed.error?.message || "signed URL unavailable"}` }, 500);
+  return json({ asset, signed_url: signed.data.signedUrl, mime_type: audio.mimeType });
 });
