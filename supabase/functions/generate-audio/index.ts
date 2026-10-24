@@ -212,7 +212,7 @@ async function generateGeminiAudio(text: string, keys: string[], model: string, 
     response_format: { type: "audio" },
     generation_config: {
       speech_config: multiSpeaker
-        ? { mode: "conversational", speakers: [{ speaker: "HOST", voice: hostGender === "female" ? "Kore" : "Puck" }, { speaker: "TUTOR", voice: tutorGender === "female" ? "Kore" : "Puck" }] }
+        ? { speakers: [{ speaker: "HOST", voice: hostGender === "female" ? "Kore" : "Puck" }, { speaker: "TUTOR", voice: tutorGender === "female" ? "Kore" : "Puck" }] }
         : [{ voice: "Kore" }],
     },
   };
