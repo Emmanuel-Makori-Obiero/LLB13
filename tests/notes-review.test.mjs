@@ -4,7 +4,9 @@ import { readFileSync } from "node:fs";
 import {
   normalizeNotesReview,
   normalizeResearchPlan,
+  mergeResearchPlans,
   joinReviewedNoteParts,
+  notesResearchPrompt,
   notesReviewPrompt,
   extractOfficialCitation,
   safeKenyaLawUrl,
@@ -17,6 +19,7 @@ const prompt = readFileSync(new URL("../supabase/functions/ai/prompts.ts", impor
 const page = readFileSync(new URL("../src/NotesReviewPage.tsx", import.meta.url), "utf8");
 const transcript = readFileSync(new URL("../src/TranscriptAI.tsx", import.meta.url), "utf8");
 const migration = readFileSync(new URL("../supabase/migrations/20261025085439_notes_reviews.sql", import.meta.url), "utf8");
+const largeReviewMigration = readFileSync(new URL("../supabase/migrations/20261025180000_notes_review_large_documents.sql", import.meta.url), "utf8");
 
  test("research plan preserves only bounded legal queries and exact authority mentions", () => {
   const result = normalizeResearchPlan({
@@ -120,6 +123,20 @@ test("private history migration is owner scoped with row-level security", () => 
   assert.match(migration, /auth\.uid\(\) = user_id/g);
   assert.match(migration, /on delete cascade/i);
   assert.match(page, /\.eq\("user_id", userId\)/);
+});
+
+test("large note reviews research and correct every bounded segment", () => {
+  const merged = mergeResearchPlans([
+    { legalIssues: ["Judicial review"], authorities: [{ mention: "Mumo Matemu", query: "Mumo Matemu" }], searchQueries: ["judicial review Kenya"] },
+    { legalIssues: ["Judicial review", "fair hearing"], authorities: [{ mention: "Mumo Matemu", query: "duplicate" }, { mention: "Article 47", query: "Article 47 Kenya" }], searchQueries: ["fair hearing Kenya"] },
+  ]);
+  assert.deepEqual(merged.authorities.map((item) => item.mention), ["Mumo Matemu", "Article 47"]);
+  assert.match(notesResearchPrompt({ part: 6, total: 8 }), /segment 7 of 8/);
+  assert.match(page, /feature: "notes_research"/);
+  assert.match(page, /part,\n\s+size: REVIEW_SECTIONS_PER_PART/);
+  assert.match(backend, /\["notes", "notes_research", "notes_review"\]\.includes\(feature\)/);
+  assert.doesNotMatch(page, /indexed\.chunks > 24/);
+  assert.match(largeReviewMigration, /char_length\(original_text\) between 1 and 500000/i);
 });
 
 test("long notes are reviewed in order with overlap continuity and no repeated boundary text", () => {

@@ -17,13 +17,16 @@ import type { Material, Unit } from "./data/types";
 import { askAI, deleteMaterial, extractText, saveTextMaterial } from "./lib/ai";
 import {
   extractOfficialCitation,
+  mergeResearchPlans,
   normalizeNotesReview,
   normalizeResearchPlan,
   joinReviewedNoteParts,
+  notesResearchPrompt,
   notesReviewPrompt,
   safeKenyaLawUrl,
   uniqueOfficialSources,
   type NotesReviewResult,
+  type NotesResearchPlan,
   type OfficialResearchSource,
 } from "./lib/notesReview";
 import { fetchKenyaLawCase } from "./lib/kenyaLaw";
@@ -48,6 +51,7 @@ const MAX_RESEARCH_QUERIES = 8;
 const MAX_OPENED_AUTHORITIES = 6;
 const HISTORY_LIMIT = 25;
 const REVIEW_SECTIONS_PER_PART = 6;
+const MAX_REVIEW_PARTS = 30;
 
 function parsePlan(value: unknown, answer: string) {
   if (value && typeof value === "object") return normalizeResearchPlan(value);
@@ -223,19 +227,25 @@ export default function NotesReviewPage({ userId, units, initialText, initialTit
       setStage("Indexing the complete note for source-based review");
       const indexed = await saveTextMaterial(`Private review source ${crypto.randomUUID()}`, original);
       documentId = indexed.id;
-      if (indexed.chunks > 24) {
-        await deleteMaterial(indexed.id).catch(() => undefined);
-        throw new Error(`These notes contain ${indexed.chunks} indexed sections. A complete review supports up to 24; split the notes into smaller documents and retry. Nothing was sampled.`);
+      const totalParts = Math.max(1, Math.ceil(indexed.chunks / REVIEW_SECTIONS_PER_PART));
+      if (totalParts > MAX_REVIEW_PARTS) {
+        throw new Error(`These notes contain ${indexed.chunks} indexed sections. A complete review supports up to ${MAX_REVIEW_PARTS * REVIEW_SECTIONS_PER_PART}; split the notes into smaller documents and retry. Nothing was sampled.`);
       }
 
-      setStage("Identifying every legal issue and authority that needs research");
-      const planResponse = await askAI({
-        feature: "notes_research",
-        mode: "materials",
-        docIds: [indexed.id],
-        messages: [{ role: "user", content: "Read the complete indexed note. Identify legal issues and exact authorities/citations mentioned. Produce up to eight short, neutral research queries that can be run against official Kenya Law. Do not invent a case or assume that any authority is correct. Return the requested structured result only." }],
-      });
-      const plan = parsePlan(planResponse.data, planResponse.answer);
+      const researchPlans: NotesResearchPlan[] = [];
+      for (let part = 0; part < totalParts; part++) {
+        setStage(`Identifying authorities · reading notes section ${part + 1} of ${totalParts}`);
+        const planResponse = await askAI({
+          feature: "notes_research",
+          mode: "materials",
+          docIds: [indexed.id],
+          part,
+          size: REVIEW_SECTIONS_PER_PART,
+          messages: [{ role: "user", content: notesResearchPrompt({ part, total: totalParts }) }],
+        });
+        researchPlans.push(parsePlan(planResponse.data, planResponse.answer));
+      }
+      const plan = mergeResearchPlans(researchPlans);
       const queries = plan.searchQueries.slice(0, MAX_RESEARCH_QUERIES);
       const searchStatus: string[] = [];
       const candidates: { title: string; url: string }[] = [];
@@ -282,7 +292,6 @@ export default function NotesReviewPage({ userId, units, initialText, initialTit
       setSources(verifiedSources);
 
       const safeIds = new Set(verifiedSources.map((item) => item.id));
-      const totalParts = Math.max(1, Math.ceil(indexed.chunks / REVIEW_SECTIONS_PER_PART));
       const reviewedParts: NotesReviewResult[] = [];
       let precedingTail = "";
       for (let part = 0; part < totalParts; part++) {

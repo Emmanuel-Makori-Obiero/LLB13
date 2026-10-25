@@ -632,8 +632,8 @@ async function retrieve(
         citation: r.ai_documents?.citation,
         content: r.content,
       });
-  } else if ((feature === "notes" || feature === "notes_review") && docIds?.length === 1 && selectedIds.length === 1 && part !== undefined) {
-    // Note generation and correction walk the selected document in order; parts never sample sections.
+  } else if (["notes", "notes_research", "notes_review"].includes(feature) && docIds?.length === 1 && selectedIds.length === 1 && part !== undefined) {
+    // Note generation, research planning, and correction walk the selected document in order; parts never sample sections.
     const from = part * size;
     const { data } = await db
       .from("ai_chunks")

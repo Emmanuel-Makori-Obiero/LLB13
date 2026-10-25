@@ -6,6 +6,34 @@ export type NotesResearchPlan = {
   searchQueries: string[];
 };
 
+export function notesResearchPrompt(segment: { part: number; total: number }): string {
+  return `Read ONLY the selected student's notes in indexed segment ${segment.part + 1} of ${segment.total}. Extract exact authority names and citations actually written in this segment, plus neutral legal issues that require official Kenya Law verification. Return ONLY valid JSON with exactly these keys: {"legalIssues":[""],"authorities":[{"mention":"exact wording from this segment","query":"short query <=180 chars"}],"searchQueries":["short neutral Kenya Law query"]}. Do not invent, normalize, complete or substitute a case name or citation. Preserve garbled names as written and search only the exact recoverable words. Produce at most eight distinct queries for this segment, prioritizing cited authorities and specific propositions. Do not answer the legal issue or claim that a search has been done.`;
+}
+
+export function mergeResearchPlans(plans: NotesResearchPlan[]): NotesResearchPlan {
+  const authorities = new Map<string, AuthorityQuery>();
+  const legalIssues: string[] = [];
+  const queries: string[] = [];
+  for (const plan of plans) {
+    legalIssues.push(...plan.legalIssues);
+    queries.push(...plan.searchQueries);
+    for (const authority of plan.authorities) {
+      const key = authority.mention.trim().toLowerCase();
+      if (key && !authorities.has(key)) authorities.set(key, authority);
+    }
+  }
+  const mergedAuthorities = [...authorities.values()].slice(0, 8);
+  return {
+    legalIssues: [...new Set(legalIssues)].slice(0, 12),
+    authorities: mergedAuthorities,
+    searchQueries: [...new Set([
+      ...mergedAuthorities.map((authority) => authority.query),
+      ...queries,
+      ...legalIssues,
+    ])].filter((query) => query.length >= 3 && query.length <= 180).slice(0, 8),
+  };
+}
+
 export type NotesCorrection = {
   original: string;
   corrected: string;
@@ -96,7 +124,7 @@ export function normalizeNotesReview(
   if (!value || typeof value !== "object") return null;
   const data = value as Record<string, unknown>;
   const safeIds = (input: unknown) => stringArray(input, 8).filter((id) => availableSourceIds.has(id));
-  const correctedNotes = cleanString(data.corrected_notes ?? data.correctedNotes, 100_000)
+  const correctedNotes = cleanString(data.corrected_notes ?? data.correctedNotes, 500_000)
     .replace(/\[(K\d+)\]/g, (tag, id: string) => availableSourceIds.has(id) ? tag : "[unverified source reference]");
   if (correctedNotes.length < 20) return null;
   const corrections: NotesCorrection[] = Array.isArray(data.corrections)
