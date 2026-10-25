@@ -370,10 +370,10 @@ export function TranscriptAI({
         const complete = done.join("\n\n---\n\n");
         setNotesText(complete);
         const report = await reviewOutput(complete);
-        if (report.status !== "pass" && automaticRepairs.current < 3) {
+        if (report.status !== "pass") {
           automaticRepairs.current += 1;
-          setStep(`Source audit found unsupported material. Repair pass ${automaticRepairs.current} of 3…`);
-          window.setTimeout(() => void run(action, report), 0);
+          setStep(`Source audit is below 99/100. Repair pass ${automaticRepairs.current} — continuing until it passes…`);
+          window.setTimeout(() => void run(action, report), 750);
         }
         return;
       }
@@ -398,10 +398,10 @@ export function TranscriptAI({
       setTurn({ id: 1, task, prompt: generationPrompt, result, mode: "materials", docIds: [doc.id] });
       if (action.feature === "summarize") {
         const report = await reviewOutput(result.answer);
-        if (report.status !== "pass" && automaticRepairs.current < 3) {
+        if (report.status !== "pass") {
           automaticRepairs.current += 1;
-          setStep(`Source audit found unsupported material. Repair pass ${automaticRepairs.current} of 3…`);
-          window.setTimeout(() => void run(action, report), 0);
+          setStep(`Source audit is below 99/100. Repair pass ${automaticRepairs.current} — continuing until it passes…`);
+          window.setTimeout(() => void run(action, report), 750);
         }
       }
     } catch (e) {
