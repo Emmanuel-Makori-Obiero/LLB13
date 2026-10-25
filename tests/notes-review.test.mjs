@@ -6,15 +6,17 @@ import {
   normalizeResearchPlan,
   joinReviewedNoteParts,
   notesReviewPrompt,
+  extractOfficialCitation,
   safeKenyaLawUrl,
   uniqueOfficialSources,
 } from "../src/lib/notesReview.ts";
+import { selectTranscriptRunSource } from "../src/lib/transcriptRunSource.ts";
 
 const backend = readFileSync(new URL("../supabase/functions/ai/index.ts", import.meta.url), "utf8");
 const prompt = readFileSync(new URL("../supabase/functions/ai/prompts.ts", import.meta.url), "utf8");
 const page = readFileSync(new URL("../src/NotesReviewPage.tsx", import.meta.url), "utf8");
 const transcript = readFileSync(new URL("../src/TranscriptAI.tsx", import.meta.url), "utf8");
-const migration = readFileSync(new URL("../supabase/migrations/20261025114500_notes_reviews.sql", import.meta.url), "utf8");
+const migration = readFileSync(new URL("../supabase/migrations/20261025085439_notes_reviews.sql", import.meta.url), "utf8");
 
  test("research plan preserves only bounded legal queries and exact authority mentions", () => {
   const result = normalizeResearchPlan({
@@ -74,6 +76,43 @@ test("transcript-generated notes can be edited, rerun as the source, and handed 
   assert.match(transcript, /onReviewNotes\(generatedText/);
   assert.match(transcript, /sourceOverride/);
   assert.match(page, /initialText\?\.trim\(\)/);
+});
+
+test("notes rerun indexes the edited generated notes and does not read the original transcript", () => {
+  const generatedNotes = "Edited notes: judicial review requires legality, rationality, and procedural fairness.";
+  let originalReads = 0;
+  const selected = selectTranscriptRunSource(generatedNotes, () => {
+    originalReads++;
+    return "Original lecture transcript that must not be used for this rerun.";
+  });
+  assert.deepEqual(selected, { kind: "generated_notes", text: generatedNotes });
+  assert.equal(originalReads, 0);
+  assert.match(transcript, /saveTextMaterial\(`\$\{title\} \(notes rerun/);
+  assert.match(transcript, /selectTranscriptRunSource\(sourceOverride, getText\)/);
+  assert.deepEqual(selectTranscriptRunSource(undefined, () => "Original transcript"), {
+    kind: "original_transcript",
+    text: "Original transcript",
+  });
+});
+
+test("case citation corrections use the opened Kenya Law record citation and retain its source link", () => {
+  const officialTitle = "Matemu v Trusted Society of Human Rights Alliance & 5 others (Civil Application 29 of 2014) [2014] KESC 6 (KLR) (9 December 2014) (Ruling)";
+  const citation = extractOfficialCitation(officialTitle, "Neutral citation: [2014] KESC 6 (KLR).\nRepublic of Kenya.");
+  assert.equal(citation, "[2014] KESC 6 (KLR)");
+  const result = normalizeNotesReview({
+    summary: "The case citation was corrected against the opened Supreme Court record.",
+    corrected_notes: `Matemu v Trusted Society of Human Rights Alliance & 5 others ${citation} [K1] concerned Civil Application 29 of 2014.`,
+    corrections: [{ original: "[2013] KESC 6", corrected: citation, category: "citation", reason: "Matches the neutral citation in the opened Kenya Law record.", source_ids: ["K1"], verification: "supported" }],
+    authority_checks: [{ authority: `Matemu v Trusted Society of Human Rights Alliance & 5 others ${citation}`, status: "verified", reason: "Official Kenya Law text was opened.", source_ids: ["K1"] }],
+    unresolved_questions: [],
+  }, new Set(["K1"]));
+  assert.ok(result);
+  assert.match(result.correctedNotes, /\[2014\] KESC 6 \(KLR\) \[K1\]/);
+  assert.equal(result.corrections[0].corrected, citation);
+  assert.equal(result.corrections[0].verification, "supported");
+  assert.deepEqual(result.corrections[0].sourceIds, ["K1"]);
+  assert.match(page, /citation: extractOfficialCitation\(document\.title \|\| candidate\.title, document\.text\)/);
+  assert.doesNotMatch(page, /citation: candidate\.citation/);
 });
 
 test("private history migration is owner scoped with row-level security", () => {

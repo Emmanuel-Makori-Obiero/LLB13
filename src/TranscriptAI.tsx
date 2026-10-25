@@ -22,6 +22,7 @@ import {
   type AIResult,
 } from "./lib/ai";
 import { Answer, type Turn } from "./StudyAssistant";
+import { selectTranscriptRunSource } from "./lib/transcriptRunSource";
 import "./assistant.css";
 import { downloadBlob, downloadPdf, downloadWord } from "./export";
 import {
@@ -290,9 +291,10 @@ export function TranscriptAI({
     if (!repair) automaticRepairs.current = 0;
     try {
       let doc: { id: string; chunks: number };
-      if (sourceOverride !== undefined) {
+      const selectedSource = selectTranscriptRunSource(sourceOverride, getText);
+      if (selectedSource.kind === "generated_notes") {
         setStep("Preparing the generated notes as the new source");
-        doc = await saveTextMaterial(`${title} (notes rerun ${crypto.randomUUID()})`, sourceOverride);
+        doc = await saveTextMaterial(`${title} (notes rerun ${crypto.randomUUID()})`, selectedSource.text);
         temporarySourceId = doc.id;
       } else {
         // Save the transcript once per visit so every button reads the same copy.
@@ -300,7 +302,7 @@ export function TranscriptAI({
           setStep("Preparing the original transcript");
           saved.current = await saveTextMaterial(
             `${title} (lecture transcript)`,
-            getText(),
+            selectedSource.text,
           );
         }
         doc = saved.current;

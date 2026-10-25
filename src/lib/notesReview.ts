@@ -80,6 +80,12 @@ export function safeKenyaLawUrl(value: unknown): string | null {
   }
 }
 
+export function extractOfficialCitation(title: string, text: string): string | null {
+  const header = `${title}\n${text.slice(0, 1800)}`.replace(/\s+/g, " ");
+  const match = header.match(/\[(?:19|20)\d{2}\]\s+(?:[A-Z]{2,12}\s+\d+\s+\(KLR\)|[A-Z]{2,12}\s+\d+|eKLR)(?![\w])/i);
+  return match?.[0]?.replace(/\s+/g, " ").trim() ?? null;
+}
+
 const validVerification = (value: unknown): NotesCorrection["verification"] =>
   value === "supported" || value === "unverified" ? value : "not_applicable";
 

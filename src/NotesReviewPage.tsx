@@ -16,6 +16,7 @@ import { supabase } from "./data/repository";
 import type { Material, Unit } from "./data/types";
 import { askAI, deleteMaterial, extractText, saveTextMaterial } from "./lib/ai";
 import {
+  extractOfficialCitation,
   normalizeNotesReview,
   normalizeResearchPlan,
   joinReviewedNoteParts,
@@ -237,7 +238,7 @@ export default function NotesReviewPage({ userId, units, initialText, initialTit
       const plan = parsePlan(planResponse.data, planResponse.answer);
       const queries = plan.searchQueries.slice(0, MAX_RESEARCH_QUERIES);
       const searchStatus: string[] = [];
-      const candidates: { title: string; url: string; citation: string | null }[] = [];
+      const candidates: { title: string; url: string }[] = [];
       if (queries.length) {
         setStage(`Searching official Kenya Law for ${queries.length} cited authorities and issues`);
         const lookups = await Promise.all(queries.map(async (query) => {
@@ -252,8 +253,8 @@ export default function NotesReviewPage({ userId, units, initialText, initialTit
             const row = asRecord(item) ?? {};
             const url = safeKenyaLawUrl(row.url);
             if (!url) return null;
-            return { title: String(row.title ?? "Kenya Law result"), url, citation: typeof row.citation === "string" ? row.citation : null };
-          }).filter((item): item is { title: string; url: string; citation: string | null } => Boolean(item));
+            return { title: String(row.title ?? "Kenya Law result"), url };
+          }).filter((item): item is { title: string; url: string } => Boolean(item));
           if (!queryMatches.length) searchStatus.push(`${query}: no official record returned`);
           return queryMatches.slice(0, 2);
         }));
@@ -269,7 +270,7 @@ export default function NotesReviewPage({ userId, units, initialText, initialTit
             id: "",
             title: document.title || candidate.title,
             url: safeKenyaLawUrl(document.url) ?? candidate.url,
-            citation: candidate.citation,
+            citation: extractOfficialCitation(document.title || candidate.title, document.text),
             text: document.text.slice(0, 4500),
           } satisfies OfficialResearchSource;
         } catch {
