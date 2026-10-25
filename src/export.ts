@@ -19,15 +19,8 @@ export function downloadBlob(blob: Blob, filename: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-const escapeHtml = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const splitTable = (line: string) => line.trim().replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim());
 const isTableSeparator = (line: string) => /^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test(line.trim());
-
-function inlineHtml(value: string) {
-  let safe = escapeHtml(value).replace(/\[S(\d+)\]/g, "<sup class=\"citation\">S$1</sup>");
-  safe = safe.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/\*([^*]+)\*/g, "<em>$1</em>").replace(/`([^`]+)`/g, "<code>$1</code>");
-  return safe;
-}
 
 function blocks(text: string): ExportBlock[] {
   const lines = text.replace(/\r/g, "").split("\n");
@@ -53,34 +46,114 @@ function blocks(text: string): ExportBlock[] {
   return result;
 }
 
-function documentBodyHtml(text: string) {
-  const out: string[] = [];
-  let list: "ul" | "ol" | null = null;
-  const closeList = () => { if (list) { out.push(`</${list}>`); list = null; } };
-  for (const block of blocks(text)) {
-    if (block.kind === "bullet" || block.kind === "number") {
-      const next = block.kind === "bullet" ? "ul" : "ol";
-      if (list !== next) { closeList(); list = next; out.push(`<${list}>`); }
-      out.push(`<li>${inlineHtml(block.text)}</li>`);
-    } else {
-      closeList();
-      if (block.kind === "heading") out.push(`<h2>${inlineHtml(block.text)}</h2>`);
-      else if (block.kind === "subheading") out.push(`<h3>${inlineHtml(block.text)}</h3>`);
-      else if (block.kind === "quote") out.push(`<blockquote>${inlineHtml(block.text)}</blockquote>`);
-      else if (block.kind === "rule") out.push(`<hr>`);
-      else if (block.kind === "table") out.push(`<table><thead><tr>${(block.rows?.[0] ?? []).map((cell) => `<th>${inlineHtml(cell)}</th>`).join("")}</tr></thead><tbody>${(block.rows ?? []).slice(1).map((row) => `<tr>${row.map((cell) => `<td>${inlineHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table>`);
-      else out.push(`<p>${inlineHtml(block.text)}</p>`);
-    }
+const escapeXml = (value: string) => value
+  .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
+  .replace(/&/g, "&amp;")
+  .replace(/</g, "&lt;")
+  .replace(/>/g, "&gt;")
+  .replace(/"/g, "&quot;")
+  .replace(/'/g, "&apos;");
+
+function wordRuns(value: string, color?: string) {
+  const parts: string[] = [];
+  const inlinePattern = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g;
+  let previous = 0;
+  const addRun = (text: string, bold = false, italic = false, monospace = false) => {
+    if (!text) return;
+    const props = [
+      bold ? "<w:b/>" : "",
+      italic ? "<w:i/>" : "",
+      monospace ? '<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas"/>' : "",
+      color ? `<w:color w:val="${color}"/>` : "",
+    ].join("");
+    parts.push(`<w:r>${props ? `<w:rPr>${props}</w:rPr>` : ""}<w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r>`);
+  };
+  for (const match of value.matchAll(inlinePattern)) {
+    const index = match.index ?? 0;
+    addRun(value.slice(previous, index), false, false, false);
+    const token = match[0];
+    if (token.startsWith("**")) addRun(token.slice(2, -2), true, false, false);
+    else if (token.startsWith("*")) addRun(token.slice(1, -1), false, true, false);
+    else addRun(token.slice(1, -1), false, false, true);
+    previous = index + token.length;
   }
-  closeList();
-  return out.join("\n");
+  addRun(value.slice(previous), false, false, false);
+  return parts.join("") || "<w:r><w:t></w:t></w:r>";
 }
 
-export function downloadWord(title: string, text: string, filename: string, options: ExportOptions = {}) {
-  const sources = options.sources?.length ? `<section class="sources"><h3>Sources used</h3><ul>${options.sources.map((source) => `<li>${escapeHtml(source)}</li>`).join("")}</ul></section>` : "";
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>
-    @page{margin:0.7in}body{font-family:"Aptos","Calibri",Arial,sans-serif;color:#1f2320;background:#fffefa;line-height:1.55;font-size:10.5pt;margin:0}header{background:#163a34;color:#f7f5f0;padding:28px 34px 24px;margin-bottom:24px}header .eyebrow{font-size:8pt;letter-spacing:1.5pt;text-transform:uppercase;color:#f2c3a8;font-weight:bold;margin-bottom:9px}h1{font-family:Georgia,serif;font-size:25pt;font-weight:normal;margin:0 0 7px}header p{margin:0;color:#dce7d9;font-size:10pt}main{padding:0 34px}h2{font-family:Georgia,serif;color:#163a34;font-size:16pt;font-weight:normal;border-bottom:1px solid #dedbd1;padding-bottom:5px;margin:21px 0 9px}h3{color:#8f3e32;font-size:11pt;margin:17px 0 5px}p{margin:0 0 10px}ul,ol{margin:4px 0 12px 24px;padding:0}li{margin:0 0 5px}blockquote{border-left:3px solid #c96e52;background:#fff7ef;margin:12px 0;padding:10px 14px;color:#4e5049}hr{border:0;border-top:1px solid #dedbd1;margin:17px 0}table{width:100%;border-collapse:collapse;margin:14px 0 18px;page-break-inside:avoid}th{background:#163a34;color:#fffefa;text-align:left;font-weight:bold}th,td{border:1px solid #cfd8cc;padding:7px 8px;vertical-align:top}tr:nth-child(even) td{background:#f3f6f0}.sources{background:#eef4ed;border:1px solid #dce7d9;padding:12px 15px;margin-top:24px}.sources h3{margin-top:0;color:#163a34}.citation{color:#8f3e32;font-size:8pt}.footer{margin-top:28px;padding-top:8px;border-top:1px solid #dedbd1;color:#77776e;font-size:8.5pt}</style></head><body><header><div class="eyebrow">${escapeHtml(options.eyebrow ?? "Group 13 · Study document")}</div><h1>${escapeHtml(title)}</h1>${options.subtitle ? `<p>${escapeHtml(options.subtitle)}</p>` : ""}</header><main>${documentBodyHtml(text)}${sources}${options.footer ? `<div class="footer">${escapeHtml(options.footer)}</div>` : ""}</main></body></html>`;
-  downloadBlob(new Blob([html], { type: "application/msword" }), filename);
+function wordParagraph(text: string, style = "Normal", options: { color?: string; borderBottom?: boolean } = {}) {
+  const border = options.borderBottom
+    ? '<w:pBdr><w:bottom w:val="single" w:sz="4" w:space="4" w:color="DEDBD1"/></w:pBdr>'
+    : "";
+  const props = `<w:pPr><w:pStyle w:val="${style}"/>${border}</w:pPr>`;
+  return `<w:p>${props}${wordRuns(text, options.color)}</w:p>`;
+}
+
+function wordTable(rows: TableRow[]) {
+  if (!rows.length) return "";
+  const columnCount = Math.max(1, ...rows.map((row) => row.length));
+  const tableWidth = 9360;
+  const baseColumnWidth = Math.floor(tableWidth / columnCount);
+  const grid = Array.from({ length: columnCount }, (_, index) => `<w:gridCol w:w="${index === columnCount - 1 ? tableWidth - baseColumnWidth * (columnCount - 1) : baseColumnWidth}"/>`).join("");
+  const borders = ["top", "left", "bottom", "right", "insideH", "insideV"].map((edge) => `<w:${edge} w:val="single" w:sz="4" w:space="0" w:color="CFD8CC"/>`).join("");
+  const body = rows.map((row, rowIndex) => {
+    const cells = Array.from({ length: columnCount }, (_, cellIndex) => {
+      const width = cellIndex === columnCount - 1 ? tableWidth - baseColumnWidth * (columnCount - 1) : baseColumnWidth;
+      const header = rowIndex === 0;
+      const shading = header ? '<w:shd w:fill="163A34"/>' : "";
+      return `<w:tc><w:tcPr><w:tcW w:w="${width}" w:type="dxa"/>${shading}</w:tcPr>${wordParagraph(row[cellIndex] ?? "", "Normal", { color: header ? "FFFEFA" : undefined })}</w:tc>`;
+    }).join("");
+    return `<w:tr>${rowIndex === 0 ? '<w:trPr><w:tblHeader w:val="true"/></w:trPr>' : ""}${cells}</w:tr>`;
+  }).join("");
+  return `<w:tbl><w:tblPr><w:tblW w:w="${tableWidth}" w:type="dxa"/><w:tblBorders>${borders}</w:tblBorders><w:tblLayout w:type="autofit"/></w:tblPr><w:tblGrid>${grid}</w:tblGrid>${body}</w:tbl>`;
+}
+
+function wordDocumentXml(title: string, text: string, options: ExportOptions) {
+  const content: string[] = [
+    wordParagraph(options.eyebrow ?? "Group 13 · Study document", "Eyebrow"),
+    wordParagraph(title, "Title"),
+  ];
+  if (options.subtitle) content.push(wordParagraph(options.subtitle, "Subtitle"));
+  for (const block of blocks(text)) {
+    if (block.kind === "table") content.push(wordTable(block.rows ?? []));
+    else if (block.kind === "heading") content.push(wordParagraph(block.text, "Heading1"));
+    else if (block.kind === "subheading") content.push(wordParagraph(block.text, "Heading2"));
+    else if (block.kind === "bullet") content.push(wordParagraph(`•  ${block.text}`, "ListParagraph"));
+    else if (block.kind === "number") content.push(wordParagraph(block.text, "ListParagraph"));
+    else if (block.kind === "quote") content.push(wordParagraph(block.text, "Quote"));
+    else if (block.kind === "rule") content.push(wordParagraph("", "Normal", { borderBottom: true }));
+    else content.push(wordParagraph(block.text));
+  }
+  if (options.sources?.length) {
+    content.push(wordParagraph("Sources used", "Heading2"));
+    for (const source of options.sources) content.push(wordParagraph(`•  ${source}`, "ListParagraph"));
+  }
+  if (options.footer) content.push(wordParagraph(options.footer, "FooterNote"));
+  content.push('<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1008" w:right="1008" w:bottom="1008" w:left="1008" w:header="480" w:footer="480" w:gutter="0"/></w:sectPr>');
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${content.join("")}</w:body></w:document>`;
+}
+
+const WORD_STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/><w:color w:val="1F2320"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="140" w:line="360" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style><w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:pPr><w:jc w:val="left"/><w:spacing w:before="40" w:after="180"/></w:pPr><w:rPr><w:rFonts w:ascii="Georgia" w:hAnsi="Georgia"/><w:sz w:val="48"/><w:color w:val="163A34"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Subtitle"><w:name w:val="Subtitle"/><w:pPr><w:spacing w:after="320"/></w:pPr><w:rPr><w:sz w:val="22"/><w:color w:val="52665E"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Eyebrow"><w:name w:val="Eyebrow"/><w:pPr><w:spacing w:before="100" w:after="70"/></w:pPr><w:rPr><w:b/><w:sz w:val="16"/><w:color w:val="8F3E32"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:before="420" w:after="160"/><w:pBdr><w:bottom w:val="single" w:sz="4" w:space="4" w:color="DEDBD1"/></w:pBdr></w:pPr><w:rPr><w:rFonts w:ascii="Georgia" w:hAnsi="Georgia"/><w:sz w:val="32"/><w:color w:val="163A34"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:before="300" w:after="100"/></w:pPr><w:rPr><w:b/><w:sz w:val="24"/><w:color w:val="8F3E32"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="ListParagraph"><w:name w:val="List Paragraph"/><w:basedOn w:val="Normal"/><w:pPr><w:ind w:left="360" w:hanging="180"/><w:spacing w:after="80"/></w:pPr></w:style><w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/><w:basedOn w:val="Normal"/><w:pPr><w:ind w:left="420" w:right="240"/><w:pBdr><w:left w:val="single" w:sz="18" w:space="8" w:color="C96E52"/></w:pBdr><w:spacing w:before="160" w:after="180"/></w:pPr><w:rPr><w:i/><w:color w:val="4E5049"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="FooterNote"><w:name w:val="Footer Note"/><w:pPr><w:pBdr><w:top w:val="single" w:sz="4" w:space="6" w:color="DEDBD1"/></w:pBdr><w:spacing w:before="300"/></w:pPr><w:rPr><w:sz w:val="17"/><w:color w:val="77776E"/></w:rPr></w:style></w:styles>`;
+
+export function normalizeWordFilename(filename: string) {
+  const base = filename.replace(/\.docx?$/i, "").trim() || "study-document";
+  return `${base}.docx`;
+}
+
+export async function buildWordDocument(title: string, text: string, options: ExportOptions = {}): Promise<ArrayBuffer> {
+  const JSZip = (await import("jszip")).default;
+  const zip = new JSZip();
+  zip.file("[Content_Types].xml", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>');
+  zip.file("_rels/.rels", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
+  zip.file("word/document.xml", wordDocumentXml(title, text, options));
+  zip.file("word/_rels/document.xml.rels", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>');
+  zip.file("word/styles.xml", WORD_STYLES_XML);
+  return await zip.generateAsync({ type: "arraybuffer", compression: "DEFLATE" });
+}
+
+export async function downloadWord(title: string, text: string, filename: string, options: ExportOptions = {}) {
+  const content = await buildWordDocument(title, text, options);
+  downloadBlob(new Blob([content], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }), normalizeWordFilename(filename));
 }
 
 function pdfText(value: string) { return value.normalize("NFKD").replace(/[^\x20-\x7e\n\r\t]/g, "?").replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)"); }

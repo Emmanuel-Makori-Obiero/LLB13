@@ -283,7 +283,7 @@ export function ResearchWriter({ userId }: { userId: string | null }) {
     downloadWord(
       project.title || "Untitled paper",
       draft,
-      `${(project.title || "paper").replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "paper"}.doc`,
+      `${(project.title || "paper").replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "paper"}.docx`,
     );
 
   if (!isSupabaseConfigured)

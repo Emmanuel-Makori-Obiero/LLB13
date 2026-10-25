@@ -97,7 +97,7 @@ export default function MeetingRoom({
     downloadWord(
       discussion.title,
       transcript || "No transcript yet.",
-      `${discussion.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "meeting"}-transcript.doc`,
+      `${discussion.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "meeting"}-transcript.docx`,
     );
   const uploadAudio = async (file?: File) => {
     if (!file) return;

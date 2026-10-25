@@ -532,7 +532,7 @@ export default function TranscribePage({
     downloadWord(
       title,
       `${title}\n${opened?.unit ?? ""}\n\n${fullText()}`,
-      `${title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "transcript"}.doc`,
+      `${title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "transcript"}.docx`,
     );
   };
 

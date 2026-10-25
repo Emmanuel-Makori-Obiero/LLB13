@@ -386,7 +386,7 @@ export default function GuidedStudyPage({ learnerLevel = "" }: { learnerLevel?: 
       sources: course.source_labels.map((source) => `${source.title} (${source.kind === "material" ? "Library material" : source.scope === "library" ? "Library book" : source.kind === "transcript" ? "Saved transcript" : "My saved document"})`),
       footer: "Prepared in Group 13 · Review authorities against the original source",
     };
-    if (kind === "word") downloadWord(course.title, text, `${course.subject.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-guided-study.doc`, options);
+    if (kind === "word") downloadWord(course.title, text, `${course.subject.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-guided-study.docx`, options);
     else downloadPdf(course.title, text, `${course.subject.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-guided-study.pdf`, options);
   };
 

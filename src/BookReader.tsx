@@ -137,7 +137,7 @@ export default function BookReader({ material, onClose }: Props) {
   const resultName = `${material.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "book-explanation"}-plain-language`;
   const downloadResultMarkdown = () => result && downloadBlob(new Blob([`# ${material.title}\n\n${result.answer}`], { type: "text/markdown" }), `${resultName}.md`);
   const downloadResultPdf = () => result && downloadPdf(`${material.title} — Plain-language explanation`, result.answer, `${resultName}.pdf`);
-  const downloadResultWord = () => result && downloadWord(`${material.title} — Plain-language explanation`, result.answer, `${resultName}.doc`);
+  const downloadResultWord = () => result && downloadWord(`${material.title} — Plain-language explanation`, result.answer, `${resultName}.docx`);
 
   return (
     <div className={`book-reader ${expanded ? "book-reader-expanded" : ""}`}>

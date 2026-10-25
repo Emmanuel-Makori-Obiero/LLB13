@@ -104,7 +104,7 @@ export default function FloatingLawyerAgent({ currentPage, onOpenDictionary, his
     if (!exportText || !activeThread) return;
     const title = activeThread.title === "New legal conversation" ? "Lawyer Agent conversation" : activeThread.title;
     const options = { eyebrow: "Group 13 · Lawyer Agent", subtitle: `Conversation continued from the ${currentPage} page`, footer: "Study support only · Verify current Kenyan authorities before relying on this document" };
-    const filename = `${safeFilename(title)}.${kind === "word" ? "doc" : "pdf"}`;
+    const filename = `${safeFilename(title)}.${kind === "word" ? "docx" : "pdf"}`;
     if (kind === "word") downloadWord(title, exportText, filename, options);
     else downloadPdf(title, exportText, filename, options);
   };

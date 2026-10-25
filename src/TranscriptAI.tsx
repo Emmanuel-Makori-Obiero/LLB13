@@ -186,7 +186,7 @@ export function TranscriptAI({
     downloadWord(
       title,
       exportText,
-      `${title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "lecture"}-${turn?.task.feature === "summarize" ? "summary" : "notes"}.doc`,
+      `${title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "lecture"}-${turn?.task.feature === "summarize" ? "summary" : "notes"}.docx`,
     );
 
   const reviewOutput = async (text: string, documentId: string): Promise<QualityReport> => {
