@@ -202,7 +202,8 @@ export function TranscriptAI({
           !(Array.isArray(raw.spelling_issues) && raw.spelling_issues.length) &&
           !(Array.isArray(raw.meaning_issues) && raw.meaning_issues.length) &&
           !(Array.isArray(raw.unsupported_claims) && raw.unsupported_claims.length) &&
-          !(Array.isArray(raw.missing_points) && raw.missing_points.length) ? "pass" : "review",
+          !(Array.isArray(raw.missing_points) && raw.missing_points.length) &&
+          (!Array.isArray(raw.authority_checks) || raw.authority_checks.every((item) => item.status === "confirmed")) ? "pass" : "review",
         score,
         summary: String(raw.summary ?? "The output needs a human review."),
         spelling_issues: Array.isArray(raw.spelling_issues) ? raw.spelling_issues as QualityReport["spelling_issues"] : [],
