@@ -7,7 +7,7 @@ import {
   findArticleChunkRanges,
   isConstitutionQuestion,
 } from "../supabase/functions/ai/constitution.ts";
-import { splitArticleNumbers } from "../src/lib/constitutionArticles.ts";
+import { isConstitutionHistoryFollowup, splitArticleNumbers } from "../src/lib/constitutionArticles.ts";
 
 const edge = readFileSync(new URL("../supabase/functions/ai/index.ts", import.meta.url), "utf8");
 const client = readFileSync(new URL("../src/lib/ai.ts", import.meta.url), "utf8");
@@ -41,6 +41,24 @@ test("all 264 Articles are covered by ordered, complete batches with no 12-Artic
   assert.match(edge, /MAX_CONSTITUTION_ARTICLES_PER_BATCH/);
   assert.match(edge, /constitutionArticles\)/);
   assert.doesNotMatch(edge, /MAX_EXPLICIT_ARTICLES_PER_REQUEST/);
+});
+
+test("implicit follow-ups can use recent Constitution history, but explicit requests are freshly retrieved", () => {
+  assert.equal(isConstitutionHistoryFollowup("Can you explain that Article again?"), true);
+  assert.equal(isConstitutionHistoryFollowup("What about the second one?"), true);
+  assert.equal(isConstitutionHistoryFollowup("Explain Article 150 again."), false);
+  assert.equal(isConstitutionHistoryFollowup("Explain every Article again."), false);
+  assert.equal(isConstitutionHistoryFollowup("Repeat that exact wording."), false);
+  assert.equal(isConstitutionHistoryFollowup("How does that apply to my case?"), false);
+  assert.equal(isConstitutionHistoryFollowup("How can I use that in my case?"), false);
+  assert.match(client, /hasRecentGroundedConstitutionAnswer/);
+  assert.match(client, /isConstitutionHistoryFollowup\(articleRequest\)/);
+  assert.match(client, /constitutionHistoryOnly: true/);
+  assert.match(edge, /body\.constitutionHistoryOnly === true/);
+  assert.match(edge, /if \(constitutionHistoryOnly\) return \[\]/);
+  assert.match(edge, /const currentArticleQuery = articleQuery \?\? query/);
+  assert.match(edge, /extractArticleNumbers\(currentArticleQuery\)/);
+  assert.match(edge, /CONVERSATION CONTINUITY/);
 });
 
 test("exact Article lookup rejects table-of-contents dot leaders and selects the full-text heading", () => {
@@ -91,7 +109,7 @@ test("Article 264 retrieval stops before the Constitution schedules", () => {
 test("the Edge Function reserves exact Article hits from the selected automatic batch", () => {
   assert.match(edge, /exactConstitutionRows\(db, constitutionIds, articleNumbers\)/);
   assert.match(edge, /findArticleChunkRanges\(chunks, articleNumbers\)/);
-  assert.match(edge, /articleBatch \?\? extractArticleNumbers\(query\)/);
+  assert.match(edge, /articleBatch \?\? extractArticleNumbers\(currentArticleQuery\)/);
   assert.match(edge, /exact\.missing\.length/);
   assert.doesNotMatch(edge, /q:\s*`article \| \$\{number\}`/);
   assert.match(edge, /Math\.max\(limits\.total, articleChunkReserve\)/);

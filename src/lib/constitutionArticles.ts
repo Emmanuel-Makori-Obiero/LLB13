@@ -52,3 +52,12 @@ export function splitArticleNumbers(
   }
   return batches;
 }
+
+export function isConstitutionHistoryFollowup(text: string): boolean {
+  if (extractArticleNumbers(text).length) return false;
+  if (/\b(?:all|every|each|entire)\s+(?:the\s+)?articles?\b/i.test(text)) return false;
+  if (/\b(?:exact|verbatim|quote|quotation|word[- ]for[- ]word|verify|verification|confirm|citation|cite|source|updated?|current|latest|apply|application|use|affect|impact|case|situation|problem|rights|remedy|lawful|valid|legal effect|what should|can i|could i|may i)\b/i.test(text)) return false;
+  const asksForContinuation = /\b(?:explain|compare|expand|elaborate|clarify|repeat|summari[sz]e|continue|again|more|further|what did you mean|what did you say|what about|how|why)\b/i.test(text);
+  const refersToHistory = /\b(?:it|them|that|those|these|same|earlier|previous|above|last|second|first|one|constitution|article|provision)\b/i.test(text);
+  return asksForContinuation && refersToHistory;
+}

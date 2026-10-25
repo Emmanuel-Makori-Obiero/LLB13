@@ -638,14 +638,21 @@ async function retrieve(
   size = CHUNKS_PART,
   learnerLevel?: string,
   articleBatch?: number[],
+  constitutionHistoryOnly = false,
+  articleQuery?: string,
 ): Promise<Source[]> {
   const requestedIds = [...new Set((docIds ?? []).filter((value) => typeof value === "string" && value.trim()).map((value) => value.trim()))];
   if (feature === "exam_analysis" && requestedIds.length !== 1) {
     const message = "Exam analysis requires exactly one selected paper. Select a single paper and retry.";
     throw Object.assign(new Error(message), { status: 400, publicMessage: message });
   }
-  const constitutionQuestion = shouldAutoRetrieveConstitution(feature, isConstitutionQuestion(query));
-  const articleNumbers = constitutionQuestion ? articleBatch ?? extractArticleNumbers(query) : [];
+  if (constitutionHistoryOnly) return [];
+  const currentArticleQuery = articleQuery ?? query;
+  const constitutionQuestion = shouldAutoRetrieveConstitution(
+    feature,
+    isConstitutionQuestion(currentArticleQuery) || isConstitutionQuestion(query),
+  );
+  const articleNumbers = constitutionQuestion ? articleBatch ?? extractArticleNumbers(currentArticleQuery) : [];
   if (articleNumbers.length > MAX_CONSTITUTION_ARTICLES_PER_BATCH) {
     const message = `This AI request contains ${articleNumbers.length} Articles in one batch. Submit it through the Study Assistant to split large Article lists automatically into batches of ${MAX_CONSTITUTION_ARTICLES_PER_BATCH}.`;
     throw Object.assign(new Error(message), { status: 413, publicMessage: message });
@@ -882,6 +889,7 @@ NON-NEGOTIABLE RULES
 10. ACTIVE RECALL: end most teaching turns with one small retrieval question or mini-drill, except feature explain and any response where the student did not ask to be tested. Use explain -> ask -> correct -> next idea -> revisit only when testing is wanted.
 11. REPETITION FOR RETENTION: revisit important rules, definitions, cases and procedures with varied wording and examples; do not repeat filler. Label occasional Quick recall checks.
 12. HUMAN WORK FIRST: never encourage submitting unedited AI text as the student's own. AI-like style signals are not proof of authorship; explain them and suggest adding the student's own reasoning, class context, concrete examples, uncertainty and original transitions.
+13. CONVERSATION CONTINUITY: Recent assistant turns may be used to resolve references and continue a previously source-grounded constitutional explanation without repeating a full retrieval. In a history-only response, make clear that you are continuing the earlier explanation rather than freshly checking the source. Treat earlier assistant text as context, not primary authority: do not introduce new Article numbers, exact wording, citations or legal conclusions from history alone. For fresh verification, exact wording, or a materially new question, rely on freshly retrieved source text; if none was retrieved, say that a fresh source check is needed.
 
 VERIFIED CONSTITUTION ARTICLE CROSS-CHECK
 The shared Library source contains the full Constitution of Kenya, and Article-aware retrieval can supply any numbered provision. Use retrieved Constitution text as the primary authority for any Article, Chapter, Part or constitutional provision; the summaries below are examples, not an allowlist or complete list. Before assigning an Article number, compare it with the retrieved text. Never attribute one Article's subject matter to another. If retrieved text conflicts with a fallback example, follow the retrieved text and flag the conflict. When a requested Article's text was not retrieved, say so and use the neutral official-source search marker rather than guessing from memory.
@@ -991,6 +999,7 @@ Deno.serve(async (req) => {
     size?: number;
     learnerLevel?: string;
     constitutionArticles?: number[];
+    constitutionHistoryOnly?: boolean;
   };
   try {
     body = await req.json();
@@ -1031,6 +1040,10 @@ Deno.serve(async (req) => {
       return json({ error: `A Constitution Article batch may contain up to ${MAX_CONSTITUTION_ARTICLES_PER_BATCH} Articles.` }, 400);
     }
   }
+  const constitutionHistoryOnly = body.constitutionHistoryOnly === true &&
+    (feature === "chat" || feature === "explain") &&
+    (mode === "general" || mode === "auto") &&
+    !docIds?.length;
 
   // Reserve atomically in Postgres so concurrent requests cannot bypass the cap.
   // Book-title metadata extraction uses its own high-cap bucket and does not consume ordinary text-AI credits.
@@ -1121,6 +1134,8 @@ Deno.serve(async (req) => {
       size,
       learnerLevel,
       constitutionArticles,
+      constitutionHistoryOnly,
+      last.content,
     );
   } catch (err) {
     const status = Number((err as { status?: unknown }).status);

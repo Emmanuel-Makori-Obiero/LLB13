@@ -8,7 +8,7 @@ import { ocrImage, ocrPdfPages } from "./ocr";
 import { extractLegacyWordHtml } from "./legacyWord";
 import { isPersonalizedStudyFeature, personalizeMessages, type LearningProfile } from "./learnerAdaptation";
 import { shouldRetryAiRequest } from "./aiRetryPolicy";
-import { extractArticleNumbers, MAX_CONSTITUTION_ARTICLES_PER_BATCH, splitArticleNumbers } from "./constitutionArticles";
+import { extractArticleNumbers, isConstitutionHistoryFollowup, MAX_CONSTITUTION_ARTICLES_PER_BATCH, splitArticleNumbers } from "./constitutionArticles";
 
 function db() {
   if (!client) throw new Error("Supabase is not configured.");
@@ -119,15 +119,24 @@ type AskAIArgs = {
 };
 
 const CONSTITUTION_BATCHABLE_FEATURES = new Set<AIFeature>(["chat", "explain", "legal_explain"]);
+const CONSTITUTION_HISTORY_FEATURES = new Set<AIFeature>(["chat", "explain"]);
 
-async function askAISingle(args: AskAIArgs, constitutionArticles?: number[]): Promise<AIResult> {
+async function askAISingle(
+  args: AskAIArgs,
+  constitutionArticles?: number[],
+  constitutionHistoryOnly = false,
+): Promise<AIResult> {
   let data: unknown = null;
   let error: unknown = null;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const request = isPersonalizedStudyFeature(args.feature)
       ? { ...args, learnerLevel: currentLearnerProfile.learnerLevel, messages: personalizeMessages(args.messages, currentLearnerProfile) }
       : args;
-    const body = constitutionArticles ? { ...request, constitutionArticles } : request;
+    const body = {
+      ...request,
+      ...(constitutionArticles ? { constitutionArticles } : {}),
+      ...(constitutionHistoryOnly ? { constitutionHistoryOnly: true } : {}),
+    };
     const response = await db().functions.invoke("ai", { body });
     data = response.data;
     error = response.error;
@@ -225,11 +234,29 @@ function mergeConstitutionBatchResults(
 export async function askAI(args: AskAIArgs): Promise<AIResult> {
   if (!CONSTITUTION_BATCHABLE_FEATURES.has(args.feature)) return askAISingle(args);
 
-  const articleRequest = args.messages
+  const userMessages = args.messages
     .filter((message) => message.role === "user")
-    .slice(-2)
-    .map((message) => message.content)
-    .join("\n");
+    .slice(-1);
+  const articleRequest = userMessages[0]?.content ?? "";
+
+  const recentAssistantTurns = args.messages
+    .filter((message) => message.role === "assistant")
+    .slice(-4);
+  const hasRecentGroundedConstitutionAnswer = recentAssistantTurns.some((message) =>
+    message.content.length < 3000 &&
+    /\b(?:constitution|articles?)\b/i.test(message.content) &&
+    /\[S\d+\]/.test(message.content)
+  );
+  if (
+    CONSTITUTION_HISTORY_FEATURES.has(args.feature) &&
+    (args.mode === "general" || args.mode === "auto") &&
+    !args.docIds?.length &&
+    hasRecentGroundedConstitutionAnswer &&
+    isConstitutionHistoryFollowup(articleRequest)
+  ) {
+    return askAISingle(args, undefined, true);
+  }
+
   const articleNumbers = extractArticleNumbers(articleRequest);
   const batches = splitArticleNumbers(articleNumbers, MAX_CONSTITUTION_ARTICLES_PER_BATCH);
   if (batches.length <= 1) return askAISingle(args);
