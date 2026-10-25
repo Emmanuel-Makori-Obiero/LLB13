@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FileText, Image as ImageIcon, Library, Loader2, Send, Trash2, Upload, CheckCircle2 } from "lucide-react";
+import { Download, FileText, Image as ImageIcon, Library, Loader2, Send, Trash2, Upload, CheckCircle2 } from "lucide-react";
 import { isSupabaseConfigured, supabase } from "./data/repository";
 import {
   AI_MODES,
   askAI,
+  countMaterialChunks,
   deleteMaterial,
   listMyMaterials,
   uploadMaterial,
@@ -13,6 +14,8 @@ import {
 } from "./lib/ai";
 import { Markdown } from "./Markdown";
 import { materialVisibleToLevel } from "./lib/learnerAdaptation";
+import { bookSummaryPartPrompt, bookSummarySynthesisPrompt, extractBookPartRecap, mergeBookSummaryParts, planBookSummary, type CompletedBookSummaryPart } from "./lib/bookSummary";
+import { downloadPdf, downloadWord } from "./export";
 import "./assistant.css";
 
 type Doc = {
@@ -84,7 +87,7 @@ const TASKS: Task[] = [
     label: "Summarise",
     needsDoc: true,
     placeholder: "Optional: what should the summary focus on?",
-    fallback: "Summarise the selected document.",
+    fallback: "Create complete, source-grounded study notes for the selected book, preserving the main points in order.",
   },
   {
     feature: "book_contents",
@@ -135,10 +138,12 @@ export type Turn = {
   id: number;
   task: Task;
   prompt: string;
+  bookTitle?: string;
   mode?: AIMode;
   docIds?: string[];
   result?: AIResult;
   error?: string;
+  progress?: string;
 };
 
 const BASIS_LABEL: Record<AIResult["basis"], string> = {
@@ -318,6 +323,16 @@ export function Answer({ turn }: { turn: Turn }) {
       {cards.length > 0 && <Flashcards cards={cards} />}
       {contents.length > 0 && <Contents items={contents} />}
       {!structured && <Markdown text={r.answer} />}
+      {turn.task.feature === "summarize" && r.answer && (() => {
+        const title = turn.bookTitle || "Complete book study notes";
+        const filename = title.replace(/[\\/:*?"<>|]+/g, "-").trim().slice(0, 120) || "book-study-notes";
+        const sources = r.sources.map((source) => `${source.tag} — ${source.title}${source.author ? ` — ${source.author}` : ""}${source.ref ? ` — ${source.ref}` : ""}`);
+        const options = { subtitle: "Complete-source study notes · read and organized in order", sources, footer: "Prepared from the readable indexed source sections. Check unclear/OCR text against the original book." };
+        return <div className="sa-answer-actions">
+          <button type="button" className="secondary-button" onClick={() => void downloadWord(title, r.answer, `${filename}.docx`, options)}><Download size={13} /> Download DOCX</button>
+          <button type="button" className="secondary-button" onClick={() => downloadPdf(title, r.answer, `${filename}.pdf`, options)}><Download size={13} /> Download PDF</button>
+        </div>;
+      })()}
       {r.warnings.length > 0 && (
         <ul className="sa-warnings">
           {r.warnings.map((w) => (
@@ -453,8 +468,13 @@ export function StudyAssistant({ learnerLevel = "" }: { learnerLevel?: string })
       setNote("Choose at least one document on the right first.");
       return;
     }
+    if (task.feature === "summarize" && selected.length !== 1) {
+      setNote("Choose exactly one book for a complete summary. Multiple books cannot be mixed into one coverage report.");
+      return;
+    }
     setNote("");
-    const turn: Turn = { id: nextId.current++, task, prompt: text };
+    const selectedBook = task.feature === "summarize" ? docs.find((doc) => doc.id === selected[0]) : undefined;
+    const turn: Turn = { id: nextId.current++, task, prompt: text, bookTitle: selectedBook?.title };
 
     // Document tasks need the chosen documents, so "Any law" is switched to "Smart" for them.
     const useMode: AIMode =
@@ -478,6 +498,58 @@ export function StudyAssistant({ learnerLevel = "" }: { learnerLevel?: string })
             { role: "assistant" as const, content: t.result!.answer.slice(0, 3000) },
           ]);
     try {
+      if (task.feature === "summarize") {
+        const bookTitle = selectedBook?.title || "Selected book";
+        const totalSections = await countMaterialChunks(selected[0]);
+        const plan = planBookSummary(totalSections);
+        const completed: CompletedBookSummaryPart[] = [];
+        for (const part of plan) {
+          setTurns((all) => all.map((item) => item.id === turn.id
+            ? { ...item, progress: `Reading indexed sections ${part.startSection}–${part.endSection} of ${totalSections}` }
+            : item));
+          try {
+            const result = await askAI({
+              feature: "summarize",
+              mode: useMode,
+              messages: [{ role: "user", content: bookSummaryPartPrompt(text, part) }],
+              docIds: [selected[0]],
+              part: part.part,
+              size: part.size,
+            });
+            if (!result.answer.trim() || !result.sources.length || result.basis === "none") {
+              throw new Error("The source section was not returned to the model. No partial section summary was accepted.");
+            }
+            completed.push({ plan: part, result });
+          } catch (cause) {
+            const detail = cause instanceof Error ? cause.message : "an AI request failed";
+            const partial = mergeBookSummaryParts(bookTitle, totalSections, completed, null, `part ${part.part + 1} of ${plan.length} failed: ${detail}`);
+            setTurns((all) => all.map((item) => item.id === turn.id
+              ? { ...item, result: partial, error: `Complete coverage stopped at part ${part.part + 1} of ${plan.length}. The completed sections are available below but are not a complete book summary. ${detail}`, progress: undefined }
+              : item));
+            return;
+          }
+        }
+
+        setTurns((all) => all.map((item) => item.id === turn.id
+          ? { ...item, progress: "Writing the whole-book overview from all section recaps" }
+          : item));
+        let overview: AIResult | null = null;
+        let overviewFailure: string | undefined;
+        try {
+          overview = await askAI({
+            feature: "book_summary_synthesis",
+            mode: "general",
+            messages: [{ role: "user", content: bookSummarySynthesisPrompt(bookTitle, text, completed.map(({ plan: part, result }) => ({ plan: part, recap: extractBookPartRecap(result.answer) }))) }],
+          });
+        } catch (cause) {
+          overviewFailure = cause instanceof Error ? cause.message : "the overview request failed";
+        }
+        const result = mergeBookSummaryParts(bookTitle, totalSections, completed, overview, undefined, overviewFailure);
+        setTurns((all) => all.map((item) => item.id === turn.id
+          ? { ...item, result, progress: undefined }
+          : item));
+        return;
+      }
       const result = await askAI({
         feature: task.feature,
         mode: useMode,
@@ -533,7 +605,7 @@ export function StudyAssistant({ learnerLevel = "" }: { learnerLevel?: string })
               </div>
               {!t.result && !t.error ? (
                 <div className="sa-thinking">
-                  <Loader2 size={15} className="sa-spin" /> Working on it
+                  <Loader2 size={15} className="sa-spin" /> {t.progress || "Working on it"}
                 </div>
               ) : (
                 <Answer turn={t} />

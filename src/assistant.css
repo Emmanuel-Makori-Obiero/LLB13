@@ -102,6 +102,17 @@
   padding-top: 12px;
   border-top: 1px solid var(--line);
 }
+.sa-answer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 14px 0;
+}
+.sa-answer-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
 .ta-quality {
   margin: 14px 0;
   padding: 12px 14px;

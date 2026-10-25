@@ -156,25 +156,165 @@ export async function downloadWord(title: string, text: string, filename: string
   downloadBlob(new Blob([content], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }), normalizeWordFilename(filename));
 }
 
-function pdfText(value: string) { return value.normalize("NFKD").replace(/[^\x20-\x7e\n\r\t]/g, "?").replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)"); }
-function wrap(value: string, max: number) { const lines: string[] = []; let remaining = value; while (remaining.length > max) { let cut = remaining.lastIndexOf(" ", max); if (cut < Math.floor(max * 0.55)) cut = max; lines.push(remaining.slice(0, cut)); remaining = remaining.slice(cut).trimStart(); } lines.push(remaining); return lines; }
+function pdfText(value: string) {
+  return value
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/[–—]/g, "-")
+    .replace(/…/g, "...")
+    .replace(/[•·]/g, "*")
+    .normalize("NFKD")
+    .replace(/[^\x20-\x7e\n\r\t]/g, "?")
+    .replace(/\\/g, "\\\\")
+    .replace(/\(/g, "\\(")
+    .replace(/\)/g, "\\)");
+}
 
-export function downloadPdf(title: string, text: string, filename: string, options: ExportOptions = {}) {
-  const lines: { text: string; kind: ExportBlock["kind"] }[] = [];
+function wrapPdf(value: string, max: number): string[] {
+  const clean = value.replace(/\*\*|__|`/g, "").replace(/\*([^*]+)\*/g, "$1").trim();
+  if (!clean) return [""];
+  const lines: string[] = [];
+  let remaining = clean;
+  while (remaining.length > max) {
+    let cut = remaining.lastIndexOf(" ", max);
+    if (cut < Math.floor(max * 0.55)) cut = max;
+    lines.push(remaining.slice(0, cut));
+    remaining = remaining.slice(cut).trimStart();
+  }
+  lines.push(remaining);
+  return lines;
+}
+
+type PdfPage = { commands: string[]; y: number };
+
+export function buildPdfDocument(title: string, text: string, options: ExportOptions = {}): string {
+  const pages: PdfPage[] = [];
+  const drawText = (page: PdfPage, value: string, x: number, y: number, size: number, font: "F1" | "F2" | "F3", color = "0.12 0.14 0.13") => {
+    page.commands.push(`${color} rg`, `BT /${font} ${size} Tf 1 0 0 1 ${x.toFixed(2)} ${y.toFixed(2)} Tm (${pdfText(value)}) Tj ET`);
+  };
+  const addPage = (): PdfPage => {
+    const pageIndex = pages.length;
+    const page: PdfPage = { commands: [
+      "q", "0.969 0.961 0.941 rg", "0 0 612 792 re", "f",
+      "0.086 0.227 0.204 rg", "0 705 612 87 re", "f", "Q",
+    ], y: 686 };
+    drawText(page, (options.eyebrow ?? "GROUP 13 - STUDY DOCUMENT").toUpperCase(), 48, 770, 8, "F2", "0.95 0.76 0.65");
+    const titleLines = wrapPdf(title, 58).slice(0, 2);
+    titleLines.forEach((line, index) => drawText(page, line, 48, 744 - index * 20, 17, "F3", "1 1 1"));
+    if (pageIndex === 0 && options.subtitle) {
+      const subtitleLines = wrapPdf(options.subtitle, 104).slice(0, 2);
+      subtitleLines.forEach((line, index) => drawText(page, line, 48, page.y - index * 12, 8.5, "F1", "0.34 0.40 0.36"));
+      page.y -= subtitleLines.length * 12 + 12;
+    }
+    pages.push(page);
+    return page;
+  };
+  let page = addPage();
+  const ensureSpace = (height: number) => {
+    if (page.y - height < 48) page = addPage();
+  };
+  const drawRule = () => {
+    ensureSpace(10);
+    page.commands.push("0.82 0.83 0.79 RG 0.6 w", `48 ${page.y.toFixed(2)} m 564 ${page.y.toFixed(2)} l S`);
+    page.y -= 12;
+  };
+  const drawTable = (rows: TableRow[]) => {
+    if (!rows.length) return;
+    const columnCount = Math.max(1, ...rows.map((row) => row.length));
+    const tableX = 48;
+    const tableWidth = 516;
+    const columnWidth = tableWidth / columnCount;
+    const fontSize = columnCount >= 5 ? 7 : 8.5;
+    const lineHeight = columnCount >= 5 ? 9.5 : 11;
+    const maxChars = Math.max(7, Math.floor((columnWidth - 12) / (fontSize * 0.52)));
+    rows.forEach((row, rowIndex) => {
+      const cellLines = Array.from({ length: columnCount }, (_, index) => wrapPdf(row[index] ?? "", maxChars));
+      const maxLines = Math.max(1, ...cellLines.map((lines) => lines.length));
+      const rowHeight = Math.max(24, maxLines * lineHeight + 10);
+      ensureSpace(rowHeight);
+      const top = page.y;
+      const bottom = top - rowHeight;
+      row.forEach((_cell, column) => {
+        const x = tableX + column * columnWidth;
+        if (rowIndex === 0) {
+          page.commands.push("0.086 0.227 0.204 rg", `${x.toFixed(2)} ${bottom.toFixed(2)} ${columnWidth.toFixed(2)} ${rowHeight.toFixed(2)} re f`);
+        } else if (rowIndex % 2 === 0) {
+          page.commands.push("0.925 0.932 0.910 rg", `${x.toFixed(2)} ${bottom.toFixed(2)} ${columnWidth.toFixed(2)} ${rowHeight.toFixed(2)} re f`);
+        }
+        page.commands.push("0.78 0.82 0.77 RG 0.45 w", `${x.toFixed(2)} ${bottom.toFixed(2)} ${columnWidth.toFixed(2)} ${rowHeight.toFixed(2)} re S`);
+        cellLines[column].forEach((line, lineIndex) => drawText(page, line, x + 6, top - 14 - lineIndex * lineHeight, fontSize, rowIndex === 0 ? "F2" : "F1", rowIndex === 0 ? "1 1 1" : "0.12 0.14 0.13"));
+      });
+      page.y = bottom;
+    });
+    page.y -= 14;
+  };
+
   for (const block of blocks(text)) {
-    if (block.kind === "rule") { lines.push({ text: "", kind: "rule" }); continue; }
-    if (block.kind === "table") {
-      lines.push({ text: "", kind: "rule" });
-      (block.rows ?? []).forEach((row, index) => wrap(`│ ${row.join(" │ ")} │`, 78).forEach((line) => lines.push({ text: line, kind: index === 0 ? "heading" : "paragraph" })));
-      lines.push({ text: "", kind: "rule" });
+    if (block.kind === "rule") { drawRule(); continue; }
+    if (block.kind === "table") { drawTable(block.rows ?? []); continue; }
+    if (block.kind === "heading" || block.kind === "subheading") {
+      const size = block.kind === "heading" ? 15 : 11;
+      const lineHeight = block.kind === "heading" ? 19 : 15;
+      page.y -= block.kind === "heading" ? 9 : 5;
+      const lines = wrapPdf(block.text, Math.floor(516 / (size * 0.53)));
+      ensureSpace(lines.length * lineHeight + 8);
+      lines.forEach((line, index) => drawText(page, line, 48, page.y - index * lineHeight, size, block.kind === "heading" ? "F3" : "F2", block.kind === "heading" ? "0.086 0.227 0.204" : "0.56 0.24 0.20"));
+      page.y -= lines.length * lineHeight + 7;
       continue;
     }
-    const prefix = block.kind === "bullet" ? "· " : "";
-    for (const line of wrap(prefix + block.text, block.kind === "paragraph" ? 88 : 78)) lines.push({ text: line, kind: block.kind });
+    const prefix = block.kind === "bullet" ? "* " : block.kind === "number" ? "  " : block.kind === "quote" ? "  " : "";
+    const lines = wrapPdf(`${prefix}${block.text}`, block.kind === "paragraph" ? 96 : 91);
+    const lineHeight = block.kind === "quote" ? 14 : 13;
+    const topPadding = block.kind === "quote" ? 8 : 0;
+    ensureSpace(lines.length * lineHeight + topPadding + 5);
+    if (block.kind === "quote") {
+      const height = lines.length * lineHeight + 10;
+      page.commands.push("0.94 0.94 0.91 rg", `54 ${(page.y - height + 4).toFixed(2)} 506 ${height.toFixed(2)} re f`, "0.78 0.38 0.29 RG 2 w", `54 ${(page.y - height + 4).toFixed(2)} m 54 ${(page.y + 4).toFixed(2)} l S`);
+    }
+    lines.forEach((line, index) => drawText(page, line, block.kind === "quote" ? 64 : 50, page.y - topPadding - index * lineHeight, 9.5, block.kind === "quote" ? "F3" : "F1", block.kind === "quote" ? "0.30 0.32 0.29" : "0.12 0.14 0.13"));
+    page.y -= lines.length * lineHeight + (block.kind === "quote" ? 12 : 7);
   }
-  if (options.sources?.length) { lines.push({ text: "", kind: "rule" }, { text: "Sources used", kind: "heading" }); options.sources.forEach((source) => wrap(`· ${source}`, 78).forEach((line) => lines.push({ text: line, kind: "bullet" }))); }
-  const pageLines = 44; const pages: typeof lines[] = []; for (let i = 0; i < Math.max(1, lines.length); i += pageLines) pages.push(lines.slice(i, i + pageLines));
-  const objects: string[] = ["<< /Type /Catalog /Pages 2 0 R >>", "", "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>", "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>", "<< /Type /Font /Subtype /Type1 /BaseFont /Times-Roman >>"]; const pageIds: number[] = [];
-  pages.forEach((page, pageIndex) => { const commands = ["q", "0.969 0.961 0.941 rg", "0 0 612 792 re", "f", "0.086 0.227 0.204 rg", "0 722 612 70 re", "f", "Q", "BT", "/F2 9 Tf", "0.95 0.76 0.65 rg", "50 765 Td", `(${pdfText((options.eyebrow ?? "GROUP 13 - STUDY DOCUMENT").toUpperCase())}) Tj`, "0 -27 Td", "/F3 24 Tf", `(${pdfText(title)}) Tj`, "0 -42 Td", "/F1 10 Tf", "14 TL", "0.12 0.14 0.13 rg"]; page.forEach((line, index) => { if (index > 0) commands.push("T*", "0 0 0 rg"); if (line.kind === "heading") commands.push("/F3 15 Tf", "0.086 0.227 0.204 rg", "18 TL"); else if (line.kind === "subheading") commands.push("/F2 11 Tf", "0.56 0.24 0.20 rg", "15 TL"); else commands.push("/F1 10 Tf", "0.12 0.14 0.13 rg", "14 TL"); commands.push(`(${pdfText(line.text)}) Tj`); }); commands.push("ET", "BT", "/F1 8 Tf", "0.47 0.47 0.43 rg", "50 28 Td", `(${pdfText(`${options.footer ?? "Prepared in Group 13"} - ${pageIndex + 1}/${pages.length}`)}) Tj`, "ET"); const stream = commands.join("\n"); const contentId = objects.length + 1; objects.push(`<< /Length ${new TextEncoder().encode(stream).length} >>\nstream\n${stream}\nendstream`); const pageId = objects.length + 1; pageIds.push(pageId); objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents ${contentId} 0 R >>`); });
-  objects[1] = `<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pageIds.length} >>`; let pdf = "%PDF-1.4\n% Group 13\n"; const offsets = [0]; objects.forEach((object, index) => { offsets[index + 1] = pdf.length; pdf += `${index + 1} 0 obj\n${object}\nendobj\n`; }); const xref = pdf.length; pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`; for (let i = 1; i < offsets.length; i++) pdf += `${String(offsets[i]).padStart(10, "0")} 00000 n \n`; pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`; downloadBlob(new Blob([pdf], { type: "application/pdf" }), filename);
+  if (options.sources?.length) {
+    drawRule();
+    const heading = wrapPdf("Sources used", 52);
+    ensureSpace(26);
+    heading.forEach((line) => drawText(page, line, 48, page.y, 14, "F3", "0.086 0.227 0.204"));
+    page.y -= 20;
+    for (const source of options.sources) {
+      const lines = wrapPdf(`* ${source}`, 91);
+      ensureSpace(lines.length * 12 + 5);
+      lines.forEach((line, index) => drawText(page, line, 50, page.y - index * 12, 8.5, "F1", "0.12 0.14 0.13"));
+      page.y -= lines.length * 12 + 4;
+    }
+  }
+
+  const objects: string[] = ["<< /Type /Catalog /Pages 2 0 R >>", "", "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>", "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>", "<< /Type /Font /Subtype /Type1 /BaseFont /Times-Roman >>"];
+  const pageIds: number[] = [];
+  pages.forEach((pdfPage, pageIndex) => {
+    const footer = wrapPdf(`${options.footer ?? "Prepared in Group 13"}  ·  ${pageIndex + 1}/${pages.length}`, 105)[0];
+    drawText(pdfPage, footer, 48, 27, 7.5, "F1", "0.47 0.47 0.43");
+    const stream = pdfPage.commands.join("\n");
+    const contentId = objects.length + 1;
+    objects.push(`<< /Length ${new TextEncoder().encode(stream).length} >>\nstream\n${stream}\nendstream`);
+    const pageId = objects.length + 1;
+    pageIds.push(pageId);
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents ${contentId} 0 R >>`);
+  });
+  objects[1] = `<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pageIds.length} >>`;
+  let pdf = "%PDF-1.4\n% Group 13\n";
+  const offsets = [0];
+  objects.forEach((object, index) => {
+    offsets[index + 1] = pdf.length;
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+  const xref = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (let index = 1; index < offsets.length; index += 1) pdf += `${String(offsets[index]).padStart(10, "0")} 00000 n \n`;
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return pdf;
+}
+
+export function downloadPdf(title: string, text: string, filename: string, options: ExportOptions = {}) {
+  const content = buildPdfDocument(title, text, options);
+  downloadBlob(new Blob([content], { type: "application/pdf" }), filename);
 }

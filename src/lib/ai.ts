@@ -21,6 +21,7 @@ export type AIFeature =
   | "exam_analysis"
   | "explain"
   | "summarize"
+  | "book_summary_synthesis"
   | "book_contents"
   | "topic_summary"
   | "book_metadata"
@@ -113,8 +114,8 @@ type AskAIArgs = {
   mode: AIMode;
   messages: AIMessage[];
   docIds?: string[];
-  part?: number; // 'notes' only: which block of a document to read
-  size?: number; // 'notes' only: how many sections per block
+  part?: number; // Paged notes or complete-source book summary block
+  size?: number; // How many indexed sections per paged block
   learnerLevel?: LearningProfile["learnerLevel"];
 };
 
@@ -532,6 +533,16 @@ export async function listMyMaterials() {
     for (const material of materials ?? []) currentTags.set(String(material.id), material.target_years ?? []);
   }
   return (data ?? []).map((doc) => ({ ...doc, target_years: doc.material_id && currentTags.has(String(doc.material_id)) ? currentTags.get(String(doc.material_id))! : (doc.target_years ?? []) }));
+}
+
+/** Count only readable chunks, subject to the same RLS rules as document selection. */
+export async function countMaterialChunks(documentId: string): Promise<number> {
+  const { count, error } = await db()
+    .from("ai_chunks")
+    .select("id", { count: "exact", head: true })
+    .eq("document_id", documentId);
+  if (error) throw new Error("Could not verify the book's indexed sections. No summary was generated; refresh the Library and try again.");
+  return Number(count ?? 0);
 }
 
 export async function deleteMaterial(id: string) {

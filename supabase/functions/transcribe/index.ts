@@ -5,6 +5,7 @@
 // Deploy:          supabase functions deploy transcribe
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { recordProviderUsage } from "../_shared/usage.ts";
+import { proofreadTranscript } from "./proofread.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -21,18 +22,20 @@ const json = (
     headers: { ...cors, "Content-Type": "application/json", ...extra },
   });
 
-const MODEL = "whisper-large-v3-turbo";
+const MODELS = {
+  accurate: "whisper-large-v3",
+  balanced: "whisper-large-v3-turbo",
+} as const;
 // Groq free plan: 7,200 audio seconds/hour and 28,800/day for the whole organisation.
 // Stay a little under so one request never tips the group over the line.
 const HOUR_LIMIT = 7000;
 const DAY_LIMIT = 28000;
 const MAX_BYTES = 24 * 1024 * 1024;
-// Groq/Whisper rejects prompts longer than 896 characters. Keep this seed short;
-// the continuation is useful for stitched recordings but must fit the provider
-// limit together with the language instruction.
+// Groq documents a 224-token Whisper prompt limit; cap the fixed seed plus
+// carried-over context conservatively by character count.
 const LAW_PROMPT =
   "Kenyan university law lecture. Preserve names, legal terms, Kiswahili, Sheng and code-switching exactly. Common terms: statute, tort, mens rea, actus reus, locus standi, obiter dicta, ratio decidendi, Constitution of Kenya, High Court, Court of Appeal, Supreme Court.";
-const WHISPER_PROMPT_LIMIT = 896;
+const WHISPER_PROMPT_CHAR_LIMIT = 896;
 
 type UsageRow = { seconds: number; created_at: string };
 
@@ -40,6 +43,7 @@ async function correctWrittenTranscript(
   raw: string,
   groqKey: string,
   mixedLanguage: boolean,
+  pass: 1 | 2,
 ): Promise<string> {
   if (!raw.trim()) return raw;
   if (raw.length > 24000) return raw;
@@ -47,15 +51,14 @@ async function correctWrittenTranscript(
     method: "POST",
     headers: { Authorization: `Bearer ${groqKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "llama-3.1-8b-instant",
-      temperature: 0,
-      max_tokens: 4096,
+      model: "openai/gpt-oss-20b",
+      max_completion_tokens: 4096,
       messages: [
         {
           role: "system",
-          content: mixedLanguage
-            ? "Correct only obvious spelling and punctuation errors in this Kenyan English, Kiswahili and Sheng transcript. Preserve meaning, sentence order, names, legal terminology, code-switching and Sheng. Never replace an uncertain name or case with a famous real-world name; keep it as heard or mark it [unclear]. Do not translate, summarise, add, remove or rewrite. Return only the corrected transcript."
-            : "Correct only obvious spelling and punctuation errors in this Kenyan lecture transcript. Preserve meaning, sentence order, names and legal terminology. Never replace an uncertain name or case with a famous real-world name; keep it as heard or mark it [unclear]. Do not translate, summarise, add, remove or rewrite. Return only the corrected transcript.",
+          content: `${pass === 2 ? "This transcript has already received one correction pass. Re-check that corrected text once more, making only minimal final edits." : "Proofread the raw speech-recognition transcript once."} ${mixedLanguage
+            ? "Correct only obvious spelling and punctuation errors in Kenyan English, Kiswahili and Sheng. Preserve meaning, sentence order, names, legal terminology, code-switching and Sheng. Never replace an uncertain name or case with a famous real-world name; keep it as heard or mark it [unclear]. Do not translate, summarise, add, remove or rewrite. Return only the corrected transcript."
+            : "Correct only obvious spelling and punctuation errors in this Kenyan lecture transcript. Preserve meaning, sentence order, names and legal terminology. Never replace an uncertain name or case with a famous real-world name; keep it as heard or mark it [unclear]. Do not translate, summarise, add, remove or rewrite. Return only the corrected transcript."}`,
         },
         { role: "user", content: raw },
       ],
@@ -128,6 +131,9 @@ Deno.serve(async (request) => {
       413,
     );
 
+  const requestedQuality = form.get("quality") === "balanced" ? "balanced" : "accurate";
+  const model = MODELS[requestedQuality];
+
   const requestedLanguage = String(form.get("language") ?? "")
     .trim()
     .toLowerCase();
@@ -192,7 +198,7 @@ Deno.serve(async (request) => {
 
   const body = new FormData();
   body.append("file", audio, audio.name || "chunk.mp3");
-  body.append("model", MODEL);
+  body.append("model", model);
   body.append("response_format", "verbose_json");
   body.append("temperature", "0");
   if (language) body.append("language", language);
@@ -207,12 +213,12 @@ Deno.serve(async (request) => {
   const continuationLabel = " Continue naturally. Recent transcript context: ";
   const continuationBudget = Math.max(
     0,
-    WHISPER_PROMPT_LIMIT - seed.length - continuationLabel.length,
+    WHISPER_PROMPT_CHAR_LIMIT - seed.length - continuationLabel.length,
   );
   const prompt = continuation
     ? `${seed}${continuationLabel}${continuation.slice(-continuationBudget)}`
     : seed;
-  body.append("prompt", prompt.slice(0, WHISPER_PROMPT_LIMIT));
+  body.append("prompt", prompt.slice(0, WHISPER_PROMPT_CHAR_LIMIT));
 
   const result = await fetch(
     "https://api.groq.com/openai/v1/audio/transcriptions",
@@ -251,16 +257,12 @@ Deno.serve(async (request) => {
       .from("transcription_usage")
       .update({ seconds: Math.ceil(data.duration) })
       .eq("id", reserved.id);
-  await recordProviderUsage(admin, { userId: user.id, category: "transcription", provider: "groq", model: MODEL, inputUnits: Math.ceil(data.duration || estimate), unitLabel: "audio_seconds", details: { language: language || null } });
+  await recordProviderUsage(admin, { userId: user.id, category: "transcription", provider: "groq", model, inputUnits: Math.ceil(data.duration || estimate), unitLabel: "audio_seconds", details: { language: language || null, quality: requestedQuality } });
   const originalText = (data.text ?? "").trim();
-  let text = originalText;
-  try {
-    text = await correctWrittenTranscript(originalText, groqKey, mixedLanguage);
-  } catch {
-    // Transcription must still succeed when the optional correction call is out
-    // of quota or unavailable; the raw provider text remains downloadable.
-    text = originalText;
-  }
+  const proofread = await proofreadTranscript(originalText, (current, pass) =>
+    correctWrittenTranscript(current, groqKey, mixedLanguage, pass),
+  );
+  const text = proofread.text;
   const segments = (data.segments ?? []).map((segment) => ({
     start: Number((segment.start + offset).toFixed(2)),
     end: Number((segment.end + offset).toFixed(2)),
@@ -286,6 +288,8 @@ Deno.serve(async (request) => {
     text,
     segments,
     duration: data.duration ?? estimate,
+    model,
+    proofreading_passes: proofread.passes,
     saved: !!transcriptId,
   });
 });

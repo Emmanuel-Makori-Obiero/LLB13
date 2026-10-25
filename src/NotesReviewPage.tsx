@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   BookOpen,
   CheckCircle2,
+  Download,
   ExternalLink,
   FileText,
   History,
@@ -30,6 +31,7 @@ import {
   type OfficialResearchSource,
 } from "./lib/notesReview";
 import { fetchKenyaLawCase } from "./lib/kenyaLaw";
+import { downloadPdf, downloadWord } from "./export";
 import "./notes-review.css";
 
 type SavedReview = {
@@ -201,12 +203,13 @@ export default function NotesReviewPage({ userId, units, initialText, initialTit
     setSaving(false);
   };
 
-  const runReview = async () => {
+  const runReview = async (sourceText = notes, sourceTitle = title) => {
     if (!userId) {
       setError("Sign in to run and save a private notes review.");
       return;
     }
-    const original = notes.trim();
+    const original = sourceText.trim();
+    const reviewName = sourceTitle.trim() || "My law notes";
     if (original.length < 80) {
       setError("Add at least a paragraph of notes so the review has enough legal context.");
       return;
@@ -340,12 +343,12 @@ export default function NotesReviewPage({ userId, units, initialText, initialTit
         normalized.unresolved.length
       )) normalized.status = "partly_checked";
       setReview(normalized);
-      setReviewTitle(title.trim() || "My law notes");
+      setReviewTitle(reviewName);
       setActiveReviewId(null);
       setReviewDirty(false);
       setNotes(original);
       const recordSources = verifiedSources.map(({ id, title: sourceTitle, url, citation }) => ({ id, title: sourceTitle, url, citation, text: "" }));
-      const record = { title: title.trim() || "My law notes", original, review: normalized, sources: recordSources };
+      const record = { title: reviewName, original, review: normalized, sources: recordSources };
       setPendingRecord(record);
       await saveToHistory(record);
     } catch (cause) {
@@ -383,6 +386,38 @@ export default function NotesReviewPage({ userId, units, initialText, initialTit
     } finally {
       setSharing(false);
     }
+  };
+
+  const downloadReviewedNotes = (format: "docx" | "pdf") => {
+    if (!review) return;
+    const cell = (value: string) => value.replace(/\|/g, "\\|").replace(/\s*\n\s*/g, " ").trim() || "—";
+    const correctionTable = review.corrections.length
+      ? `## Corrections and legal issues\n\n| Original | Suggested correction | Reason / support | Check |\n| --- | --- | --- | --- |\n${review.corrections.map((item) => `| ${cell(item.original)} | ${cell(item.corrected)} | ${cell(item.reason || item.category)} | ${cell(item.verification)} |`).join("\n")}`
+      : "";
+    const authorityTable = review.authorityChecks.length
+      ? `## Authorities checked\n\n| Authority | Status | Note |\n| --- | --- | --- |\n${review.authorityChecks.map((item) => `| ${cell(item.authority)} | ${cell(item.status)} | ${cell(item.reason)} |`).join("\n")}`
+      : "";
+    const followUps = review.unresolved.length
+      ? `## Still needs a human check\n\n${review.unresolved.map((item) => `- ${item}`).join("\n")}`
+      : "";
+    const report = [
+      `> Review status: ${statusLabel}${reviewDirty ? ". Edited after this review; run the review again before relying on the old checks." : "."}`,
+      "## Review summary",
+      review.summary,
+      "## Corrected notes",
+      review.correctedNotes.trim(),
+      correctionTable,
+      authorityTable,
+      followUps,
+    ].filter(Boolean).join("\n\n");
+    const safeName = (reviewTitle || title || "law-notes").replace(/[\\/:*?\"<>|]+/g, "-").trim().slice(0, 120) || "law-notes";
+    const exportOptions = {
+      subtitle: "Research-backed notes review · verify unresolved points against the linked records",
+      sources: sources.map((source) => `[${source.id}] ${source.title}${source.citation ? ` — ${source.citation}` : ""} — ${source.url}`),
+      footer: reviewDirty ? "These notes were edited after the source check. Re-run the review before treating its checks as current." : "Read the linked official records for full context. A source check is not a legal certification.",
+    };
+    if (format === "docx") void downloadWord(reviewTitle || title, report, `${safeName}-reviewed-notes.docx`, exportOptions);
+    else downloadPdf(reviewTitle || title, report, `${safeName}-reviewed-notes.pdf`, exportOptions);
   };
 
   const statusLabel = useMemo(() => {
@@ -438,7 +473,12 @@ export default function NotesReviewPage({ userId, units, initialText, initialTit
         {sources.length > 0 && <div className="nr-sources"><h4>Official records opened</h4><ul>{sources.map((source) => <li key={source.id}><a href={source.url} target="_blank" rel="noopener noreferrer"><strong>[{source.id}] {source.title}</strong> <ExternalLink size={12} /></a>{source.citation && <small>{source.citation}</small>}</li>)}</ul></div>}
         {review.unresolved.length > 0 && <div className="nr-unresolved"><h4>Still needs a human check</h4><ul>{review.unresolved.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ul></div>}
         <label className="nr-field-label" htmlFor="nr-corrected">Corrected notes — editable before you share</label>
-        <textarea id="nr-corrected" className="nr-corrected" value={review.correctedNotes} onChange={(event) => { setReview((current) => current ? { ...current, correctedNotes: event.target.value } : current); setReviewDirty(true); }} rows={18} />
+        <textarea id="nr-corrected" className="nr-corrected" value={review.correctedNotes} onChange={(event) => { setReview((current) => current ? { ...current, correctedNotes: event.target.value, status: "partly_checked" } : current); setReviewDirty(true); }} rows={18} />
+        <div className="nr-download-row">
+          <button type="button" className="secondary-button" disabled={!review.correctedNotes.trim()} onClick={() => downloadReviewedNotes("docx")}><Download size={15} /> Download DOCX</button>
+          <button type="button" className="secondary-button" disabled={!review.correctedNotes.trim()} onClick={() => downloadReviewedNotes("pdf")}><Download size={15} /> Download PDF</button>
+          <button type="button" className="secondary-button" disabled={busy || review.correctedNotes.trim().length < 80} onClick={() => void runReview(review.correctedNotes, reviewTitle)}><RotateCcw size={15} /> Re-review corrected notes</button>
+        </div>
         {reviewDirty && userId && <button className="secondary-button nr-retry-save" disabled={saving} onClick={() => void saveToHistory(null)}>{saving ? "Saving edits…" : "Save corrected-note edits to private history"}</button>}
         <div className="nr-share-row"><button className="primary-button" disabled={sharing || !review.correctedNotes.trim()} onClick={() => void shareToLibrary()}>{sharing ? <><Loader2 size={15} className="nr-spin" /> Adding…</> : <><Share2 size={15} /> Share corrected notes to Library</>}</button><span>Publishing is optional and shares only the corrected notes—not your original or private audit.</span></div>
         {shareMessage && <div className="nr-inline-status" role="status">{shareMessage}</div>}

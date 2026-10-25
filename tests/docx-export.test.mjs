@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import JSZip from "jszip";
 import mammoth from "mammoth";
-import { buildWordDocument, normalizeWordFilename } from "../src/export.ts";
+import { buildPdfDocument, buildWordDocument, normalizeWordFilename } from "../src/export.ts";
 
 test("Word exports are real DOCX packages with readable tables and formatting", async () => {
   const text = [
@@ -32,6 +32,23 @@ test("Word exports are real DOCX packages with readable tables and formatting", 
   assert.match(extracted.value, /Rule/);
   assert.match(extracted.value, /Acceptance/);
   assert.match(extracted.value, /Official Kenya Law source/);
+});
+
+test("PDF exports have a valid document structure and readable, bordered tables", () => {
+  const pdf = buildPdfDocument("Study notes", [
+    "## Legal principles",
+    "| Topic | Rule |",
+    "| --- | --- |",
+    "| Offer | Acceptance |",
+  ].join("\n"), { subtitle: "Revision notes", footer: "Check the source" });
+  assert.ok(pdf.startsWith("%PDF-1.4"));
+  assert.match(pdf, /xref\n0 \d+/);
+  assert.match(pdf, /\/Type \/Pages[^>]*\/Count 1/);
+  assert.match(pdf, /\(Topic\) Tj ET/);
+  assert.match(pdf, /\(Rule\) Tj ET/);
+  assert.match(pdf, /\(Offer\) Tj ET/);
+  assert.match(pdf, /\(Acceptance\) Tj ET/);
+  assert.match(pdf, / re S/);
 });
 
 test("every legacy Word export filename is normalized to .docx", () => {

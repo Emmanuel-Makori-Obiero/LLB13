@@ -134,7 +134,7 @@ test("large note reviews research and correct every bounded segment", () => {
   assert.match(notesResearchPrompt({ part: 6, total: 8 }), /segment 7 of 8/);
   assert.match(page, /feature: "notes_research"/);
   assert.match(page, /part,\n\s+size: REVIEW_SECTIONS_PER_PART/);
-  assert.match(backend, /\["notes", "notes_research", "notes_review"\]\.includes\(feature\)/);
+  assert.match(backend, /\["notes", "notes_research", "notes_review", "summarize"\]\.includes\(feature\)/);
   assert.doesNotMatch(page, /indexed\.chunks > 24/);
   assert.match(largeReviewMigration, /char_length\(original_text\) between 1 and 500000/i);
 });
@@ -144,7 +144,16 @@ test("the review picker does not hide legacy Word files and explains DOCX suppor
   assert.match(page, /older Word files exported by Group 13 can be read directly/i);
   assert.match(page, /accept="[^"]*application\/pdf[^"]*text\/markdown"[^>]*onChange/);
   assert.match(page, /accept="image\/\*"/);
-  assert.doesNotMatch(page, /accept="[^"]*image\/\*[^"]*application\/pdf/);
+  assert.doesNotMatch(page, /accept="[^"]*image\/\*[^\"]*application\/pdf/);
+});
+
+test("edited corrected notes can be re-reviewed and downloaded as DOCX or PDF", () => {
+  assert.match(page, /Download DOCX/);
+  assert.match(page, /Download PDF/);
+  assert.match(page, /Re-review corrected notes/);
+  assert.match(page, /runReview\(review\.correctedNotes, reviewTitle\)/);
+  assert.match(page, /downloadReviewedNotes\("docx"\)/);
+  assert.match(page, /downloadReviewedNotes\("pdf"\)/);
 });
 
 test("long notes are reviewed in order with overlap continuity and no repeated boundary text", () => {

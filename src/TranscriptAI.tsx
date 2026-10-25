@@ -23,6 +23,7 @@ import {
 } from "./lib/ai";
 import { Answer, type Turn } from "./StudyAssistant";
 import { selectTranscriptRunSource } from "./lib/transcriptRunSource";
+import { bookSummaryPartPrompt, bookSummarySynthesisPrompt, extractBookPartRecap, mergeBookSummaryParts, planBookSummary, type CompletedBookSummaryPart } from "./lib/bookSummary";
 import "./assistant.css";
 import { downloadBlob, downloadPdf, downloadWord } from "./export";
 import {
@@ -33,6 +34,7 @@ import {
 } from "./transcriptJobs";
 
 const SECTIONS_PER_PART = 6; // sections read per request: small enough for free-tier token limits
+const MAX_AUTOMATIC_REPAIRS = 2;
 const WAITS = [0, 25_000, 50_000]; // retry pauses when every AI provider is busy
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -56,9 +58,9 @@ const ACTIONS: Action[] = [
     feature: "summarize",
     label: "Summarise",
     icon: NotebookText,
-    hint: "A short overview of the main points.",
+    hint: "All readable transcript sections, summarized in order with the important points retained.",
     prompt:
-      "This is a lecture transcript. Write a genuinely concise summary, about 20–30% of the source length: state the central topic, then the most important points in lecture order in 5–8 short bullets or paragraphs. Include a case, statute, date or exam warning only if it is central and explicitly appears in the transcript. Omit minor examples, repetition and filler. Do not add anything from memory.",
+      "Summarise the lecture in clear study notes. Keep every substantive main point, rule, example, qualification, authority and conclusion that the lecturer actually states. Compress repetition and filler, but do not omit a main point merely to make the answer short. Preserve the lecturer's order and mark unclear wording instead of guessing.",
   },
   {
     feature: "quiz",
@@ -316,6 +318,61 @@ export function TranscriptAI({
           ].join("\n")}`
         : action.prompt;
 
+      if (action.feature === "summarize") {
+        const plan = planBookSummary(doc.chunks);
+        const completed: CompletedBookSummaryPart[] = [];
+        for (const part of plan) {
+          setStep(`Summarising transcript sections ${part.startSection}–${part.endSection} of ${doc.chunks}`);
+          try {
+            const result = await askAI({
+              feature: "summarize",
+              mode: "materials",
+              messages: [{ role: "user", content: bookSummaryPartPrompt(generationPrompt, part) }],
+              docIds: [doc.id],
+              part: part.part,
+              size: part.size,
+            });
+            if (!result.answer.trim() || !result.sources.length || result.basis === "none") {
+              throw new Error("The transcript source section was not returned to the model.");
+            }
+            completed.push({ plan: part, result });
+            const partial = mergeBookSummaryParts(title, doc.chunks, completed, null, `processing part ${part.part + 1} of ${plan.length}`);
+            setNotesText(partial.answer);
+            setTurn({ id: 1, task, prompt: generationPrompt, result: partial, mode: "materials", docIds: [doc.id] });
+          } catch (cause) {
+            const detail = cause instanceof Error ? cause.message : "an AI request failed";
+            const partial = mergeBookSummaryParts(title, doc.chunks, completed, null, `part ${part.part + 1} of ${plan.length} failed: ${detail}`);
+            setNotesText(partial.answer);
+            setTurn({ id: 1, task, prompt: generationPrompt, result: partial, error: `Complete transcript coverage stopped at part ${part.part + 1} of ${plan.length}. Completed sections are shown below but are not a complete summary. ${detail}`, mode: "materials", docIds: [doc.id] });
+            setQuality({ status: "review", score: 0, summary: "This is a partial result. Retry the summary or check the source sections manually.", spelling_issues: [], meaning_issues: [], unsupported_claims: [], missing_points: [], authority_checks: [] });
+            return;
+          }
+        }
+
+        setStep("Writing the overview from all section recaps");
+        let overview: AIResult | null = null;
+        let overviewFailure: string | undefined;
+        try {
+          overview = await askAI({
+            feature: "book_summary_synthesis",
+            mode: "general",
+            messages: [{ role: "user", content: bookSummarySynthesisPrompt(title, generationPrompt, completed.map(({ plan: part, result }) => ({ plan: part, recap: extractBookPartRecap(result.answer) }))) }],
+          });
+        } catch (cause) {
+          overviewFailure = cause instanceof Error ? cause.message : "the overview request failed";
+        }
+        const complete = mergeBookSummaryParts(title, doc.chunks, completed, overview, undefined, overviewFailure);
+        setNotesText(complete.answer);
+        setTurn({ id: 1, task, prompt: generationPrompt, result: complete, mode: "materials", docIds: [doc.id] });
+        setQuality({
+          status: "review",
+          score: 0,
+          summary: "All readable transcript sections were summarized in order. This large-source summary has not received a separate full-source audit. Use Notes Review or compare the notes with the original transcript before relying on them.",
+          spelling_issues: [], meaning_issues: [], unsupported_claims: [], missing_points: [], authority_checks: [],
+        });
+        return;
+      }
+
       if (action.feature === "notes") {
         const parts = Math.max(1, Math.ceil(doc.chunks / SECTIONS_PER_PART));
         const done: string[] = [];
@@ -386,9 +443,13 @@ export function TranscriptAI({
         setNotesText(complete);
         const report = await reviewOutput(complete, doc.id);
         if (report.status !== "pass") {
-          automaticRepairs.current += 1;
-          setStep(`Source audit is below 99/100. Repair pass ${automaticRepairs.current} — continuing until it passes…`);
-          window.setTimeout(() => void run(action, report, sourceOverride), 750);
+          if (automaticRepairs.current < MAX_AUTOMATIC_REPAIRS) {
+            automaticRepairs.current += 1;
+            setStep(`Source audit is below 99/100. Correction pass ${automaticRepairs.current} of ${MAX_AUTOMATIC_REPAIRS}…`);
+            window.setTimeout(() => void run(action, report, sourceOverride), 750);
+          } else {
+            setQuality({ ...report, summary: `Two automatic correction passes are complete. Some findings remain for a human to review. ${report.summary}` });
+          }
         }
         return;
       }
@@ -411,14 +472,6 @@ export function TranscriptAI({
         applyAssignmentResult(result);
       }
       setTurn({ id: 1, task, prompt: generationPrompt, result, mode: "materials", docIds: [doc.id] });
-      if (action.feature === "summarize") {
-        const report = await reviewOutput(result.answer, doc.id);
-        if (report.status !== "pass") {
-          automaticRepairs.current += 1;
-          setStep(`Source audit is below 99/100. Repair pass ${automaticRepairs.current} — continuing until it passes…`);
-          window.setTimeout(() => void run(action, report, sourceOverride), 750);
-        }
-      }
     } catch (e) {
       setTurn({
         id: 1,

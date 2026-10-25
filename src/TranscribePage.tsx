@@ -40,7 +40,7 @@ type Chunk = {
 };
 type Progress = { phase: string; done: number; total: number };
 
-const CHUNK_SECONDS = 600; // 10-minute pieces, about 2.4 MB each at 32 kbps
+const CHUNK_SECONDS = 600; // 10-minute pieces, about 4.8 MB each at 64 kbps
 const CORE_BASE = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm";
 const COLUMNS =
   "id,title,unit,lesson_number,lesson_title,language,uploader_name,created_by,duration_seconds,total_chunks,status,created_at";
@@ -89,7 +89,7 @@ function toParagraphs(chunks: Chunk[], field: "text" | "original_text" = "text")
   return paragraphs.filter((paragraph) => paragraph.text);
 }
 
-// ffmpeg.wasm runs in the browser: it shrinks the recording to 16 kHz mono MP3 and cuts it into 10-minute pieces.
+// ffmpeg.wasm runs in the browser: it converts audio to 16 kHz mono MP3 at 64 kbps and cuts it into 10-minute pieces.
 async function splitAudio(file: File, onProgress: (ratio: number) => void) {
   const { FFmpeg } = await import("@ffmpeg/ffmpeg");
   const { fetchFile, toBlobURL } = await import("@ffmpeg/util");
@@ -125,7 +125,7 @@ async function splitAudio(file: File, onProgress: (ratio: number) => void) {
     "-c:a",
     "libmp3lame",
     "-b:a",
-    "32k",
+    "64k",
     "-f",
     "segment",
     "-segment_time",
@@ -176,6 +176,7 @@ export default function TranscribePage({
   const [unit, setUnit] = useState(initialUnit ?? "");
   const [lessonNumber, setLessonNumber] = useState("");
   const [language, setLanguage] = useState("en");
+  const [quality, setQuality] = useState<"accurate" | "balanced">("accurate");
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<Progress | null>(null);
@@ -263,6 +264,7 @@ export default function TranscribePage({
       const form = new FormData();
       form.append("audio", blob, `chunk_${index}.mp3`);
       form.append("language", language);
+      form.append("quality", quality);
       form.append("transcript_id", transcriptId);
       form.append("idx", String(globalIndex));
       form.append("offset", String(offsetSeconds + index * CHUNK_SECONDS));
@@ -604,6 +606,14 @@ export default function TranscribePage({
             </label>
           </div>
           <label>
+            Transcription quality
+            <select value={quality} onChange={(event) => setQuality(event.target.value as "accurate" | "balanced")} disabled={busy}>
+              <option value="accurate">Higher accuracy · Whisper Large v3</option>
+              <option value="balanced">Faster / lower cost · Whisper Large v3 Turbo</option>
+            </select>
+            <span className="field-hint">Groq currently lists $0.111 per audio hour for Large v3 and $0.04 for Turbo. Its published evaluation reports a lower average word-error rate for Large v3; that is not a guarantee for your recording. <a href="https://console.groq.com/docs/speech-to-text" target="_blank" rel="noreferrer">Model details and pricing</a></span>
+          </label>
+          <label>
             Audio files (select one or more)
             <input
               type="file"
@@ -669,7 +679,7 @@ export default function TranscribePage({
           Add as many recordings as you need for one class. The parts are joined in the order shown above, with continuous timestamps and context carried from one recording into the next. The free service allows about 2 hours of audio per hour and 8 hours
           per day for the whole group together. A 3-hour lesson can need a short
           wait partway through, and it carries on by itself. Recordings are sent
-          to Groq for transcription.
+          to Groq for transcription. The corrected text receives up to two restrained text-only proofreading passes, with each pass using the previous corrected wording. These passes can fix obvious spelling and punctuation, but they cannot compare text against the audio or promise a fixed accuracy percentage; listen to the recording for names, legal terms and uncertain passages.
         </p>
       </div>
 
