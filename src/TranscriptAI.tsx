@@ -57,7 +57,7 @@ const ACTIONS: Action[] = [
     icon: NotebookText,
     hint: "A short overview of the main points.",
     prompt:
-      "This is a lecture transcript. Summarise it as clear lecture notes: the main topics in order, the key rules and principles, every case and statute mentioned, and any exam tips or warnings the lecturer gave. Ignore filler and repetition.",
+      "This is a lecture transcript. Write a genuinely concise summary, about 20–30% of the source length: state the central topic, then the most important points in lecture order in 5–8 short bullets or paragraphs. Include a case, statute, date or exam warning only if it is central and explicitly appears in the transcript. Omit minor examples, repetition and filler. Do not add anything from memory.",
   },
   {
     feature: "quiz",
@@ -149,6 +149,7 @@ export function TranscriptAI({
   const [assignmentMsg, setAssignmentMsg] = useState("");
   const assignmentKey = assignmentJobKey(transcriptId, userId);
   const [quality, setQuality] = useState<QualityReport | null>(null);
+  const automaticRepairs = useRef(0);
 
   const mkTask = (a: Action) => ({
     feature: a.feature,
@@ -187,7 +188,7 @@ export function TranscriptAI({
       `${title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "lecture"}-${turn?.task.feature === "summarize" ? "summary" : "notes"}.doc`,
     );
 
-  const reviewOutput = async (text: string, documentId: string) => {
+  const reviewOutput = async (text: string, documentId: string): Promise<QualityReport> => {
     setStep("Checking spelling, meaning, source support and authorities");
     try {
       const result = await askAI({
@@ -200,18 +201,28 @@ export function TranscriptAI({
         }],
       });
       const raw = (result.data ?? {}) as Partial<QualityReport>;
-      setQuality({
-        status: raw.status === "pass" ? "pass" : "review",
-        score: Math.max(0, Math.min(100, Number(raw.score ?? 0))),
+      const score = Math.max(0, Math.min(100, Number(raw.score ?? 0)));
+      const report: QualityReport = {
+        status: raw.status === "pass" && score >= 99 &&
+          !(Array.isArray(raw.spelling_issues) && raw.spelling_issues.length) &&
+          !(Array.isArray(raw.meaning_issues) && raw.meaning_issues.length) &&
+          !(Array.isArray(raw.unsupported_claims) && raw.unsupported_claims.length) &&
+          !(Array.isArray(raw.missing_points) && raw.missing_points.length) &&
+          (!Array.isArray(raw.authority_checks) || raw.authority_checks.every((item) => item.status === "confirmed")) ? "pass" : "review",
+        score,
         summary: String(raw.summary ?? "The output needs a human review."),
         spelling_issues: Array.isArray(raw.spelling_issues) ? raw.spelling_issues as QualityReport["spelling_issues"] : [],
         meaning_issues: Array.isArray(raw.meaning_issues) ? raw.meaning_issues as QualityReport["meaning_issues"] : [],
         unsupported_claims: Array.isArray(raw.unsupported_claims) ? raw.unsupported_claims as QualityReport["unsupported_claims"] : [],
         missing_points: Array.isArray(raw.missing_points) ? raw.missing_points.map(String) : [],
         authority_checks: Array.isArray(raw.authority_checks) ? raw.authority_checks as QualityReport["authority_checks"] : [],
-      });
+      };
+      setQuality(report);
+      return report;
     } catch (error) {
-      setQuality({ status: "review", score: 0, summary: `Quality review could not complete: ${(error as Error).message}`, spelling_issues: [], meaning_issues: [], unsupported_claims: [], missing_points: [], authority_checks: [] });
+      const report: QualityReport = { status: "review", score: 0, summary: `Quality review could not complete: ${(error as Error).message}`, spelling_issues: [], meaning_issues: [], unsupported_claims: [], missing_points: [], authority_checks: [] };
+      setQuality(report);
+      return report;
     }
   };
 
@@ -276,6 +287,7 @@ export function TranscriptAI({
     setNotesText("");
     setQuality(null);
     let temporarySourceId: string | null = null;
+    if (!repair) automaticRepairs.current = 0;
     try {
       let doc: { id: string; chunks: number };
       if (sourceOverride !== undefined) {
@@ -370,7 +382,12 @@ export function TranscriptAI({
         }
         const complete = done.join("\n\n---\n\n");
         setNotesText(complete);
-        await reviewOutput(complete, doc.id);
+        const report = await reviewOutput(complete, doc.id);
+        if (report.status !== "pass") {
+          automaticRepairs.current += 1;
+          setStep(`Source audit is below 99/100. Repair pass ${automaticRepairs.current} — continuing until it passes…`);
+          window.setTimeout(() => void run(action, report, sourceOverride), 750);
+        }
         return;
       }
 
@@ -392,7 +409,14 @@ export function TranscriptAI({
         applyAssignmentResult(result);
       }
       setTurn({ id: 1, task, prompt: generationPrompt, result, mode: "materials", docIds: [doc.id] });
-      if (action.feature === "summarize") await reviewOutput(result.answer, doc.id);
+      if (action.feature === "summarize") {
+        const report = await reviewOutput(result.answer, doc.id);
+        if (report.status !== "pass") {
+          automaticRepairs.current += 1;
+          setStep(`Source audit is below 99/100. Repair pass ${automaticRepairs.current} — continuing until it passes…`);
+          window.setTimeout(() => void run(action, report, sourceOverride), 750);
+        }
+      }
     } catch (e) {
       setTurn({
         id: 1,
