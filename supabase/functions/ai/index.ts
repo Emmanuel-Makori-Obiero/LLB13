@@ -305,7 +305,7 @@ const FEATURES: Record<
   },
   summarize: {
     docWide: true,
-    task: "Create attractive, human study notes from the material, not an AI-sounding essay. Start directly with a useful ## title or topic heading; do not say 'Here is a summary' or describe what you are doing. Use ## headings for major topics, ### headings for Rule, Authority, Example, Exam focus or Takeaway, short paragraphs and purposeful bullet lists. Where the source gives 2 or more cases, tests, elements or concepts that can be compared, include a compact Markdown table with useful column headings; do not force a table when it would add no clarity. Use a blockquote for a lecturer warning or exam tip. Keep the lecturer's actual meaning, rules/holdings, reasoning and significance in order. Add no facts that are not in the source and mark unclear material [unclear].",
+    task: "Create a genuinely concise summary of the material, not full notes and not an AI-sounding essay. Keep it to about 20–30% of the readable source where possible. Start with a useful ## title, then give the central idea and 5–8 short bullets or paragraphs in source order. Include only the most important rules, principles, cases, dates or warnings explicitly supported by the source; omit minor examples, repetition and filler. Add no facts from memory and mark unclear material [unclear].",
   },
   book_contents: {
     json: true,
@@ -399,7 +399,7 @@ const FEATURES: Record<
   },
   notes: {
     docWide: true,
-    task: `Turn this part of a lecture transcript into complete, natural student study notes. Keep the lecturer's order. Do NOT leave out any substantive point: every rule, definition, test, element, case, statute and section, example, date, name, number, exception and instruction must appear. Copy every proper name, case name and authority exactly as it appears in the transcript; never silently normalise it to a famous real-world authority. If a name or passage is uncertain, write [unclear] and preserve the surrounding context. Do not convert a casual remark into a legal rule. Remove only filler, repetition, jokes and chit-chat. Do not open with "Here are the notes", do not use generic AI filler, and do not repeat "key takeaway" or "in summary" after every section. Use "## " headings for major topics, "### " headings for Rule, Authority, Example, Exam focus or Takeaway, short paragraphs and purposeful bullets. Use bold only for genuinely important terms, not whole sentences. When the source contains 2 or more comparable cases, tests, elements or concepts, include a compact Markdown table with clear column headings; never invent a comparison. Use a blockquote for an exam warning or lecturer emphasis. If this part has cases or statutes, end with a short "Authorities mentioned" list.`,
+    task: `Turn ONLY this part of a lecture transcript into concise, complete student study notes. Keep the lecturer's order. Include each substantive point actually present in this part, but do not expand it with general knowledge. A note is allowed only when a reader can point to words in this transcript part that support it. Copy every proper name, case name, authority, date and number exactly as heard; never silently correct a likely transcription error into a famous real-world name. If a word or passage is garbled, preserve it as [unclear: original wording] rather than guessing. Never add Moot Court, a law firm, a politician, a case, a statute, a legal rule or an event merely because it is plausible or familiar. Do not turn a casual remark into a legal rule. Remove only filler, repetition, jokes and chit-chat. Be substantially shorter than the transcript: compress repeated wording and examples while preserving their meaning. Use "## " headings, short paragraphs and purposeful bullets. Use a compact table only when the transcript itself compares items. End with "Authorities mentioned" only if this part actually mentions authorities.`,
   },
   extract_assignments: {
     json: true,
@@ -409,7 +409,7 @@ const FEATURES: Record<
   quality_check: {
     json: true,
     docWide: true,
-    task: 'Audit the generated notes or summary against the supplied transcript. Return ONLY JSON: {"status":"pass|review","score":0,"spelling_issues":[{"text":"","suggestion":"","reason":""}],"meaning_issues":[{"text":"","issue":"","suggested_fix":"","source_support":""}],"unsupported_claims":[{"text":"","reason":""}],"missing_points":[""],"authority_checks":[{"authority":"","status":"confirmed|unclear|not_found","reason":""}],"summary":""}. Check spelling of names, cases, statutes, sections, dates and numbers; whether each claim makes sense; whether it is actually supported by the transcript; and whether any garbled passage was silently guessed. Treat the transcript as the authority: if it is itself unclear, mark review and say so. Never silently rewrite the output or invent a correction. Pass only when there are no material meaning, support or authority problems; minor style suggestions alone may still pass.',
+    task: 'Audit the generated notes or summary against the COMPLETE supplied transcript. Return ONLY JSON: {"status":"pass|review","score":0,"spelling_issues":[{"text":"","suggestion":"","reason":""}],"meaning_issues":[{"text":"","issue":"","suggested_fix":"","source_support":""}],"unsupported_claims":[{"text":"","reason":""}],"missing_points":[""],"authority_checks":[{"authority":"","status":"confirmed|unclear|not_found","reason":""}],"summary":""}. Treat every sentence, name, case, statute, section, date and event in the generated text as unverified until supported by the transcript. Specifically flag plausible additions that are absent, transcription errors silently changed into real-world terms, legal rules inferred beyond the lecturer words, and claims about politicians, law firms, Moot Court or other topics not present in the transcript. A legal claim being generally true is still unsupported if the transcript does not contain it. Treat the transcript as the only authority; if it is unclear, preserve [unclear] and mark review. Never silently rewrite or invent a correction. Pass only when there are no unsupported claims, material meaning problems, authority problems or missing substantive points and the score is at least 99.',
   },
   rw_question: {
     task: "Help the student develop a focused, arguable legal research question from their topic. Give 3 to 5 candidate questions. For each, explain why it is contestable and give likely thesis directions, then suggest legal issues or neutral Kenya Law search phrases to investigate. Do not name a case or citation unless it appears in <sources>; never turn a guessed authority into a '(verify)' lead. End by recommending one question and saying why.",
@@ -600,7 +600,25 @@ async function retrieve(
     total: 24,
   });
 
-  if (feature === "notes" && docIds?.length === 1 && part !== undefined) {
+  if (feature === "quality_check" && docIds?.length === 1) {
+    // A quality gate must not audit against a sampled slice: unsupported
+    // sections can otherwise look correct simply because their source was not
+    // retrieved. Transcript chunks are already bounded rows in the database.
+    const { data } = await db
+      .from("ai_chunks")
+      .select("document_id, idx, content, ai_documents(title, author, citation)")
+      .eq("document_id", docIds[0])
+      .order("idx")
+      .limit(3000);
+    for (const r of data ?? [])
+      rows.push({
+        document_id: r.document_id,
+        title: r.ai_documents?.title,
+        author: r.ai_documents?.author,
+        citation: r.ai_documents?.citation,
+        content: r.content,
+      });
+  } else if (feature === "notes" && docIds?.length === 1 && part !== undefined) {
     // Notes walk through a document in order, CHUNKS_PART sections at a time, so nothing is skipped.
     const from = part * size;
     const { data } = await db

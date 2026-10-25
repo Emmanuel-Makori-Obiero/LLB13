@@ -18,7 +18,7 @@ import "./learning-studio.css";
 type Doc = { id: string; title: string; scope: "user" | "library"; citation?: string | null; kind?: "document" | "library"; url?: string | null; target_years?: string[] | null };
 type Mode = "podcast" | "video";
 const STUDIO_STORAGE_KEY = "group13-learning-studio-draft-v2";
-type StudioDraft = { topic: string; selected: string[]; mode: Mode; spokenLanguage: "en" | "sw" | "mix" | "sheng"; scriptLanguage: "en" | "sw" | "mix" | "sheng"; presenterStyle: string; presenterName: string; guideName: string; presenterGender: "male" | "female"; guideGender: "male" | "female"; script: string; slide: number; audioUrl: string | null; audioMimeType: string; audioProvider: string | null };
+type StudioDraft = { topic: string; selected: string[]; mode: Mode; spokenLanguage: "en" | "sw" | "mix" | "sheng"; scriptLanguage: "en" | "sw" | "mix" | "sheng"; presenterStyle: string; presenterName: string; guideName: string; presenterGender: "male" | "female"; guideGender: "male" | "female"; script: string; slide: number; audioUrl: string | null; audioMimeType: string; audioProvider: string | null; audioJob?: { status: "generating"; startedAt: number; title: string; language: "en" | "sw" | "mix" | "sheng" } };
 function savedStudioDraft(): Partial<StudioDraft> {
   try { return JSON.parse(window.localStorage.getItem(STUDIO_STORAGE_KEY) ?? "{}"); } catch { return {}; }
 }
@@ -82,6 +82,8 @@ export default function LearningStudio({ learnerLevel = "" }: { learnerLevel?: s
   const [audioProgress, setAudioProgress] = useState(0);
   const [audioElapsedSeconds, setAudioElapsedSeconds] = useState(0);
   const [audioStage, setAudioStage] = useState("");
+  const [audioJob, setAudioJob] = useState<StudioDraft["audioJob"]>(saved.audioJob);
+  const [resumeAudioOnLoad, setResumeAudioOnLoad] = useState(Boolean(saved.audioJob?.status === "generating" && saved.script));
   const audioRequestId = useRef(0);
   useEffect(() => {
     if (!audioBusy) return;
@@ -100,9 +102,9 @@ export default function LearningStudio({ learnerLevel = "" }: { learnerLevel?: s
   }, [audioBusy]);
   useEffect(() => {
     try {
-      window.localStorage.setItem(STUDIO_STORAGE_KEY, JSON.stringify({ topic, selected, mode, spokenLanguage, scriptLanguage, presenterStyle, presenterName, guideName, presenterGender, guideGender, script, slide, audioUrl, audioMimeType, audioProvider } satisfies StudioDraft));
+      window.localStorage.setItem(STUDIO_STORAGE_KEY, JSON.stringify({ topic, selected, mode, spokenLanguage, scriptLanguage, presenterStyle, presenterName, guideName, presenterGender, guideGender, script, slide, audioUrl, audioMimeType, audioProvider, audioJob } satisfies StudioDraft));
     } catch { /* browser storage is optional */ }
-  }, [topic, selected, mode, spokenLanguage, scriptLanguage, presenterStyle, presenterName, guideName, presenterGender, guideGender, script, slide, audioUrl, audioMimeType, audioProvider]);
+  }, [topic, selected, mode, spokenLanguage, scriptLanguage, presenterStyle, presenterName, guideName, presenterGender, guideGender, script, slide, audioUrl, audioMimeType, audioProvider, audioJob]);
 
   const loadSources = async () => {
     const [items, library] = await Promise.all([listMyMaterials(), import("./lib/guidedStudy").then(({ listGuideSources }) => listGuideSources())]);
@@ -171,6 +173,7 @@ export default function LearningStudio({ learnerLevel = "" }: { learnerLevel?: s
     const scriptSnapshot = script;
     const languageSnapshot = scriptLanguage || spokenLanguage;
     setAudioBusy(true);
+    setAudioJob({ status: "generating", startedAt: Date.now(), title: topic || "Podcast episode", language: languageSnapshot });
     setAudioProgress(4);
     setAudioElapsedSeconds(0);
     setAudioStage("Preparing speech chunks…");
@@ -183,6 +186,7 @@ export default function LearningStudio({ learnerLevel = "" }: { learnerLevel?: s
       setAudioUrl(result.signed_url);
       setAudioMimeType(result.mime_type || "audio/mpeg");
       setAudioProvider(result.asset?.provider || null);
+      setAudioJob(undefined);
       setAudioProgress(100);
       setAudioStage("Playable audio is ready.");
       setAudioNote("Audio is ready and saved in Media archive. Listen below, download it, or open Media to play and share it with Group 13.");
@@ -190,11 +194,18 @@ export default function LearningStudio({ learnerLevel = "" }: { learnerLevel?: s
     } catch (e) {
       logPodcastAudioActivity("podcast_audio_failed");
       if (requestId === audioRequestId.current) setAudioNote(e instanceof Error ? e.message : "Could not create audio.");
+      if (requestId === audioRequestId.current) setAudioJob(undefined);
       if (requestId === audioRequestId.current) { setAudioProgress(0); setAudioStage("Audio generation stopped."); }
     } finally {
       if (requestId === audioRequestId.current) setAudioBusy(false);
     }
   };
+  useEffect(() => {
+    if (!resumeAudioOnLoad || !script || audioBusy) return;
+    setResumeAudioOnLoad(false);
+    setAudioNote("The page was reloaded while audio was being created. Resuming the saved audio request…");
+    void generatePodcastAudio();
+  }, [resumeAudioOnLoad, script, audioBusy]);
   const downloadGeneratedAudio = async () => {
     if (!audioUrl) return;
     const extension = audioMimeType === "audio/mpeg" ? "mp3" : audioMimeType === "audio/ogg" ? "ogg" : "wav";
