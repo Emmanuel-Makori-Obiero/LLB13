@@ -11,6 +11,8 @@ import {
 import {
   ARENA_CASE_SYSTEM_PROMPT,
   EXAM_ANALYSIS_SYSTEM_PROMPT,
+  NOTES_RESEARCH_SYSTEM_PROMPT,
+  NOTES_REVIEW_SYSTEM_PROMPT,
   hasLegalProcessSteps,
   legalWhatIfSystemPrompt,
 } from "./prompts.ts";
@@ -297,6 +299,16 @@ const FEATURES: Record<
     docWide: true,
     task: "Review the selected exam paper question by question. Use the full selected source, preserve numbering, distinguish study guidance from an official marking scheme, and flag unsupported law or citations instead of inventing them. Keep the overall summary short and each answer focused so every readable question is covered.",
   },
+  notes_research: {
+    json: true,
+    docWide: true,
+    task: "Extract exact authority mentions, legal issues, and short Kenya Law search queries. Do not answer the issues.",
+  },
+  notes_review: {
+    json: true,
+    docWide: true,
+    task: "Return the complete corrected notes and a structured source-bounded audit. Never claim a source was checked unless its official text is present in the request.",
+  },
   arena_case: {
     task: "Create a balanced fictional Kenyan-law moot case from the stated legal issue and verified authority list. Follow the server's strict legal-scope and exact case-packet structure.",
   },
@@ -558,8 +570,10 @@ async function retrieve(
     const allowed = new Set((selectedDocs ?? []).filter((doc: any) => { const targetYears = audiences.get(String(doc.id)) ?? []; return !targetYears.length || targetYears.includes(learnerLevel); }).map((doc: any) => String(doc.id)));
     selectedIds = selectedIds.filter((id) => allowed.has(id));
     if (docIds?.length && !selectedIds.length) {
-      if (feature === "exam_analysis") {
-        const message = "The selected paper is unavailable for this account or learner level. Choose a paper you can access and retry.";
+      if (["exam_analysis", "notes_review", "notes_research"].includes(feature)) {
+        const message = feature === "exam_analysis"
+          ? "The selected paper is unavailable for this account or learner level. Choose a paper you can access and retry."
+          : "The selected notes are unavailable for this account. Re-upload the notes and retry.";
         throw Object.assign(new Error(message), { status: 422, publicMessage: message });
       }
       return [];
@@ -600,8 +614,8 @@ async function retrieve(
     total: 24,
   });
 
-  if (feature === "notes" && docIds?.length === 1 && part !== undefined) {
-    // Notes walk through a document in order, CHUNKS_PART sections at a time, so nothing is skipped.
+  if ((feature === "notes" || feature === "notes_review") && docIds?.length === 1 && selectedIds.length === 1 && part !== undefined) {
+    // Note generation and correction walk the selected document in order; parts never sample sections.
     const from = part * size;
     const { data } = await db
       .from("ai_chunks")
@@ -633,30 +647,31 @@ async function retrieve(
         .eq("document_id", id)
         .order("idx")
         .limit(3000);
-      if (indexError && feature === "exam_analysis") {
-        const message = "Could not verify every section of the selected paper. No partial review was generated; please retry.";
+      if (indexError && ["exam_analysis", "notes_review", "notes_research"].includes(feature)) {
+        const message = "Could not verify every section of the selected document. No partial review was generated; please retry.";
         throw Object.assign(new Error(message), { status: 503, publicMessage: message });
       }
       if (!idx?.length) {
-        if (feature === "exam_analysis") {
-          const message = "The selected paper has no readable indexed text. Upload a text-readable PDF, DOCX, TXT, or Markdown file and retry.";
+        if (["exam_analysis", "notes_review", "notes_research"].includes(feature)) {
+          const message = "The selected document has no readable indexed text. Upload a text-readable PDF, DOCX, TXT, or Markdown file and retry.";
           throw Object.assign(new Error(message), { status: 422, publicMessage: message });
         }
         continue;
       }
-      const indexes = selectDocumentChunkIndexes(idx.length, per, feature === "exam_analysis");
+      const requireComplete = ["exam_analysis", "notes_review", "notes_research"].includes(feature);
+      const indexes = selectDocumentChunkIndexes(idx.length, per, requireComplete);
       const pick = indexes.map((index) => (idx[index] as { id: number }).id);
       const { data: selectedChunks, error: chunksError } = await db
         .from("ai_chunks")
         .select("id, document_id, idx, content, ai_documents(title, author, citation)")
         .in("id", pick)
         .order("idx");
-      if (chunksError && feature === "exam_analysis") {
-        const message = "Could not retrieve every section of the selected paper. No partial review was generated; please retry.";
+      if (chunksError && ["exam_analysis", "notes_review", "notes_research"].includes(feature)) {
+        const message = "Could not retrieve every section of the selected document. No partial review was generated; please retry.";
         throw Object.assign(new Error(message), { status: 503, publicMessage: message });
       }
-      if (feature === "exam_analysis" && (selectedChunks?.length ?? 0) !== pick.length) {
-        const message = "The complete text of the selected paper could not be retrieved. No partial review was generated; check access or upload the paper again.";
+      if (requireComplete && (selectedChunks?.length ?? 0) !== pick.length) {
+        const message = "The complete text of the selected document could not be retrieved. No partial review was generated; check access or upload the document again.";
         throw Object.assign(new Error(message), { status: 422, publicMessage: message });
       }
       for (const r of selectedChunks ?? [])
@@ -742,6 +757,10 @@ function systemPrompt(
   feature: string,
 ): string {
   if (feature === "exam_analysis") return EXAM_ANALYSIS_SYSTEM_PROMPT;
+  if (feature === "notes_research")
+    return `${NOTES_RESEARCH_SYSTEM_PROMPT}\nTASK: ${FEATURES[feature].task}`;
+  if (feature === "notes_review")
+    return `${NOTES_REVIEW_SYSTEM_PROMPT}\nTASK: ${FEATURES[feature].task}`;
   if (feature === "arena_case") return ARENA_CASE_SYSTEM_PROMPT;
   if (feature === "legal_process" || feature === "legal_explain")
     return legalWhatIfSystemPrompt(FEATURES[feature]?.task ?? FEATURES.chat.task);
@@ -1043,9 +1062,19 @@ Deno.serve(async (req) => {
       temperature: strict ? 0.1 : 0.3,
       json: FEATURES[feature].json,
       fast: feature === "study_plan",
-      maxTokens: feature === "study_plan" ? 10_000 : undefined,
+      maxTokens: feature === "study_plan" || feature === "notes_review" ? 10_000 : undefined,
       validateResponse: feature === "legal_process"
         ? (text) => hasLegalProcessSteps(parseJsonObject(text))
+        : feature === "notes_review"
+        ? (text) => {
+            const value = parseJsonObject(text);
+            return typeof value?.corrected_notes === "string" && value.corrected_notes.trim().length >= 20 && Array.isArray(value.corrections) && Array.isArray(value.authority_checks);
+          }
+        : feature === "notes_research"
+        ? (text) => {
+            const value = parseJsonObject(text);
+            return Array.isArray(value?.legalIssues) && Array.isArray(value?.authorities) && Array.isArray(value?.searchQueries);
+          }
         : undefined,
     });
     await admin.from("ai_usage").insert({

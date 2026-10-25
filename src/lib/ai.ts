@@ -43,6 +43,8 @@ export type AIFeature =
   | "quiz"
   | "flashcards"
   | "notes"
+  | "notes_research"
+  | "notes_review"
   | "quality_check"
   | "extract_assignments"
   | "counsellor"

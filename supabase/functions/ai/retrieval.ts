@@ -2,7 +2,7 @@ export function shouldAutoRetrieveConstitution(
   feature: string,
   queryIsConstitutional: boolean,
 ): boolean {
-  return queryIsConstitutional && feature !== "exam_analysis" && feature !== "notes";
+  return queryIsConstitutional && !["exam_analysis", "notes", "notes_review", "notes_research"].includes(feature);
 }
 
 export interface RetrievalLimits {

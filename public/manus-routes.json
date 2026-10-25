@@ -53,6 +53,10 @@
       "title": "Exam paper review"
     },
     {
+      "path": "/review",
+      "title": "Review law notes"
+    },
+    {
       "path": "/units",
       "title": "Units"
     },

@@ -31,3 +31,12 @@
 - Keep the legal motion visible throughout the match and persist the generated court question—not a broad topic label—as the room motion.
 - Case generation accepts legal topics only, cites only provided verified Kenya Law results, requires all six balanced case-packet sections, rejects irrelevant Boolean/search/computer jargon, and retries an invalid draft once before discarding it.
 - Constrain case-setter, live-opponent/commentator, and final-evaluator prompts to material legal issues, evidence, authority, inference, procedure, and remedies. Validate with the full test suite, project check, and production build.
+
+
+## Legal notes review and transcript rerun
+- A student can paste or upload typed/transcribed legal notes and receive a researched review that corrects spelling and meaning and checks case names, citations, legal claims, and omissions; the original is retained separately and the corrected notes remain editable.
+- AI-generated search phrases are checked against opened official Kenya Law judgments/legislation; each authority is labelled verified only when the official document was readable, while not-found/not-checked authorities and unresolved law stay explicit. Do not claim 100% accuracy or treat a search result title as proof of a holding.
+- Do not silently sample the note: include every indexed section up to the bounded 24-chunk cap and give a clear split-and-retry message above it. Failed research or malformed model output must not overwrite the user's notes or appear as a completed review.
+- Save review history privately with owner-scoped RLS; allow reopening prior reports and corrected notes. Do not share anything with the group automatically.
+- Let a student explicitly publish edited corrected notes to the shared Library with AI indexing, and show a success/failure status.
+- In Transcript, open a notes review from generated notes and allow a rerun using those generated/edited notes instead of only the original transcript. Run project check, full tests, and build.

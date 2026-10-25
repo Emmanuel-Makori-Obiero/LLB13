@@ -51,7 +51,7 @@ export function reasoningAttemptVariants(
   reasoning: Entry["reasoning"],
   fast = false,
 ): boolean[] {
-  if (feature === "exam_analysis" || reasoning === "none" || fast) return [false];
+  if (["exam_analysis", "notes_review", "notes_research"].includes(feature ?? "") || reasoning === "none" || fast) return [false];
   return [true, false];
 }
 

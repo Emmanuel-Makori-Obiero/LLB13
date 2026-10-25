@@ -75,7 +75,8 @@ test("exam review retrieves the selected paper document-wide without pasting its
   assert.doesNotMatch(page, /\.join\("\\n\\n"\)\.slice\(0,\s*15_000\)/);
   assert.match(edge, /exam_analysis:\s*\{\s*docWide:\s*true/);
   assert.match(edge, /FEATURES\[feature\]\?\.docWide &&[\s\S]*?feature !== "legal_process"[\s\S]*?selectedIds\.length/);
-  assert.match(edge, /selectDocumentChunkIndexes\(idx\.length, per, feature === "exam_analysis"\)/);
+  assert.match(edge, /const requireComplete = \["exam_analysis", "notes_review", "notes_research"\]\.includes\(feature\)/);
+  assert.match(edge, /selectDocumentChunkIndexes\(idx\.length, per, requireComplete\)/);
   assert.match(edge, /selectedChunks\?\.length \?\? 0\) !== pick\.length/);
   assert.match(edge, /No partial review was generated/);
   assert.match(edge, /publicMessage === "string" \? publicMessage/);

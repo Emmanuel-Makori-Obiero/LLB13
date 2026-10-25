@@ -88,6 +88,7 @@ import { DeleteAccountCard } from "./AccountPage";
 import Home from "./Home";
 import TimetablePage from "./TimetablePage";
 const TranscribePage = lazy(() => import("./TranscribePage"));
+const NotesReviewPage = lazy(() => import("./NotesReviewPage"));
 import { CounsellorChat } from "./CounsellorChat";
 import { StudyAssistant } from "./StudyAssistant";
 import ExamReviewPage from "./ExamReviewPage";
@@ -145,6 +146,7 @@ const nav = [
   { id: "scanner", label: "Scan & notes", icon: ScanLine },
   { id: "guide", label: "Guided study", icon: GraduationCap },
   { id: "exam-review", label: "Exam review", icon: ClipboardCheck },
+  { id: "review", label: "Review notes", icon: ClipboardCheck },
   { id: "music", label: "Music & media", icon: Music2 },
   { id: "assignment-helper", label: "AI assignment helper", icon: Sparkles },
   { id: "units", label: "Units", icon: BookOpen },
@@ -279,6 +281,7 @@ function App() {
   const [media, setMedia] = useState<MediaResource[]>([]);
   const [selectedUnit, setSelectedUnit] = useState("");
   const [transcribeUnit, setTranscribeUnit] = useState<string | undefined>();
+  const [notesReviewSeed, setNotesReviewSeed] = useState<{ text: string; title: string; nonce: number } | null>(null);
   const [selectedAssignment, setSelectedAssignment] = useState("");
   const [search, setSearch] = useState("");
   const [notice, setNotice] = useState("");
@@ -560,6 +563,10 @@ function App() {
     setView(target);
     setSearch("");
     if (target !== "transcribe") setTranscribeUnit(undefined);
+  };
+  const openNotesReview = (text: string, title: string) => {
+    setNotesReviewSeed({ text, title, nonce: Date.now() });
+    setPage("review");
   };
   useEffect(() => {
     if (userEmail && (view === "login" || view === "signup"))
@@ -1127,6 +1134,7 @@ function App() {
                   profile.displayName || userEmail?.split("@")[0] || "Member"
                 }
                 setNotice={setNotice}
+                onReviewNotes={openNotesReview}
               />
             </Suspense>
           )}
@@ -1342,6 +1350,47 @@ function App() {
                 }}
               />
             </>
+          )}
+          {view === "review" && (
+            <Suspense fallback={<div className="subheading">Opening notes review…</div>}>
+              <PageHeading
+                eyebrow="Research, verify, improve"
+                title="Review your law notes."
+                subtitle="Correct the writing, check authorities against Kenya Law, and keep an editable, private review history."
+              />
+              <NotesReviewPage
+                key={`${userId ?? "signed-out"}-${notesReviewSeed?.nonce ?? "direct"}`}
+                userId={userId}
+                units={units}
+                initialText={notesReviewSeed?.text}
+                initialTitle={notesReviewSeed?.title}
+                onShareToLibrary={async (file, title, unit) => {
+                  const duplicate = await findLibraryMaterialDuplicate(file, title);
+                  if (duplicate) {
+                    setMaterials((current) => current.some((item) => item.id === duplicate.id) ? current : [duplicate, ...current]);
+                    return duplicate;
+                  }
+                  const created = await repository.createMaterial({
+                    title,
+                    author: profile.displayName || undefined,
+                    type: "Lecture notes",
+                    unit,
+                    topic: title,
+                    date: new Date().toISOString().slice(0, 10),
+                    source: "LLB13 Notes Review",
+                    url: "",
+                  }, file);
+                  setMaterials((current) => [created, ...current]);
+                  try {
+                    const indexed = await uploadLibraryMaterial(file, `Reviewed study notes · ${unit} · Kenya Law checked`, created.author ?? undefined, [], created.id);
+                    setNotice(`Reviewed notes added to the shared Library and AI knowledge (${indexed.chunks} sections).`);
+                  } catch (indexError) {
+                    setNotice(`Notes added to the shared Library, but AI indexing failed: ${indexError instanceof Error ? indexError.message : "retry indexing from the AI document area."}`);
+                  }
+                  return created;
+                }}
+              />
+            </Suspense>
           )}
           {view === "guide" && (
             <Suspense fallback={<div className="subheading">Opening guided study…</div>}>

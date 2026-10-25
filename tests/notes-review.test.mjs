@@ -1,0 +1,94 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import {
+  normalizeNotesReview,
+  normalizeResearchPlan,
+  joinReviewedNoteParts,
+  notesReviewPrompt,
+  safeKenyaLawUrl,
+  uniqueOfficialSources,
+} from "../src/lib/notesReview.ts";
+
+const backend = readFileSync(new URL("../supabase/functions/ai/index.ts", import.meta.url), "utf8");
+const prompt = readFileSync(new URL("../supabase/functions/ai/prompts.ts", import.meta.url), "utf8");
+const page = readFileSync(new URL("../src/NotesReviewPage.tsx", import.meta.url), "utf8");
+const transcript = readFileSync(new URL("../src/TranscriptAI.tsx", import.meta.url), "utf8");
+const migration = readFileSync(new URL("../supabase/migrations/20261025114500_notes_reviews.sql", import.meta.url), "utf8");
+
+ test("research plan preserves only bounded legal queries and exact authority mentions", () => {
+  const result = normalizeResearchPlan({
+    legalIssues: ["Contract formation"],
+    authorities: [{ mention: "Mumo Matemu v Trusted Society", query: "Mumo Matemu v Trusted Society" }],
+    searchQueries: ["Article 10 public participation", "x"],
+  });
+  assert.deepEqual(result.searchQueries, ["Mumo Matemu v Trusted Society", "Article 10 public participation", "Contract formation"]);
+  assert.equal(result.authorities[0].mention, "Mumo Matemu v Trusted Society");
+  assert.ok(result.searchQueries.length <= 8);
+});
+
+test("official link validation accepts only HTTPS Kenya Law AKN records", () => {
+  assert.equal(safeKenyaLawUrl("https://kenyalaw.org/akn/ke/act/2010/constitution"), "https://kenyalaw.org/akn/ke/act/2010/constitution");
+  assert.equal(safeKenyaLawUrl("http://kenyalaw.org/akn/ke/act/2010/constitution"), null);
+  assert.equal(safeKenyaLawUrl("https://example.com/akn/ke/act/2010/constitution"), null);
+  assert.equal(safeKenyaLawUrl("https://kenyalaw.org/search/?q=foo"), null);
+});
+
+test("notes review rejects empty corrections and strips invented source IDs", () => {
+  assert.equal(normalizeNotesReview({ corrected_notes: "short", corrections: [], authority_checks: [] }, new Set(["K1"])), null);
+  const result = normalizeNotesReview({
+    summary: "A few citations still need checking.",
+    corrected_notes: "## Contract law\n\nThe agreement must be interpreted in context [K9].",
+    corrections: [{ original: "case claim", corrected: "revised claim", reason: "The official judgment supports this", source_ids: ["K1", "K9"], verification: "supported" }],
+    authority_checks: [{ authority: "Example v Example", status: "verified", source_ids: ["K9"] }],
+    unresolved_questions: [],
+  }, new Set(["K1"]));
+  assert.ok(result);
+  assert.equal(result.corrections[0].sourceIds.join(","), "K1");
+  assert.equal(result.authorityChecks[0].sourceIds.length, 0);
+  assert.equal(result.authorityChecks[0].status, "not_checked");
+  assert.match(result.correctedNotes, /unverified source reference/);
+  assert.equal(result.status, "partly_checked");
+});
+
+test("source inventory accepts readable official AKN records only", () => {
+  const result = uniqueOfficialSources([
+    { id: "", title: "Judgment", url: "https://kenyalaw.org/akn/ke/judgment/2020/1/eng@2020-01-01", citation: null, text: "Official judgment text" },
+    { id: "", title: "Fake", url: "https://example.com/akn/ke/judgment/1", citation: null, text: "Not official" },
+    { id: "", title: "Empty", url: "https://kenyalaw.org/akn/ke/judgment/2020/2", citation: null, text: " " },
+  ]);
+  assert.equal(result.length, 1);
+  assert.equal(result[0].id, "K1");
+});
+
+test("the app refuses silent source sampling and labels its accuracy limit", () => {
+  assert.match(page, /Nothing was sampled/);
+  assert.match(page, /No AI can guarantee 100% legal accuracy/);
+  assert.match(backend, /notes_review.*notes_research/);
+  assert.match(backend, /requireComplete/);
+  assert.match(prompt, /A result title or model memory does not prove a holding/);
+});
+
+test("transcript-generated notes can be edited, rerun as the source, and handed into legal review", () => {
+  assert.match(transcript, /Re-run using these notes as the source/);
+  assert.match(transcript, /onReviewNotes\(generatedText/);
+  assert.match(transcript, /sourceOverride/);
+  assert.match(page, /initialText\?\.trim\(\)/);
+});
+
+test("private history migration is owner scoped with row-level security", () => {
+  assert.match(migration, /alter table public\.notes_reviews enable row level security/i);
+  assert.match(migration, /auth\.uid\(\) = user_id/g);
+  assert.match(migration, /on delete cascade/i);
+  assert.match(page, /\.eq\("user_id", userId\)/);
+});
+
+test("long notes are reviewed in order with overlap continuity and no repeated boundary text", () => {
+  const overlap = "The court considered the statutory language, the parties' evidence, and the constitutional context before reaching its decision on the claim.";
+  const result = joinReviewedNoteParts([`## Part one\n\n${overlap}`, `${overlap}\n\n## Part two`]);
+  assert.equal(result.split("The court considered").length - 1, 1);
+  assert.match(notesReviewPrompt([], { part: 1, total: 3, precedingTail: "The first segment already covered this point." }), /segment 2 of 3/);
+  assert.match(notesReviewPrompt([], { part: 1, total: 3, precedingTail: "The first segment already covered this point." }), /Do not repeat material already present/);
+  assert.match(page, /REVIEW_SECTIONS_PER_PART = 6/);
+  assert.match(page, /for \(let part = 0; part < totalParts; part\+\+\)/);
+});

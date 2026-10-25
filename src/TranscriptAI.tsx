@@ -16,6 +16,7 @@ import { supabase } from "./data/repository";
 import { Markdown } from "./Markdown";
 import {
   askAI,
+  deleteMaterial,
   saveTextMaterial,
   type AIFeature,
   type AIResult,
@@ -124,6 +125,7 @@ export function TranscriptAI({
   ownerName = "Group 13 member",
   getText,
   ready,
+  onReviewNotes,
 }: {
   transcriptId: string;
   userId: string | null;
@@ -132,6 +134,7 @@ export function TranscriptAI({
   ownerName?: string;
   getText: () => string;
   ready: boolean; // false while the transcript text is still loading
+  onReviewNotes?: (text: string, title: string) => void;
 }) {
   const [busy, setBusy] = useState<AIFeature | null>(null);
   const [turn, setTurn] = useState<Turn | null>(null);
@@ -164,7 +167,9 @@ export function TranscriptAI({
       `${title.replace(/[^\w\- ]+/g, "").trim() || "lecture"} - ${turn?.task.feature === "summarize" ? "summary" : "notes"}.md`,
     );
   };
-  const generatedText = notesText || turn?.result?.answer || "";
+  const generatedText = turn?.task.feature === "notes"
+    ? turn.result?.answer ?? notesText
+    : notesText || turn?.result?.answer || "";
   const reviewed = quality?.status === "pass";
   const exportText = reviewed
     ? generatedText
@@ -182,13 +187,13 @@ export function TranscriptAI({
       `${title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "lecture"}-${turn?.task.feature === "summarize" ? "summary" : "notes"}.doc`,
     );
 
-  const reviewOutput = async (text: string) => {
+  const reviewOutput = async (text: string, documentId: string) => {
     setStep("Checking spelling, meaning, source support and authorities");
     try {
       const result = await askAI({
         feature: "quality_check",
         mode: "materials",
-        docIds: [saved.current!.id],
+        docIds: [documentId],
         messages: [{
           role: "user",
           content: `Audit this generated ${turn?.task.feature === "summarize" ? "summary" : "set of notes"} against the transcript in <sources>. Do not rewrite it.\n\nGENERATED TEXT:\n${text}`,
@@ -254,7 +259,7 @@ export function TranscriptAI({
     });
   }, [assignmentKey]);
 
-  const run = async (action: Action, repair?: QualityReport) => {
+  const run = async (action: Action, repair?: QualityReport, sourceOverride?: string) => {
     if (busy) return;
     const task = mkTask(action);
     if (!ready) {
@@ -270,18 +275,26 @@ export function TranscriptAI({
     setTurn(null);
     setNotesText("");
     setQuality(null);
+    let temporarySourceId: string | null = null;
     try {
-      // Save the transcript once per visit so every button reads the same copy.
-      if (!saved.current) {
-        setStep("Preparing the transcript");
-        saved.current = await saveTextMaterial(
-          `${title} (lecture transcript)`,
-          getText(),
-        );
+      let doc: { id: string; chunks: number };
+      if (sourceOverride !== undefined) {
+        setStep("Preparing the generated notes as the new source");
+        doc = await saveTextMaterial(`${title} (notes rerun ${crypto.randomUUID()})`, sourceOverride);
+        temporarySourceId = doc.id;
+      } else {
+        // Save the transcript once per visit so every button reads the same copy.
+        if (!saved.current) {
+          setStep("Preparing the original transcript");
+          saved.current = await saveTextMaterial(
+            `${title} (lecture transcript)`,
+            getText(),
+          );
+        }
+        doc = saved.current;
       }
-      const doc = saved.current;
       const generationPrompt = repair
-        ? `${action.prompt}\n\nREPAIR THE PREVIOUS OUTPUT USING THE ORIGINAL TRANSCRIPT. Reuse the already indexed transcript; do not create or ingest another copy. Copy names, case names and authorities exactly from the transcript, use no outside knowledge, preserve [unclear], and do not turn casual remarks into legal rules. Correct every finding below and re-check the complete result before returning it.\n\nAUDIT FINDINGS:\n${[
+        ? `${action.prompt}\n\nREPAIR THE PREVIOUS OUTPUT USING THE SELECTED SOURCE TEXT. Reuse the already indexed source; do not create another copy during this run. Copy names, case names and authorities exactly from the source, use no outside knowledge, preserve [unclear], and do not turn casual remarks into legal rules. Correct every finding below and re-check the complete result before returning it.\n\nAUDIT FINDINGS:\n${[
             ...repair.spelling_issues.map((item) => `Spelling: ${item.text} -> ${item.suggestion} (${item.reason})`),
             ...repair.meaning_issues.map((item) => `Meaning: ${item.text} — ${item.issue}; fix: ${item.suggested_fix}`),
             ...repair.unsupported_claims.map((item) => `Unsupported: ${item.text} — ${item.reason}`),
@@ -357,7 +370,7 @@ export function TranscriptAI({
         }
         const complete = done.join("\n\n---\n\n");
         setNotesText(complete);
-        await reviewOutput(complete);
+        await reviewOutput(complete, doc.id);
         return;
       }
 
@@ -379,7 +392,7 @@ export function TranscriptAI({
         applyAssignmentResult(result);
       }
       setTurn({ id: 1, task, prompt: generationPrompt, result, mode: "materials", docIds: [doc.id] });
-      if (action.feature === "summarize") await reviewOutput(result.answer);
+      if (action.feature === "summarize") await reviewOutput(result.answer, doc.id);
     } catch (e) {
       setTurn({
         id: 1,
@@ -388,6 +401,7 @@ export function TranscriptAI({
         error: (e as Error).message,
       });
     } finally {
+      if (temporarySourceId) await deleteMaterial(temporarySourceId).catch(() => undefined);
       setBusy(null);
       setStep("");
     }
@@ -453,7 +467,7 @@ export function TranscriptAI({
     if (!supabase || !turn?.result || !userId) return;
     const kind = turn.task.feature as NoteKind;
     // Source tags like [S1] only make sense next to the source list, so drop them.
-    const content = turn.result.answer.replace(/\s?\[S\d+\]/g, "").trim();
+    const content = generatedText.replace(/\s?\[S\d+\]/g, "").trim();
     setSaving(true);
     setSaveMsg("");
     const { error } = await supabase.from("transcript_notes").upsert(
@@ -520,7 +534,7 @@ export function TranscriptAI({
       )}
       {turn && (
         <div className="ta-result">
-          {turn.task.feature !== "extract_assignments" && (
+          {turn.task.feature !== "extract_assignments" && turn.task.feature !== "notes" && (
             <Answer turn={turn} />
           )}
           {turn.task.feature === "extract_assignments" && (
@@ -589,22 +603,51 @@ export function TranscriptAI({
               )}
               {!reviewed && (
                 <>
-                  <small>Check the original transcript before relying on this output. Downloads and saving stay locked until the check passes.</small>
+                  <small>Check the selected source before relying on this output. Downloads and saving stay locked until the check passes.</small>
                   {(turn?.task.feature === "notes" || turn?.task.feature === "summarize") && (
                     <button
                       type="button"
                       className="secondary-button"
                       onClick={() => {
                         const action = ACTIONS.find((item) => item.feature === turn?.task.feature);
-                        if (action && quality) void run(action, quality);
+                        if (action) void run(action, quality ?? undefined);
                       }}
                     >
                       Re-run from original transcript
                     </button>
                   )}
+                  {turn?.task.feature === "notes" && generatedText.trim() && (
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => {
+                        const action = ACTIONS.find((item) => item.feature === "notes");
+                        if (action) void run(action, undefined, generatedText);
+                      }}
+                    >
+                      Re-run using these notes as the source
+                    </button>
+                  )}
                 </>
               )}
             </div>
+          )}
+          {turn?.task.feature === "notes" && !busy && generatedText && (
+            <label className="ta-notes-editor">
+              <span className="field-hint">Generated notes · edit before saving, rerunning, or researching</span>
+              <textarea
+                value={generatedText}
+                rows={12}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setNotesText(value);
+                  setTurn((current) => current?.result
+                    ? { ...current, result: { ...current.result, answer: value } }
+                    : current);
+                  setQuality(null);
+                }}
+              />
+            </label>
           )}
           {textual && !busy && generatedText && (
             <div className="ta-after">
@@ -613,11 +656,20 @@ export function TranscriptAI({
                 type="button"
                 className="secondary-button"
                 onClick={() =>
-                  void navigator.clipboard?.writeText(turn.result!.answer)
+                  void navigator.clipboard?.writeText(generatedText)
                 }
               >
                 Copy {turn.task.feature === "notes" ? "notes" : "summary"}
               </button>
+              {(turn.task.feature === "notes" || turn.task.feature === "summarize") && onReviewNotes && (
+                <button
+                  type="button"
+                  className="secondary-button ta-btn"
+                  onClick={() => onReviewNotes(generatedText, `${title} — ${turn.task.feature === "notes" ? "Study notes" : "Lecture summary"}`)}
+                >
+                  Research and review these notes
+                </button>
+              )}
               {textual && (
                 <>
                   <button

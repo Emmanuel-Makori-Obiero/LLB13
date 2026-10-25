@@ -13,6 +13,7 @@ type Props = {
   displayName: string;
   setNotice: (notice: string) => void;
   initialUnit?: string;
+  onReviewNotes?: (text: string, title: string) => void;
 };
 
 type TranscriptRow = {
@@ -167,6 +168,7 @@ export default function TranscribePage({
   displayName,
   setNotice,
   initialUnit,
+  onReviewNotes,
 }: Props) {
   const [rows, setRows] = useState<TranscriptRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -834,7 +836,9 @@ export default function TranscribePage({
             transcriptId={opened.id}
             userId={userId}
             title={opened.title}
+            unit={opened.unit}
             ready={chunks.length > 0}
+            onReviewNotes={onReviewNotes}
             getText={() =>
               paragraphs.map((paragraph) => paragraph.text).join("\n\n")
             }

@@ -774,3 +774,5 @@
 
 /* Written-response study quiz controls */
 .sa-q textarea{display:block;width:100%;min-height:110px;margin:10px 0;padding:12px;border:1px solid var(--border,#dce2eb);border-radius:10px;background:var(--surface,#fff);color:var(--text,#1e293b);font:inherit;line-height:1.55;resize:vertical}.sa-q textarea:focus{outline:2px solid rgba(75,112,198,.25);border-color:#6c8fda}.sa-q>.primary-button{margin:0 0 12px}.sa-explain details{margin-top:12px;padding-top:10px;border-top:1px solid var(--border,#dce2eb)}.sa-explain summary{cursor:pointer;font-weight:650}
+
+.ta-notes-editor{display:grid;gap:8px;margin:14px 0}.ta-notes-editor textarea{width:100%;min-height:240px;resize:vertical;border:1px solid #d7dfd6;border-radius:10px;background:#fffefa;padding:12px;color:var(--ink,#18322b);font:inherit;font-size:13px;line-height:1.65}.ta-notes-editor textarea:focus{outline:3px solid rgba(80,133,96,.14);border-color:#6e9a7e}
