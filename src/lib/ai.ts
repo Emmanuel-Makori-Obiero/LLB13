@@ -5,6 +5,7 @@ import * as pdfjs from "pdfjs-dist";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import * as mammoth from "mammoth";
 import { ocrImage, ocrPdfPages } from "./ocr";
+import { extractLegacyWordHtml } from "./legacyWord";
 import { isPersonalizedStudyFeature, personalizeMessages, type LearningProfile } from "./learnerAdaptation";
 import { shouldRetryAiRequest } from "./aiRetryPolicy";
 
@@ -242,7 +243,9 @@ export async function extractText(file: File): Promise<string> {
     }
   }
   if (isLegacyDoc) {
-    throw new Error("Legacy .doc files are not readable in the browser. Open the file in Word or Google Docs, save/export it as .docx, then upload the .docx file.");
+    const legacyExport = extractLegacyWordHtml(await file.text());
+    if (legacyExport) return legacyExport;
+    throw new Error("This .doc is a binary Word file, not an older Group 13 export, so the browser cannot read it directly. For other .doc files, save or export a copy as .docx and upload that copy.");
   }
   if (name.endsWith(".pptx")) {
     const JSZip = (await import("jszip")).default;

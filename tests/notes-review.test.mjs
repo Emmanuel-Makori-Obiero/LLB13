@@ -141,7 +141,7 @@ test("large note reviews research and correct every bounded segment", () => {
 
 test("the review picker does not hide legacy Word files and explains DOCX support", () => {
   assert.match(page, /accept="[^"]*\.doc,\.docx/);
-  assert.match(page, /Older \.doc files are selectable, but must be saved as \.docx/);
+  assert.match(page, /older Word files exported by Group 13 can be read directly/i);
   assert.match(page, /accept="[^"]*application\/pdf[^"]*text\/markdown"[^>]*onChange/);
   assert.match(page, /accept="image\/\*"/);
   assert.doesNotMatch(page, /accept="[^"]*image\/\*[^"]*application\/pdf/);

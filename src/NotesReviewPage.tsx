@@ -403,7 +403,7 @@ export default function NotesReviewPage({ userId, units, initialText, initialTit
       <div className="nr-layout">
         <section className="nr-card nr-input-card">
           <div className="nr-section-head"><div><span className="nr-label">01 · YOUR SOURCE</span><h3>Upload or paste notes</h3></div><div className="nr-upload-actions"><label className="nr-upload"><Upload size={15} /> Choose document<input type="file" accept=".pdf,.doc,.docx,.txt,.md,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown" onChange={(event) => void addFile(event)} /></label><label className="nr-upload"><Upload size={15} /> Choose photo<input type="file" accept="image/*" onChange={(event) => void addFile(event)} /></label></div></div>
-          <p className="nr-muted">Word files ending in .docx can be read directly. Older .doc files are selectable, but must be saved as .docx in Word or Google Docs before review.</p>
+          <p className="nr-muted">DOCX files and older Word files exported by Group 13 can be read directly. Other binary .doc files need to be saved as .docx before review.</p>
           {fileMessage && <p className="nr-inline-status">{fileMessage}</p>}
           <label className="nr-field-label" htmlFor="nr-title">Note title</label>
           <input id="nr-title" value={title} onChange={(event) => setTitle(event.target.value)} maxLength={200} placeholder="e.g. Constitutional law — judicial review" />
