@@ -4,10 +4,13 @@ import { readFileSync } from "node:fs";
 import {
   extractArticleNumbers,
   findArticleChunkIndexes,
+  findArticleChunkRanges,
   isConstitutionQuestion,
 } from "../supabase/functions/ai/constitution.ts";
+import { splitArticleNumbers } from "../src/lib/constitutionArticles.ts";
 
 const edge = readFileSync(new URL("../supabase/functions/ai/index.ts", import.meta.url), "utf8");
+const client = readFileSync(new URL("../src/lib/ai.ts", import.meta.url), "utf8");
 const prompts = readFileSync(new URL("../supabase/functions/ai/prompts.ts", import.meta.url), "utf8");
 
 test("Constitution retrieval recognizes named Articles and common constitutional subjects", () => {
@@ -25,6 +28,19 @@ test("Article references parse clauses, lists, ranges, and the final Articles th
   );
   assert.deepEqual(extractArticleNumbers("Compare Article 150(2) and Article 260."), [150, 260]);
   assert.deepEqual(extractArticleNumbers("The Constitution has 264 articles."), []);
+});
+
+test("all 264 Articles are covered by ordered, complete batches with no 12-Article request ceiling", () => {
+  const allArticles = Array.from({ length: 264 }, (_, index) => index + 1);
+  const batches = splitArticleNumbers(allArticles, 12);
+  assert.equal(batches.length, 22);
+  assert.equal(batches.every((batch) => batch.length <= 12), true);
+  assert.deepEqual(batches.flat(), allArticles);
+  assert.match(client, /splitArticleNumbers\(articleNumbers, MAX_CONSTITUTION_ARTICLES_PER_BATCH\)/);
+  assert.match(client, /askAISingle\(\{ \.\.\.args, messages \}, articles\)/);
+  assert.match(edge, /MAX_CONSTITUTION_ARTICLES_PER_BATCH/);
+  assert.match(edge, /constitutionArticles\)/);
+  assert.doesNotMatch(edge, /MAX_EXPLICIT_ARTICLES_PER_REQUEST/);
 });
 
 test("exact Article lookup rejects table-of-contents dot leaders and selects the full-text heading", () => {
@@ -45,9 +61,37 @@ test("exact Article lookup rejects table-of-contents dot leaders and selects the
   assert.deepEqual(matches.get(261), { document_id: "constitution", idx: 302 });
 });
 
-test("the Edge Function reserves exact Article hits and never silently limits the lookup to eight numbers", () => {
+test("complete Article retrieval spans continuation chunks through the next body heading", () => {
+  const chunks = [
+    { document_id: "constitution", idx: 0, content: "1. First ................................ 1" },
+    { document_id: "constitution", idx: 1, content: "1. First Article\nFirst part of the provision." },
+    { document_id: "constitution", idx: 2, content: "Continuation of the first Article." },
+    { document_id: "constitution", idx: 3, content: "2. Second Article\nSecond part begins." },
+    { document_id: "constitution", idx: 4, content: "Continuation of the second Article." },
+    { document_id: "constitution", idx: 5, content: "3. Third Article\nFinal provision." },
+  ];
+  assert.deepEqual([...findArticleChunkRanges(chunks, [1, 2, 3])], [
+    [1, { document_id: "constitution", start_idx: 1, end_idx: 3 }],
+    [2, { document_id: "constitution", start_idx: 3, end_idx: 5 }],
+    [3, { document_id: "constitution", start_idx: 5, end_idx: 5 }],
+  ]);
+});
+
+test("Article 264 retrieval stops before the Constitution schedules", () => {
+  const chunks = [
+    { document_id: "constitution", idx: 300, content: "264. Interpretation of this Constitution\nArticle text starts." },
+    { document_id: "constitution", idx: 301, content: "Continuation and final paragraph of Article 264." },
+    { document_id: "constitution", idx: 302, content: "FIRST SCHEDULE\nCounty boundaries." },
+  ];
+  assert.deepEqual([...findArticleChunkRanges(chunks, [264])], [
+    [264, { document_id: "constitution", start_idx: 300, end_idx: 301 }],
+  ]);
+});
+
+test("the Edge Function reserves exact Article hits from the selected automatic batch", () => {
   assert.match(edge, /exactConstitutionRows\(db, constitutionIds, articleNumbers\)/);
-  assert.match(edge, /MAX_EXPLICIT_ARTICLES_PER_REQUEST = 12/);
+  assert.match(edge, /findArticleChunkRanges\(chunks, articleNumbers\)/);
+  assert.match(edge, /articleBatch \?\? extractArticleNumbers\(query\)/);
   assert.match(edge, /exact\.missing\.length/);
   assert.doesNotMatch(edge, /q:\s*`article \| \$\{number\}`/);
   assert.match(edge, /Math\.max\(limits\.total, articleChunkReserve\)/);

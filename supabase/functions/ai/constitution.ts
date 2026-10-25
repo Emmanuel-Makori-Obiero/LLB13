@@ -8,42 +8,14 @@ export function isConstitutionQuestion(text: string): boolean {
   return /\bconstitution(?:al)?\b|\barticles?\s*\d{1,3}\b|\barts?\.?\s*\d{1,3}\b|bill of rights|fundamental rights|\bright\b|\brights\b|freedom|libert(?:y|ies)|devolution|sovereignty|national security|defen[cs]e forces|\bKDF\b|\bdeputy president\b|\bpresident\b|parliament|national assembly|\bsenate\b|county government|\bjudiciary\b|state organ|state officer|public finance|citizenship|election|\belectoral\b|\bequality\b|discrimination|fair administrative action|access to information|\bland\b|environment|education|healthcare|\bnational values\b|\b(?:family|children?|housing|water|food|social security|labou?r|privacy|dignity|fair hearing|fair trial|religion|culture|language|assembly|protest|petition|expression|association|media|disabilit\w*|marginalis\w*|youth|public service|integrity|commission|independent office|tax|revenue|budget|procurement|borrowing|debt|county boundary|intergovernmental|appointment|removal|impeachment|term of office|judicial service|remuneration|pension|constitutional amendment|constitutional transition)\b/i.test(text);
 }
 
-const ARTICLE_MARKER = /\b(?:articles?|arts?\.?)\s+/gi;
-const MAX_ARTICLE_NUMBER = 300;
+import {
+  extractArticleNumbers,
+  MAX_CONSTITUTION_ARTICLE,
+  MAX_CONSTITUTION_ARTICLES_PER_BATCH,
+} from "../../../src/lib/constitutionArticles.ts";
+export { extractArticleNumbers, MAX_CONSTITUTION_ARTICLE, MAX_CONSTITUTION_ARTICLES_PER_BATCH };
 
-export function extractArticleNumbers(text: string): number[] {
-  const found: number[] = [];
-  for (const marker of text.matchAll(ARTICLE_MARKER)) {
-    const tail = text.slice(marker.index! + marker[0].length);
-    const first = tail.match(/^\s*(\d{1,3})(?:\s*\(\s*\d+\s*\))?/);
-    if (!first) continue;
-
-    let cursor = first[0].length;
-    let previous = Number(first[1]);
-    if (previous >= 1 && previous <= MAX_ARTICLE_NUMBER) found.push(previous);
-
-    while (cursor < tail.length) {
-      const separator = tail.slice(cursor).match(/^\s*(,|and\b|or\b|&|to\b|[-–—])\s*/i);
-      if (!separator) break;
-      cursor += separator[0].length;
-      const repeatedMarker = tail.slice(cursor).match(/^articles?\s+/i);
-      if (repeatedMarker) cursor += repeatedMarker[0].length;
-      const next = tail.slice(cursor).match(/^(\d{1,3})(?:\s*\(\s*\d+\s*\))?/);
-      if (!next) break;
-
-      const current = Number(next[1]);
-      const isRange = /^(?:to\b|[-–—])$/i.test(separator[1]);
-      if (isRange && current >= previous && current <= MAX_ARTICLE_NUMBER) {
-        for (let number = previous + 1; number <= current; number += 1) found.push(number);
-      } else if (current >= 1 && current <= MAX_ARTICLE_NUMBER) {
-        found.push(current);
-      }
-      previous = current;
-      cursor += next[0].length;
-    }
-  }
-  return [...new Set(found)];
-}
+const MAX_ARTICLE_NUMBER = MAX_CONSTITUTION_ARTICLE;
 
 function looksLikeContentsEntry(textAfterNumber: string): boolean {
   const preview = textAfterNumber.slice(0, 240);
@@ -74,4 +46,38 @@ export function findArticleChunkIndexes(
     }
   }
   return found;
+}
+
+export function findArticleChunkRanges(
+  chunks: ConstitutionChunkRef[],
+  articleNumbers: number[],
+): Map<number, { document_id: string; start_idx: number; end_idx: number }> {
+  const ordered = [...chunks].sort((a, b) => a.document_id.localeCompare(b.document_id) || a.idx - b.idx);
+  const allStarts = findArticleChunkIndexes(ordered, Array.from({ length: MAX_ARTICLE_NUMBER }, (_, index) => index + 1));
+  const starts = [...allStarts.entries()]
+    .map(([number, location]) => ({ number, ...location }))
+    .sort((a, b) => a.document_id.localeCompare(b.document_id) || a.idx - b.idx || a.number - b.number);
+  const lastIndexByDocument = new Map<string, number>();
+  for (const chunk of ordered) {
+    lastIndexByDocument.set(chunk.document_id, Math.max(lastIndexByDocument.get(chunk.document_id) ?? chunk.idx, chunk.idx));
+  }
+
+  const ranges = new Map<number, { document_id: string; start_idx: number; end_idx: number }>();
+  for (const number of [...new Set(articleNumbers)]) {
+    const location = allStarts.get(number);
+    if (!location) continue;
+    const next = starts.find((start) => start.document_id === location.document_id &&
+      (start.idx > location.idx || (start.idx === location.idx && start.number > number)));
+    const firstSchedule = number === MAX_ARTICLE_NUMBER
+      ? ordered.find((chunk) => chunk.document_id === location.document_id && chunk.idx > location.idx &&
+        /(?:^|\n)\s*(?:(?:first|second|third|fourth|fifth|sixth|seventh|eighth)\s+schedule|schedule\s+(?:[ivxlcdm]+|\d+))\b/i.test(chunk.content))
+      : undefined;
+    const scheduleEnd = firstSchedule ? Math.max(location.idx, firstSchedule.idx - 1) : undefined;
+    ranges.set(number, {
+      document_id: location.document_id,
+      start_idx: location.idx,
+      end_idx: next?.idx ?? scheduleEnd ?? lastIndexByDocument.get(location.document_id) ?? location.idx,
+    });
+  }
+  return ranges;
 }

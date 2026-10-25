@@ -8,6 +8,7 @@ import { ocrImage, ocrPdfPages } from "./ocr";
 import { extractLegacyWordHtml } from "./legacyWord";
 import { isPersonalizedStudyFeature, personalizeMessages, type LearningProfile } from "./learnerAdaptation";
 import { shouldRetryAiRequest } from "./aiRetryPolicy";
+import { extractArticleNumbers, MAX_CONSTITUTION_ARTICLES_PER_BATCH, splitArticleNumbers } from "./constitutionArticles";
 
 function db() {
   if (!client) throw new Error("Supabase is not configured.");
@@ -107,7 +108,7 @@ export interface AIResult {
   model: string | null;
 }
 
-export async function askAI(args: {
+type AskAIArgs = {
   feature: AIFeature;
   mode: AIMode;
   messages: AIMessage[];
@@ -115,14 +116,19 @@ export async function askAI(args: {
   part?: number; // 'notes' only: which block of a document to read
   size?: number; // 'notes' only: how many sections per block
   learnerLevel?: LearningProfile["learnerLevel"];
-}): Promise<AIResult> {
+};
+
+const CONSTITUTION_BATCHABLE_FEATURES = new Set<AIFeature>(["chat", "explain", "legal_explain"]);
+
+async function askAISingle(args: AskAIArgs, constitutionArticles?: number[]): Promise<AIResult> {
   let data: unknown = null;
   let error: unknown = null;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const request = isPersonalizedStudyFeature(args.feature)
       ? { ...args, learnerLevel: currentLearnerProfile.learnerLevel, messages: personalizeMessages(args.messages, currentLearnerProfile) }
       : args;
-    const response = await db().functions.invoke("ai", { body: request });
+    const body = constitutionArticles ? { ...request, constitutionArticles } : request;
+    const response = await db().functions.invoke("ai", { body });
     data = response.data;
     error = response.error;
     if (!error) break;
@@ -162,6 +168,101 @@ export async function askAI(args: {
     throw new Error(msg);
   }
   return data as AIResult;
+}
+
+function mergeConstitutionBatchResults(
+  completed: { articles: number[]; result: AIResult }[],
+  allBatches: number[][],
+  failure?: string,
+): AIResult {
+  let nextSourceNumber = 1;
+  const sharedTags = new Map<string, string>();
+  const sources: AIResult["sources"] = [];
+  const sections = completed.map(({ articles, result }) => {
+    const localToGlobal = new Map<string, string>();
+    for (const source of result.sources ?? []) {
+      const key = `${source.title}\u0000${source.author ?? ""}\u0000${source.ref ?? ""}`;
+      let globalTag = sharedTags.get(key);
+      if (!globalTag) {
+        globalTag = `S${nextSourceNumber++}`;
+        sharedTags.set(key, globalTag);
+        sources.push({ ...source, tag: globalTag });
+      }
+      localToGlobal.set(source.tag, globalTag);
+    }
+    const answer = result.answer.replace(/\[(S\d+)\]/g, (match, tag: string) => {
+      const replacement = localToGlobal.get(tag);
+      return replacement ? `[${replacement}]` : match;
+    });
+    return `## Articles ${articles.join(", ")}\n\n${answer}`;
+  });
+
+  const incompleteArticles = failure
+    ? allBatches.slice(completed.length).flat()
+    : [];
+  const incompleteNotice = failure
+    ? `> **Incomplete coverage:** batches ${completed.length} of ${allBatches.length} completed. Articles ${incompleteArticles.join(", ")} were not reviewed because processing stopped: ${failure}. Completed batches count toward your normal hourly text-AI allowance. Do not treat this as a complete review.\n\n`
+    : `> All ${completed.reduce((count, batch) => count + batch.articles.length, 0)} requested Articles were processed in ${allBatches.length} source-grounded batches. Each batch uses a standard text-AI request; a transient retry may use an additional request.\n\n`;
+  const results = completed.map((batch) => batch.result);
+  const first = results[0];
+  const last = results[results.length - 1];
+  const warnings = [...new Set(results.flatMap((result) => result.warnings ?? []))];
+  if (failure) warnings.unshift(`Constitution review incomplete: ${incompleteArticles.length} Articles remain unreviewed.`);
+  else warnings.unshift(`All requested Constitution Articles were processed in ${allBatches.length} standard AI batches; a transient retry may use an additional request.`);
+
+  return {
+    answer: `${incompleteNotice}${sections.join("\n\n---\n\n")}`,
+    data: null,
+    basis: first?.basis ?? "none",
+    grounded: !failure && results.every((result) => result.grounded),
+    warnings,
+    sources,
+    provider: last?.provider ?? null,
+    model: last?.model ?? null,
+  };
+}
+
+export async function askAI(args: AskAIArgs): Promise<AIResult> {
+  if (!CONSTITUTION_BATCHABLE_FEATURES.has(args.feature)) return askAISingle(args);
+
+  const articleRequest = args.messages
+    .filter((message) => message.role === "user")
+    .slice(-2)
+    .map((message) => message.content)
+    .join("\n");
+  const articleNumbers = extractArticleNumbers(articleRequest);
+  const batches = splitArticleNumbers(articleNumbers, MAX_CONSTITUTION_ARTICLES_PER_BATCH);
+  if (batches.length <= 1) return askAISingle(args);
+
+  let lastUserIndex = -1;
+  for (let index = args.messages.length - 1; index >= 0; index -= 1) {
+    if (args.messages[index].role === "user") {
+      lastUserIndex = index;
+      break;
+    }
+  }
+  if (lastUserIndex !== args.messages.length - 1) return askAISingle(args);
+
+  const completed: { articles: number[]; result: AIResult }[] = [];
+  let failure: string | undefined;
+  for (let index = 0; index < batches.length; index += 1) {
+    const articles = batches[index];
+    const messages = [...args.messages];
+    messages[lastUserIndex] = {
+      ...messages[lastUserIndex],
+      content: `${messages[lastUserIndex].content}\n\nFor this response, answer only for Constitution Articles ${articles.join(", ")}. This is batch ${index + 1} of ${batches.length}; do not claim that other Articles were reviewed in this batch.`,
+    };
+    try {
+      const result = await askAISingle({ ...args, messages }, articles);
+      completed.push({ articles, result });
+    } catch (error) {
+      failure = error instanceof Error ? error.message : "an AI request failed";
+      if (!completed.length) throw new Error(`Could not process the first Constitution batch (Articles ${articles.join(", ")}): ${failure}`);
+      break;
+    }
+  }
+
+  return mergeConstitutionBatchResults(completed, batches, failure);
 }
 
 /** One hook for every AI screen: const { run, loading, result, error } = useAI("case_brief") */

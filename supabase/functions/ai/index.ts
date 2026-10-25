@@ -1,6 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { EXTRA_FEATURES, handleExtra } from "./exam.ts";
-import { extractArticleNumbers, findArticleChunkIndexes, isConstitutionQuestion, type ConstitutionChunkRef } from "./constitution.ts";
+import { extractArticleNumbers, findArticleChunkRanges, isConstitutionQuestion, MAX_CONSTITUTION_ARTICLE, MAX_CONSTITUTION_ARTICLES_PER_BATCH, type ConstitutionChunkRef } from "./constitution.ts";
 import { failoverKeyCandidates, secretKeyEntries } from "../_shared/keys.ts";
 import { reserveAiQuota } from "../_shared/quotas.ts";
 import { recordProviderUsage } from "../_shared/usage.ts";
@@ -302,7 +302,6 @@ const JURISDICTION = Deno.env.get("AI_DEFAULT_JURISDICTION") ?? "Kenya";
 const CHUNKS_PER_QUERY = 12;
 const CHUNKS_PART = 10; // sections per 'notes' call: the client walks through a transcript part by part
 const CHUNKS_DOC_WIDE = 24; // about 29k characters: enough to cover a long lecture in broad strokes
-const MAX_EXPLICIT_ARTICLES_PER_REQUEST = 12;
 
 // ---------- features: add one entry per AI-powered screen/button in the app ----------
 const FEATURES: Record<
@@ -574,22 +573,19 @@ async function exactConstitutionRows(db: any, documentIds: string[], articleNumb
     throw error;
   }
 
-  const locations = findArticleChunkIndexes(chunks, articleNumbers);
-  const missing = articleNumbers.filter((number) => !locations.has(number));
-  const byKey = new Map(chunks.map((chunk) => [`${chunk.document_id}:${chunk.idx}`, chunk]));
+  const ranges = findArticleChunkRanges(chunks, articleNumbers);
+  const missing = articleNumbers.filter((number) => !ranges.has(number));
   const primary = new Map<string, ConstitutionIndexedChunk>();
   const neighboring = new Map<string, ConstitutionIndexedChunk>();
 
   for (const number of articleNumbers) {
-    const location = locations.get(number);
-    if (!location) continue;
-    const key = `${location.document_id}:${location.idx}`;
-    const core = byKey.get(key);
-    if (core) primary.set(key, core);
-    for (const offset of [-1, 1]) {
-      const neighborKey = `${location.document_id}:${location.idx + offset}`;
-      const neighbor = byKey.get(neighborKey);
-      if (neighbor && !primary.has(neighborKey)) neighboring.set(neighborKey, neighbor);
+    const range = ranges.get(number);
+    if (!range) continue;
+    // Include the complete indexed span from this Article's body heading up to
+    // the next Article heading, so long provisions are never reduced to a sample.
+    for (const chunk of chunks) {
+      if (chunk.document_id !== range.document_id || chunk.idx < range.start_idx || chunk.idx > range.end_idx) continue;
+      primary.set(`${chunk.document_id}:${chunk.idx}`, chunk);
     }
   }
 
@@ -641,6 +637,7 @@ async function retrieve(
   part?: number,
   size = CHUNKS_PART,
   learnerLevel?: string,
+  articleBatch?: number[],
 ): Promise<Source[]> {
   const requestedIds = [...new Set((docIds ?? []).filter((value) => typeof value === "string" && value.trim()).map((value) => value.trim()))];
   if (feature === "exam_analysis" && requestedIds.length !== 1) {
@@ -648,9 +645,9 @@ async function retrieve(
     throw Object.assign(new Error(message), { status: 400, publicMessage: message });
   }
   const constitutionQuestion = shouldAutoRetrieveConstitution(feature, isConstitutionQuestion(query));
-  const articleNumbers = constitutionQuestion ? extractArticleNumbers(query) : [];
-  if (articleNumbers.length > MAX_EXPLICIT_ARTICLES_PER_REQUEST) {
-    const message = `This request names ${articleNumbers.length} Constitution Articles. To avoid silently omitting provisions, ask about no more than ${MAX_EXPLICIT_ARTICLES_PER_REQUEST} Articles at a time.`;
+  const articleNumbers = constitutionQuestion ? articleBatch ?? extractArticleNumbers(query) : [];
+  if (articleNumbers.length > MAX_CONSTITUTION_ARTICLES_PER_BATCH) {
+    const message = `This AI request contains ${articleNumbers.length} Articles in one batch. Submit it through the Study Assistant to split large Article lists automatically into batches of ${MAX_CONSTITUTION_ARTICLES_PER_BATCH}.`;
     throw Object.assign(new Error(message), { status: 413, publicMessage: message });
   }
   if (mode === "general" && !constitutionQuestion && feature !== "exam_analysis") return [];
@@ -993,6 +990,7 @@ Deno.serve(async (req) => {
     part?: number;
     size?: number;
     learnerLevel?: string;
+    constitutionArticles?: number[];
   };
   try {
     body = await req.json();
@@ -1023,6 +1021,16 @@ Deno.serve(async (req) => {
   const docIds = Array.isArray(body.docIds)
     ? body.docIds.filter((x) => typeof x === "string").slice(0, 10)
     : undefined;
+  let constitutionArticles: number[] | undefined;
+  if (body.constitutionArticles !== undefined) {
+    if (!Array.isArray(body.constitutionArticles) || body.constitutionArticles.length === 0 || body.constitutionArticles.some((number) => !Number.isInteger(number) || number < 1 || number > MAX_CONSTITUTION_ARTICLE)) {
+      return json({ error: "The Constitution Article batch is invalid." }, 400);
+    }
+    constitutionArticles = [...new Set(body.constitutionArticles)];
+    if (constitutionArticles.length > MAX_CONSTITUTION_ARTICLES_PER_BATCH) {
+      return json({ error: `A Constitution Article batch may contain up to ${MAX_CONSTITUTION_ARTICLES_PER_BATCH} Articles.` }, 400);
+    }
+  }
 
   // Reserve atomically in Postgres so concurrent requests cannot bypass the cap.
   // Book-title metadata extraction uses its own high-cap bucket and does not consume ordinary text-AI credits.
@@ -1112,6 +1120,7 @@ Deno.serve(async (req) => {
       part,
       size,
       learnerLevel,
+      constitutionArticles,
     );
   } catch (err) {
     const status = Number((err as { status?: unknown }).status);
