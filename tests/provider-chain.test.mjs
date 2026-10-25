@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { boundedProviderTimeoutMs, combineProviderChains, DEFAULT_CHAIN, modelRouteCooldownMs, reasoningAttemptVariants } from "../supabase/functions/ai/providers.ts";
-import { newestKeySlotsFirst, selectFastFailoverKey } from "../supabase/functions/_shared/keys.ts";
+import { readFileSync } from "node:fs";
+import { boundedProviderTimeoutMs, combineProviderChains, DEFAULT_CHAIN, modelRouteCooldownMs, reasoningAttemptVariants, shouldTryAlternateApiKey } from "../supabase/functions/ai/providers.ts";
+import { failoverKeyCandidates, newestKeySlotsFirst, selectFastFailoverKey } from "../supabase/functions/_shared/keys.ts";
 
 test("the AI provider chain uses current high-availability fallback model IDs", () => {
   const ids = DEFAULT_CHAIN.map(({ provider, model }) => `${provider}:${model}`);
@@ -54,6 +55,29 @@ test("one model attempt uses one key, and later provider models rotate through n
   assert.deepEqual(newestKeySlotsFirst(entries).map(({ slot }) => slot), [7, 1, 0]);
   assert.deepEqual([0, 1, 2, 3].map((index) => selectFastFailoverKey(entries, index)?.slot), [7, 1, 0, 7]);
   assert.equal(selectFastFailoverKey([], 0), null);
+});
+
+test("each model route can fall through every configured API-key slot", () => {
+  const entries = [
+    { slot: 0, value: "legacy" },
+    { slot: 1, value: "older" },
+    { slot: 7, value: "newest" },
+  ];
+  assert.deepEqual(failoverKeyCandidates(entries, 0).map(({ slot }) => slot), [7, 1, 0]);
+  assert.deepEqual(failoverKeyCandidates(entries, 1).map(({ slot }) => slot), [1, 0, 7]);
+  assert.equal(shouldTryAlternateApiKey(401, true), true);
+  assert.equal(shouldTryAlternateApiKey(403, true), true);
+  assert.equal(shouldTryAlternateApiKey(429, true), true);
+  assert.equal(shouldTryAlternateApiKey(404, true), false);
+  assert.equal(shouldTryAlternateApiKey(429, false), false);
+});
+
+test("the Edge Function wires key-slot failover into the provider request loop", () => {
+  const handler = readFileSync(new URL("../supabase/functions/ai/index.ts", import.meta.url), "utf8");
+  assert.match(handler, /failoverKeyCandidates\(keys, cursor\)/);
+  assert.match(handler, /shouldTryAlternateApiKey\(res\.status, keyIndex < keyCandidates\.length - 1\)/);
+  assert.match(handler, /if \(retryWithNextKey\) continue;/);
+  assert.match(handler, /invalidKeyUntil\.set\(credentialId/);
 });
 
 test("failed model routes cool down for later requests without delaying current-request failover", () => {

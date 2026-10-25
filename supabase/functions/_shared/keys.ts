@@ -20,6 +20,17 @@ export function newestKeySlotsFirst(entries: readonly SecretKeyEntry[]): SecretK
   return [...entries].sort((left, right) => right.slot - left.slot);
 }
 
+/** Return every distinct key candidate, rotating the starting slot for later model routes. */
+export function failoverKeyCandidates(
+  entries: readonly SecretKeyEntry[],
+  attemptIndex = 0,
+): SecretKeyEntry[] {
+  const ordered = newestKeySlotsFirst(entries);
+  if (!ordered.length) return [];
+  const start = ((Math.trunc(attemptIndex) % ordered.length) + ordered.length) % ordered.length;
+  return [...ordered.slice(start), ...ordered.slice(0, start)];
+}
+
 /** Select exactly one key for this route; successive model routes can advance the cursor. */
 export function selectFastFailoverKey(
   entries: readonly SecretKeyEntry[],

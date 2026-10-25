@@ -32,6 +32,10 @@ export function modelRouteCooldownMs(status: number, retryAfterSeconds = 0): num
   return 45_000;
 }
 
+export function shouldTryAlternateApiKey(status: number, hasAnotherKey: boolean): boolean {
+  return hasAnotherKey && [401, 402, 403, 429].includes(status);
+}
+
 export function boundedProviderTimeoutMs(
   configured: number | undefined,
   inputChars = 0,

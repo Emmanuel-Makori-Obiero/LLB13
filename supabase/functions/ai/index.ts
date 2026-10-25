@@ -1,6 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { EXTRA_FEATURES, handleExtra } from "./exam.ts";
-import { selectFastFailoverKey, secretKeyEntries } from "../_shared/keys.ts";
+import { failoverKeyCandidates, secretKeyEntries } from "../_shared/keys.ts";
 import { reserveAiQuota } from "../_shared/quotas.ts";
 import { recordProviderUsage } from "../_shared/usage.ts";
 import {
@@ -27,7 +27,7 @@ import {
 export type Msg = { role: "system" | "user" | "assistant"; content: string };
 type ReasoningStyle = "openrouter" | "effort" | "none";
 
-import { boundedProviderTimeoutMs, combineProviderChains, DEFAULT_CHAIN, modelRouteCooldownMs, reasoningAttemptVariants, type Entry } from "./providers.ts";
+import { boundedProviderTimeoutMs, combineProviderChains, DEFAULT_CHAIN, modelRouteCooldownMs, reasoningAttemptVariants, shouldTryAlternateApiKey, type Entry } from "./providers.ts";
 
 function chain(feature?: string): Entry[] {
   const stageName = feature
@@ -53,6 +53,7 @@ function chain(feature?: string): Entry[] {
 
 const cooldownUntil = new Map<string, number>(); // per warm isolate; good enough for a fallback breaker
 const routeCooldownUntil = new Map<string, number>();
+const invalidKeyUntil = new Map<string, number>();
 const preferredByFeature = new Map<string, string>();
 const id = (x: Entry) => `${x.provider}:${x.model}:${x.keyEnv}`;
 const routeId = (x: Entry) => `${x.provider}\0${x.baseUrl.replace(/\/+$/, "")}\0${x.model}`;
@@ -148,8 +149,8 @@ export async function callChain(
   const perCall = boundedProviderTimeoutMs(configuredPerCall, inputChars, opts.feature);
   const attempts: Attempt[] = [];
   let retryAfterMs = 0;
-  // Use one key per model attempt, rotate slots across later routes for that provider,
-  // and advance immediately with the same request after a terminal failure.
+  // Try key alternatives on credential/quota failures, rotate the starting slot
+  // across later routes, and advance to another provider after terminal failures.
   const unavailableRoutes = new Set<string>();
   // Key cursors are request-local: each new request begins with the newest
   // available key, then advances across later model routes in this chain.
@@ -170,29 +171,35 @@ export async function callChain(
       continue;
     }
     const cursor = keyCursors.get(ent.keyEnv) ?? 0;
-    const keyEntry = selectFastFailoverKey(keys, cursor);
-    if (!keyEntry) {
+    const keyCandidates = failoverKeyCandidates(keys, cursor);
+    if (!keyCandidates.length) {
       attempts.push({ id: id(ent), status: "missing_key" });
       continue;
     }
     keyCursors.set(ent.keyEnv, cursor + 1);
-    const key = keyEntry.value;
-    const slotLabel = keyEntry.slot > 0 ? `#${keyEntry.slot}` : "#legacy";
-    const eid = `${id(ent)}${slotLabel}`;
-    if ((cooldownUntil.get(eid) ?? 0) > Date.now()) {
-      attempts.push({ id: eid, status: "cooldown" });
-      unavailableRoutes.add(route);
-      continue;
-    }
-    if (Date.now() - started > deadline - 8_000) {
-      attempts.push({ id: eid, status: "deadline" });
-      break;
-    }
-    // Prefer provider-enforced JSON for structured features. If a compatible
-    // provider rejects response_format, retry that same provider without it.
-    for (const withJsonFormat of opts.json ? [true, false] : [false]) {
-      let retryWithoutJsonFormat = false;
-      for (const withReasoning of reasoningAttemptVariants(opts.feature, ent.reasoning, opts.fast)) {
+    for (const [keyIndex, keyEntry] of keyCandidates.entries()) {
+      const key = keyEntry.value;
+      const slotLabel = keyEntry.slot > 0 ? `#${keyEntry.slot}` : "#legacy";
+      const eid = `${id(ent)}${slotLabel}`;
+      const credentialId = `${ent.provider}:${ent.baseUrl.replace(/\/+$/, "")}:${ent.keyEnv}:${slotLabel}`;
+      if ((invalidKeyUntil.get(credentialId) ?? 0) > Date.now()) {
+        attempts.push({ id: eid, status: "invalid_key_skipped" });
+        continue;
+      }
+      if ((cooldownUntil.get(eid) ?? 0) > Date.now()) {
+        attempts.push({ id: eid, status: "cooldown" });
+        continue;
+      }
+      if (Date.now() - started > deadline - 8_000) {
+        attempts.push({ id: eid, status: "deadline" });
+        break;
+      }
+      let retryWithNextKey = false;
+      // Prefer provider-enforced JSON for structured features. If a compatible
+      // provider rejects response_format, retry that same provider without it.
+      for (const withJsonFormat of opts.json ? [true, false] : [false]) {
+        let retryWithoutJsonFormat = false;
+        for (const withReasoning of reasoningAttemptVariants(opts.feature, ent.reasoning, opts.fast)) {
         const body: Record<string, unknown> = {
           model: ent.model,
           messages: ent.noSystem ? mergeSystem(messages) : messages,
@@ -242,9 +249,13 @@ export async function callChain(
           const retryAfter = Number(res.headers.get("retry-after")) || 0;
           retryAfterMs = Math.max(retryAfterMs, retryAfter * 1000);
           const cool = modelRouteCooldownMs(res.status, retryAfter);
-          unavailableRoutes.add(route);
-          routeCooldownUntil.set(route, Date.now() + cool);
+          retryWithNextKey = shouldTryAlternateApiKey(res.status, keyIndex < keyCandidates.length - 1);
           cooldownUntil.set(eid, Date.now() + cool);
+          if (res.status === 401) invalidKeyUntil.set(credentialId, Date.now() + cool);
+          if (!retryWithNextKey) {
+            unavailableRoutes.add(route);
+            routeCooldownUntil.set(route, Date.now() + cool);
+          }
           let detail: string | undefined;
           if (Deno.env.get("AI_DEBUG")) detail = (await res.text().catch(() => "")).slice(0, 240);
           else await res.body?.cancel();
@@ -258,7 +269,11 @@ export async function callChain(
           break;
         }
       }
+      if (retryWithNextKey) break;
       if (retryWithoutJsonFormat) continue;
+      break;
+    }
+      if (retryWithNextKey) continue;
       break;
     }
   }
@@ -1206,7 +1221,7 @@ Deno.serve(async (req) => {
             : "One or more providers rejected the Legal what-if request as too large (HTTP 413). Your question was not truncated; the request uses bounded, relevant source context and output. If this persists, shorten unnecessary scenario detail and retry."
           : invalidCardResponse
             ? "The providers did not return a usable Legal what-if card structure. Invalid card replies were skipped and the other models were tried; switch to Normal explanation or retry Cards later."
-          : "Each failed model was skipped and the same request was sent to the next fallback, but none of the configured models returned a result. Check provider keys, model IDs, and quota, then retry.",
+          : "Each failed API-key slot and provider route was skipped and the same request was sent to the next available alternative, but none returned a result. Check provider keys, model IDs, and quota, then retry.",
         attempts: attempts ?? [],
         retry_after_seconds: Math.ceil(Number((err as { retryAfterMs?: number }).retryAfterMs ?? 0) / 1000),
       },
