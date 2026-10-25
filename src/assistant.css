@@ -230,6 +230,7 @@
   gap: 8px;
   margin-bottom: 6px;
 }
+.sa-upload-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 .sa-upload {
   display: inline-flex;
   align-items: center;

@@ -927,6 +927,8 @@ h2 {
   opacity: 0;
   cursor: pointer;
 }
+.material-upload-field { display: grid; gap: 8px; }
+.material-image-upload { justify-self: start; display: inline-flex; align-items: center; gap: 6px; }
 
 .media-actions {
   display: flex;

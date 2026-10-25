@@ -4164,6 +4164,7 @@ function MaterialForm({
   onUpdated?: (material: Omit<Material, "id">) => Promise<void>;
 }) {
   const [file, setFile] = useState<File>();
+  const imagePickerRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
   const [extracting, setExtracting] = useState(false);
   const [savingMaterial, setSavingMaterial] = useState(false);
@@ -4377,18 +4378,25 @@ function MaterialForm({
             placeholder="https://…"
           />
         </label>
-        <label>
-          Upload file{" "}
-          <span className="field-hint">Optional PDF, Word DOCX, PPTX, TXT, or image</span>
+        <div className="material-upload-field">
+          <label htmlFor="library-material-document-upload">
+            Upload document{" "}
+            <span className="field-hint">Optional PDF, Word, PPTX, or text file</span>
+          </label>
           <span className={`material-dropzone ${dragActive ? "active" : ""} ${file ? "has-file" : ""}`}>
             <strong>{file ? file.name : "Drag and drop a book here"}</strong>
-            <small>{file ? "AI details are ready to review below." : "or choose a PDF, Word DOCX, PPTX, TXT, PNG, or JPG"}</small>
+            <small>{file ? "AI details are ready to review below." : "or choose a PDF, Word DOCX, PPTX, or text file"}</small>
             <input
+              id="library-material-document-upload"
               type="file"
-              accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown"
               onChange={(event) => chooseFile(event.target.files?.[0])}
             />
           </span>
+          <button type="button" className="secondary-button material-image-upload" onClick={() => imagePickerRef.current?.click()}>
+            <ImageIcon size={14} /> Choose image
+          </button>
+          <input ref={imagePickerRef} type="file" hidden accept="image/*" onChange={(event) => { chooseFile(event.target.files?.[0]); event.currentTarget.value = ""; }} />
           {extracting && (
             <span className="field-hint">
               AI is analysing the readable text…
@@ -4400,7 +4408,7 @@ function MaterialForm({
           {!extracting && extractNote && (
             <span className="field-hint">{extractNote}</span>
           )}
-        </label>
+        </div>
         <button className="primary-button" type="submit" disabled={savingMaterial || extracting}>
           {savingMaterial ? "Saving and indexing…" : initial ? "Save book details" : file ? "Upload material" : "Save material link"}
         </button>

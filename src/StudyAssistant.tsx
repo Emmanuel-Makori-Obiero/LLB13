@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FileText, Library, Loader2, Send, Trash2, Upload, CheckCircle2 } from "lucide-react";
+import { FileText, Image as ImageIcon, Library, Loader2, Send, Trash2, Upload, CheckCircle2 } from "lucide-react";
 import { isSupabaseConfigured, supabase } from "./data/repository";
 import {
   AI_MODES,
@@ -361,6 +361,7 @@ export function StudyAssistant({ learnerLevel = "" }: { learnerLevel?: string })
   const [uploading, setUploading] = useState(false);
   const [note, setNote] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  const imageRef = useRef<HTMLInputElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const nextId = useRef(1);
   const [historyOwner, setHistoryOwner] = useState("");
@@ -431,6 +432,7 @@ export function StudyAssistant({ learnerLevel = "" }: { learnerLevel?: string })
       }
     }
     if (fileRef.current) fileRef.current.value = "";
+    if (imageRef.current) imageRef.current.value = "";
     setUploading(false);
     void refresh();
   };
@@ -615,25 +617,38 @@ export function StudyAssistant({ learnerLevel = "" }: { learnerLevel?: string })
         <div className="card card-pad">
           <div className="sa-docs-head">
             <div className="section-label">My documents</div>
-            <button
-              type="button"
-              className="secondary-button sa-upload"
-              disabled={uploading}
-              onClick={() => fileRef.current?.click()}
-            >
-              {uploading ? (
-                <Loader2 size={13} className="sa-spin" />
-              ) : (
-                <Upload size={13} />
-              )}{" "}
-              Upload
-            </button>
+            <div className="sa-upload-actions">
+              <button
+                type="button"
+                className="secondary-button sa-upload"
+                disabled={uploading}
+                onClick={() => fileRef.current?.click()}
+              >
+                {uploading ? <Loader2 size={13} className="sa-spin" /> : <Upload size={13} />} Upload document
+              </button>
+              <button
+                type="button"
+                className="secondary-button sa-upload"
+                disabled={uploading}
+                onClick={() => imageRef.current?.click()}
+              >
+                <ImageIcon size={13} /> Upload images
+              </button>
+            </div>
             <input
               ref={fileRef}
               type="file"
               hidden
               multiple
-              accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md,.rtf,.csv,.json,.html,.png,.jpg,.jpeg,.webp,image/*,application/*,text/*"
+              accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md,.rtf,.csv,.json,.html,application/*,text/*"
+              onChange={(e) => void onUpload(e.target.files)}
+            />
+            <input
+              ref={imageRef}
+              type="file"
+              hidden
+              multiple
+              accept="image/*"
               onChange={(e) => void onUpload(e.target.files)}
             />
           </div>
