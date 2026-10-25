@@ -15,7 +15,7 @@ const result = (answer, sourceTag = "S1") => ({
 });
 
 test("book planning covers each readable section once, in order, with no silent sampling", () => {
-  for (const count of [1, 10, 11, 30, 40, 301, 500]) {
+  for (const count of [1, 10, 11, 30, 40, 301, 500, 625, 1000]) {
     const plan = planBookSummary(count);
     assert.equal(plan[0].startSection, 1);
     assert.equal(plan.at(-1).endSection, count);
@@ -27,9 +27,9 @@ test("book planning covers each readable section once, in order, with no silent 
   }
 });
 
-test("zero and oversized sources fail explicitly rather than returning sampled summaries", () => {
+test("zero and over-limit sources fail explicitly rather than returning sampled summaries", () => {
   assert.throws(() => planBookSummary(0), /no readable indexed sections/i);
-  assert.throws(() => planBookSummary(501), /Nothing was sampled/i);
+  assert.throws(() => planBookSummary(1001), /Nothing was sampled/i);
 });
 
 test("part prompts preserve the main points in order and request a concise source-only recap", () => {

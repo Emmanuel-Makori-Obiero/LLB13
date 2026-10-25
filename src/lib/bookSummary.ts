@@ -1,7 +1,7 @@
 import type { AIResult } from "./ai";
 
 export const BOOK_SUMMARY_SECTIONS_PER_PART = 10;
-export const MAX_BOOK_SUMMARY_SECTIONS = 500;
+export const MAX_BOOK_SUMMARY_SECTIONS = 1000;
 
 export type BookSummaryPartPlan = {
   part: number;
