@@ -139,6 +139,11 @@ test("large note reviews research and correct every bounded segment", () => {
   assert.match(largeReviewMigration, /char_length\(original_text\) between 1 and 500000/i);
 });
 
+test("the review picker does not hide legacy Word files and explains DOCX support", () => {
+  assert.match(page, /accept="[^"]*\.doc,\.docx/);
+  assert.match(page, /Older \.doc files are selectable, but must be saved as \.docx/);
+});
+
 test("long notes are reviewed in order with overlap continuity and no repeated boundary text", () => {
   const overlap = "The court considered the statutory language, the parties' evidence, and the constitutional context before reaching its decision on the claim.";
   const result = joinReviewedNoteParts([`## Part one\n\n${overlap}`, `${overlap}\n\n## Part two`]);
