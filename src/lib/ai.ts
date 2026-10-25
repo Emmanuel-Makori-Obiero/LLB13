@@ -8,7 +8,7 @@ import { ocrImage, ocrPdfPages } from "./ocr";
 import { extractLegacyWordHtml } from "./legacyWord";
 import { isPersonalizedStudyFeature, personalizeMessages, type LearningProfile } from "./learnerAdaptation";
 import { shouldRetryAiRequest } from "./aiRetryPolicy";
-import { extractArticleNumbers, isConstitutionHistoryFollowup, MAX_CONSTITUTION_ARTICLES_PER_BATCH, splitArticleNumbers } from "./constitutionArticles";
+import { extractArticleNumbers, MAX_CONSTITUTION_ARTICLES_PER_BATCH, shouldReuseConstitutionHistory, splitArticleNumbers } from "./constitutionArticles";
 
 function db() {
   if (!client) throw new Error("Supabase is not configured.");
@@ -242,17 +242,11 @@ export async function askAI(args: AskAIArgs): Promise<AIResult> {
   const recentAssistantTurns = args.messages
     .filter((message) => message.role === "assistant")
     .slice(-4);
-  const hasRecentGroundedConstitutionAnswer = recentAssistantTurns.some((message) =>
-    message.content.length < 3000 &&
-    /\b(?:constitution|articles?)\b/i.test(message.content) &&
-    /\[S\d+\]/.test(message.content)
-  );
   if (
     CONSTITUTION_HISTORY_FEATURES.has(args.feature) &&
     (args.mode === "general" || args.mode === "auto") &&
     !args.docIds?.length &&
-    hasRecentGroundedConstitutionAnswer &&
-    isConstitutionHistoryFollowup(articleRequest)
+    shouldReuseConstitutionHistory(articleRequest, recentAssistantTurns)
   ) {
     return askAISingle(args, undefined, true);
   }

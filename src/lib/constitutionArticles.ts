@@ -61,3 +61,15 @@ export function isConstitutionHistoryFollowup(text: string): boolean {
   const refersToHistory = /\b(?:it|them|that|those|these|same|earlier|previous|above|last|second|first|one|constitution|article|provision)\b/i.test(text);
   return asksForContinuation && refersToHistory;
 }
+
+export function shouldReuseConstitutionHistory(
+  text: string,
+  recentAssistantTurns: { content: string }[],
+): boolean {
+  if (!isConstitutionHistoryFollowup(text)) return false;
+  return recentAssistantTurns.slice(-4).some((message) =>
+    message.content.length < 3000 &&
+    /\b(?:constitution|articles?)\b/i.test(message.content) &&
+    /\[S\d+\]/.test(message.content)
+  );
+}

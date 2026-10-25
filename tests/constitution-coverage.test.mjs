@@ -7,7 +7,11 @@ import {
   findArticleChunkRanges,
   isConstitutionQuestion,
 } from "../supabase/functions/ai/constitution.ts";
-import { isConstitutionHistoryFollowup, splitArticleNumbers } from "../src/lib/constitutionArticles.ts";
+import {
+  isConstitutionHistoryFollowup,
+  shouldReuseConstitutionHistory,
+  splitArticleNumbers,
+} from "../src/lib/constitutionArticles.ts";
 
 const edge = readFileSync(new URL("../supabase/functions/ai/index.ts", import.meta.url), "utf8");
 const client = readFileSync(new URL("../src/lib/ai.ts", import.meta.url), "utf8");
@@ -44,6 +48,7 @@ test("all 264 Articles are covered by ordered, complete batches with no 12-Artic
 });
 
 test("implicit follow-ups can use recent Constitution history, but explicit requests are freshly retrieved", () => {
+  const savedSourceCitedAnswer = { content: "Earlier source-grounded explanation of Article 37 [S1]." };
   assert.equal(isConstitutionHistoryFollowup("Can you explain that Article again?"), true);
   assert.equal(isConstitutionHistoryFollowup("What about the second one?"), true);
   assert.equal(isConstitutionHistoryFollowup("Explain Article 150 again."), false);
@@ -51,8 +56,13 @@ test("implicit follow-ups can use recent Constitution history, but explicit requ
   assert.equal(isConstitutionHistoryFollowup("Repeat that exact wording."), false);
   assert.equal(isConstitutionHistoryFollowup("How does that apply to my case?"), false);
   assert.equal(isConstitutionHistoryFollowup("How can I use that in my case?"), false);
-  assert.match(client, /hasRecentGroundedConstitutionAnswer/);
-  assert.match(client, /isConstitutionHistoryFollowup\(articleRequest\)/);
+  assert.equal(shouldReuseConstitutionHistory("Can you explain that Article again?", [savedSourceCitedAnswer]), true);
+  assert.equal(shouldReuseConstitutionHistory("Can you explain that Article again?", [{ content: "An earlier answer without a source marker." }]), false);
+  assert.equal(shouldReuseConstitutionHistory("Can you explain that Article again?", [{ content: `${savedSourceCitedAnswer.content}${" ".repeat(3000)}` }]), false);
+  assert.equal(shouldReuseConstitutionHistory("Repeat that exact wording.", [savedSourceCitedAnswer]), false);
+  assert.equal(shouldReuseConstitutionHistory("Explain Article 37 again.", [savedSourceCitedAnswer]), false);
+  assert.match(client, /shouldReuseConstitutionHistory\(articleRequest, recentAssistantTurns\)/);
+  assert.match(client, /askAISingle\(args, undefined, true\)/);
   assert.match(client, /constitutionHistoryOnly: true/);
   assert.match(edge, /body\.constitutionHistoryOnly === true/);
   assert.match(edge, /if \(constitutionHistoryOnly\) return \[\]/);
