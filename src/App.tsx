@@ -97,7 +97,9 @@ import LegalProcessPage from "./LegalProcessPage";
 import FloatingLawyerAgent from "./FloatingLawyerAgent";
 import { ResearchWriter } from "./ResearchWriter";
 import { TranscriptAI } from "./TranscriptAI";
-import { askAI, extractText, setLearnerAdaptation, uploadLibraryMaterial, type AIFeature } from "./lib/ai";
+import { askAI, countMaterialChunks, extractText, getLibraryMaterialDocumentId, setLearnerAdaptation, uploadLibraryMaterial, type AIResult, type AIFeature } from "./lib/ai";
+import { bookSummaryPartPrompt, bookSummarySynthesisPrompt, extractBookPartRecap, mergeBookSummaryParts, planBookSummary, type CompletedBookSummaryPart } from "./lib/bookSummary";
+import { downloadPdf, downloadWord } from "./export";
 import { defaultLearningPreference, materialVisibleToLevel } from "./lib/learnerAdaptation";
 import { Markdown } from "./Markdown";
 import GrowthPage from "./GrowthPage";
@@ -3883,6 +3885,76 @@ function LibraryPageReal({
   useEffect(() => setYearFilter(learnerLevel || "all"), [learnerLevel]);
   const [sortBy, setSortBy] = useState("date-desc");
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [summaryMaterial, setSummaryMaterial] = useState<Material | null>(null);
+  const [summaryResult, setSummaryResult] = useState<AIResult | null>(null);
+  const [summaryBusy, setSummaryBusy] = useState(false);
+  const [summaryProgress, setSummaryProgress] = useState("");
+  const [summaryError, setSummaryError] = useState("");
+  const summarizeLibraryMaterial = async (material: Material) => {
+    if (summaryBusy) return;
+    setSummaryMaterial(material);
+    setSummaryResult(null);
+    setSummaryError("");
+    setSummaryProgress("Finding the book's indexed text…");
+    setSummaryBusy(true);
+    let totalSections = 0;
+    const completed: CompletedBookSummaryPart[] = [];
+    try {
+      const documentId = await getLibraryMaterialDocumentId(material.id);
+      totalSections = await countMaterialChunks(documentId);
+      const plan = planBookSummary(totalSections);
+      const request = "Create complete, well-organized study notes for this source. Preserve its important arguments, events, examples, qualifications, and conclusions in order.";
+      for (const part of plan) {
+        setSummaryProgress(`Reading indexed sections ${part.startSection}–${part.endSection} of ${totalSections}…`);
+        try {
+          const result = await askAI({
+            feature: "summarize",
+            mode: "materials",
+            messages: [{ role: "user", content: bookSummaryPartPrompt(request, part) }],
+            docIds: [documentId],
+            part: part.part,
+            size: part.size,
+          });
+          if (!result.answer.trim() || !result.sources.length || result.basis === "none") {
+            throw new Error("The source section was not returned to the summarizer.");
+          }
+          completed.push({ plan: part, result });
+        } catch (cause) {
+          const detail = cause instanceof Error ? cause.message : "an AI request failed";
+          if (completed.length) {
+            setSummaryResult(mergeBookSummaryParts(material.title, totalSections, completed, null, `part ${part.part + 1} of ${plan.length} failed: ${detail}`));
+          }
+          setSummaryError(`Complete coverage stopped at part ${part.part + 1} of ${plan.length}. ${completed.length ? "The completed sections are shown as a partial result." : "No notes were generated."} ${detail}`);
+          return;
+        }
+      }
+
+      setSummaryProgress("Writing the overview from all section recaps…");
+      let overview: AIResult | null = null;
+      let overviewFailure: string | undefined;
+      try {
+        overview = await askAI({
+          feature: "book_summary_synthesis",
+          mode: "general",
+          messages: [{
+            role: "user",
+            content: bookSummarySynthesisPrompt(material.title, request, completed.map(({ plan, result }) => ({
+              plan,
+              recap: extractBookPartRecap(result.answer),
+            }))),
+          }],
+        });
+      } catch (cause) {
+        overviewFailure = cause instanceof Error ? cause.message : "the overview request failed";
+      }
+      setSummaryResult(mergeBookSummaryParts(material.title, totalSections, completed, overview, undefined, overviewFailure));
+    } catch (cause) {
+      setSummaryError(cause instanceof Error ? cause.message : "The Library book could not be summarized.");
+    } finally {
+      setSummaryBusy(false);
+      setSummaryProgress("");
+    }
+  };
   const units = [...new Set(materials.map((material) => material.unit).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   const types = [...new Set(materials.map((material) => material.type).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   const visibleMaterials = [...materials]
@@ -3956,6 +4028,39 @@ function LibraryPageReal({
           <Plus size={14} style={{ verticalAlign: "middle" }} /> Add material
         </button>
       </div>
+      {summaryMaterial && (
+        <section className="card card-pad library-summary-panel">
+          <div className="detail-title">
+            <div>
+              <div className="eyebrow">ORGANIZED STUDY NOTES</div>
+              <h2 style={{ fontSize: 24, margin: "8px 0" }}>{summaryMaterial.title}</h2>
+              <p className="field-hint">Notes are built from readable indexed sections in order. Interrupted runs are labelled partial; ready notes can be downloaded as DOCX or PDF.</p>
+            </div>
+            <button type="button" className="icon-button" disabled={summaryBusy} onClick={() => { setSummaryMaterial(null); setSummaryResult(null); setSummaryError(""); }} aria-label="Close book summary"><X size={15} /></button>
+          </div>
+          {summaryProgress && <p className="field-hint" role="status"><Sparkles size={13} /> {summaryProgress}</p>}
+          {summaryError && <div className="connection-error" role="alert">{summaryError}</div>}
+          {summaryResult && (() => {
+            const fileBase = summaryMaterial.title.replace(/[\\/:*?"<>|]+/g, "-").trim().slice(0, 120) || "book-study-notes";
+            const exportOptions = {
+              subtitle: "Complete-source study notes · indexed sections organized in order",
+              sources: summaryResult.sources.map((source) => `${source.tag} — ${source.title}${source.author ? ` — ${source.author}` : ""}${source.ref ? ` — ${source.ref}` : ""}`),
+              footer: "Prepared from the readable indexed source sections. Check unclear or OCR text against the original book.",
+            };
+            return (
+              <>
+                <div className="sa-answer-actions">
+                  <button type="button" className="secondary-button" onClick={() => void downloadWord(summaryMaterial.title, summaryResult.answer, `${fileBase}-study-notes.docx`, exportOptions)}><Download size={13} /> Download DOCX</button>
+                  <button type="button" className="secondary-button" onClick={() => downloadPdf(summaryMaterial.title, summaryResult.answer, `${fileBase}-study-notes.pdf`, exportOptions)}><Download size={13} /> Download PDF</button>
+                </div>
+                <div className="sa-answer"><Markdown text={summaryResult.answer} /></div>
+                {summaryResult.warnings.length > 0 && <ul className="sa-warnings">{summaryResult.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
+                {summaryResult.sources.length > 0 && <div className="sa-sources"><div className="section-label">Sources used</div>{summaryResult.sources.map((source) => <div className="sa-source" key={source.tag}><sup className="md-cite">{source.tag}</sup><span>{source.title}{source.author ? ` — ${source.author}` : ""}{source.ref ? ` · ${source.ref}` : ""}</span></div>)}</div>}
+              </>
+            );
+          })()}
+        </section>
+      )}
       <div className="card card-pad table-wrap">
         <table className="table">
           <thead>
@@ -4000,6 +4105,15 @@ function LibraryPageReal({
                 </td>
                 <td>
                   <div className="resource-actions">
+                    <button
+                      className="secondary-button small-action"
+                      type="button"
+                      disabled={summaryBusy}
+                      onClick={() => void summarizeLibraryMaterial(material)}
+                      aria-label={`Summarise ${material.title}`}
+                    >
+                      {summaryBusy && summaryMaterial?.id === material.id ? "Summarising…" : "Summarise"}
+                    </button>
                     <button
                       className="secondary-button small-action"
                       onClick={() => openEdit(material)}

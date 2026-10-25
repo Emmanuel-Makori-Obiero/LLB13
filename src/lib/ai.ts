@@ -545,6 +545,21 @@ export async function countMaterialChunks(documentId: string): Promise<number> {
   return Number(count ?? 0);
 }
 
+/** Resolve a shared Library row to the AI document that contains its extracted text. */
+export async function getLibraryMaterialDocumentId(materialId: string): Promise<string> {
+  const { data, error } = await db()
+    .from("ai_documents")
+    .select("id")
+    .eq("scope", "library")
+    .eq("material_id", materialId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error("Could not locate the Library item's indexed text. Refresh the Library and try again.");
+  if (!data?.id) throw new Error("This Library item has no linked, searchable text yet. Add the original book as a DOCX or PDF and make sure its AI indexing finishes before summarizing.");
+  return String(data.id);
+}
+
 export async function deleteMaterial(id: string) {
   const { error } = await db().from("ai_documents").delete().eq("id", id);
   if (error) throw new Error("Could not delete that document.");
