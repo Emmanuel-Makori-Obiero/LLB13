@@ -10,6 +10,7 @@
 .nr-card{padding:21px}
 .nr-section-head,.nr-result-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
 .nr-section-head h3,.nr-result-head h3{display:flex;align-items:center;gap:8px;margin:6px 0 0;font-family:Georgia,serif;font-size:21px;font-weight:500}
+.nr-upload-actions{display:flex;flex-wrap:wrap;gap:7px}
 .nr-field-label{display:flex;justify-content:space-between;gap:8px;margin:14px 0 7px;color:#344d43;font-size:12px;font-weight:700}
 .nr-field-label span{color:#718076;font-weight:500}
 .nr-input-card input:not([type=file]),.nr-input-card textarea,.nr-input-card select,.nr-corrected{width:100%;border:1px solid #d8dfd7;border-radius:10px;background:#fffefb;padding:11px 12px;color:#203b32;font:inherit;line-height:1.55;outline:none}

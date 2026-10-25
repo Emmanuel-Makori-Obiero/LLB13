@@ -402,7 +402,7 @@ export default function NotesReviewPage({ userId, units, initialText, initialTit
 
       <div className="nr-layout">
         <section className="nr-card nr-input-card">
-          <div className="nr-section-head"><div><span className="nr-label">01 · YOUR SOURCE</span><h3>Upload or paste notes</h3></div><label className="nr-upload"><Upload size={15} /> Choose file<input type="file" accept=".pdf,.doc,.docx,.txt,.md,.png,.jpg,.jpeg,.webp,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown" onChange={(event) => void addFile(event)} /></label></div>
+          <div className="nr-section-head"><div><span className="nr-label">01 · YOUR SOURCE</span><h3>Upload or paste notes</h3></div><div className="nr-upload-actions"><label className="nr-upload"><Upload size={15} /> Choose document<input type="file" accept=".pdf,.doc,.docx,.txt,.md,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown" onChange={(event) => void addFile(event)} /></label><label className="nr-upload"><Upload size={15} /> Choose photo<input type="file" accept="image/*" onChange={(event) => void addFile(event)} /></label></div></div>
           <p className="nr-muted">Word files ending in .docx can be read directly. Older .doc files are selectable, but must be saved as .docx in Word or Google Docs before review.</p>
           {fileMessage && <p className="nr-inline-status">{fileMessage}</p>}
           <label className="nr-field-label" htmlFor="nr-title">Note title</label>
