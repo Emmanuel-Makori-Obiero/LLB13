@@ -90,6 +90,8 @@ test("production routes batch all book sections and expose both document downloa
   assert.match(server, /Complete book summaries require one selected readable book and an exact section batch/);
   assert.match(server, /\["notes", "notes_research", "notes_review", "summarize"\]/);
   assert.match(library, /getLibraryMaterialDocumentId\(material\.id\)/);
+  assert.match(library, /supabase\.storage\.from\("materials"\)\.download\(material\.storage_path\)/);
+  assert.match(library, /if \(!documentId \|\| totalSections === 0\)[\s\S]*?const indexed = await uploadLibraryMaterial\([\s\S]*?material\.id/);
   assert.match(library, /onClick=\{\(\) => void summarizeLibraryMaterial\(material\)\}/);
   assert.match(library, /Download DOCX/);
   assert.match(library, /Download PDF/);

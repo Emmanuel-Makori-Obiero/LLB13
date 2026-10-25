@@ -3890,6 +3890,41 @@ function LibraryPageReal({
   const [summaryBusy, setSummaryBusy] = useState(false);
   const [summaryProgress, setSummaryProgress] = useState("");
   const [summaryError, setSummaryError] = useState("");
+  const readLibraryAttachment = async (material: Material): Promise<File> => {
+    let blob: Blob | null = null;
+    let storageError = "";
+    if (material.storage_path && supabase) {
+      try {
+        const stored = await supabase.storage.from("materials").download(material.storage_path);
+        if (stored.error) storageError = stored.error.message;
+        else blob = stored.data;
+      } catch (cause) {
+        storageError = cause instanceof Error ? cause.message : "storage download failed";
+      }
+    }
+    const sourceUrl = safeUrl(material.url);
+    if (!blob && sourceUrl) {
+      const response = await fetch(sourceUrl);
+      if (!response.ok) throw new Error(`Could not read the original Library file (${response.status}). ${storageError}`.trim());
+      blob = await response.blob();
+    }
+    if (!blob?.size) {
+      throw new Error(storageError || "This Library item has no readable attached file. Add its original PDF or Word document, then try again.");
+    }
+    const filePath = material.storage_path || (sourceUrl ? new URL(sourceUrl).pathname : "");
+    let filename = filePath.split("/").pop()?.replace(/[^a-zA-Z0-9._-]/g, "-") ?? "";
+    const existingExtension = /\.([a-z0-9]{1,8})$/i.exec(filename)?.[1]?.toLowerCase();
+    const extension = existingExtension || (blob.type === "application/pdf"
+      ? "pdf"
+      : blob.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        ? "docx"
+        : blob.type === "application/msword" ? "doc" : "txt");
+    if (!existingExtension) {
+      const safeTitle = material.title.replace(/[^a-zA-Z0-9._-]/g, "-").replace(/^-+|-+$/g, "") || "library-book";
+      filename = `${safeTitle}.${extension}`;
+    }
+    return new File([blob], filename, { type: blob.type || "application/octet-stream" });
+  };
   const summarizeLibraryMaterial = async (material: Material) => {
     if (summaryBusy) return;
     setSummaryMaterial(material);
@@ -3900,8 +3935,26 @@ function LibraryPageReal({
     let totalSections = 0;
     const completed: CompletedBookSummaryPart[] = [];
     try {
-      const documentId = await getLibraryMaterialDocumentId(material.id);
-      totalSections = await countMaterialChunks(documentId);
+      let documentId = "";
+      try {
+        documentId = await getLibraryMaterialDocumentId(material.id);
+        totalSections = await countMaterialChunks(documentId);
+      } catch {
+        // Older Library rows may not be linked to the full-text AI index yet.
+      }
+      if (!documentId || totalSections === 0) {
+        setSummaryProgress("Reading the attached original and rebuilding its full-text index…");
+        const file = await readLibraryAttachment(material);
+        const indexed = await uploadLibraryMaterial(
+          file,
+          `${material.type} · ${material.unit} · ${material.source}`,
+          material.author ?? undefined,
+          material.target_years ?? [],
+          material.id,
+        );
+        documentId = indexed.id;
+        totalSections = indexed.chunks;
+      }
       const plan = planBookSummary(totalSections);
       const request = "Create complete, well-organized study notes for this source. Preserve its important arguments, events, examples, qualifications, and conclusions in order.";
       for (const part of plan) {
