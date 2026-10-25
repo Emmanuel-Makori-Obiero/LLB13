@@ -98,7 +98,7 @@ import FloatingLawyerAgent from "./FloatingLawyerAgent";
 import { ResearchWriter } from "./ResearchWriter";
 import { TranscriptAI } from "./TranscriptAI";
 import { askAI, countMaterialChunks, extractText, getLibraryMaterialDocumentId, setLearnerAdaptation, uploadLibraryMaterial, type AIResult, type AIFeature } from "./lib/ai";
-import { bookSummaryPartPrompt, bookSummarySynthesisPrompt, extractBookPartRecap, mergeBookSummaryParts, planBookSummary, type CompletedBookSummaryPart } from "./lib/bookSummary";
+import { bookSummarySynthesisPrompt, extractBookPartRecap, mergeBookSummaryParts, planBookSummary, requestBookSummaryPart, type CompletedBookSummaryPart } from "./lib/bookSummary";
 import { downloadPdf, downloadWord } from "./export";
 import { defaultLearningPreference, materialVisibleToLevel } from "./lib/learnerAdaptation";
 import { Markdown } from "./Markdown";
@@ -3960,24 +3960,15 @@ function LibraryPageReal({
       for (const part of plan) {
         setSummaryProgress(`Reading indexed sections ${part.startSection}–${part.endSection} of ${totalSections}…`);
         try {
-          const result = await askAI({
-            feature: "summarize",
-            mode: "materials",
-            messages: [{ role: "user", content: bookSummaryPartPrompt(request, part) }],
-            docIds: [documentId],
-            part: part.part,
-            size: part.size,
-          });
-          if (!result.answer.trim() || !result.sources.length || result.basis === "none") {
-            throw new Error("The source section was not returned to the summarizer.");
-          }
-          completed.push({ plan: part, result });
+          await requestBookSummaryPart(request, part, documentId, "materials", askAI, (split) => {
+            setSummaryProgress(`Provider size limit reached for sections ${split.startSection}–${split.endSection}; retrying smaller contiguous ranges…`);
+          }, (finished) => completed.push(finished));
         } catch (cause) {
           const detail = cause instanceof Error ? cause.message : "an AI request failed";
           if (completed.length) {
-            setSummaryResult(mergeBookSummaryParts(material.title, totalSections, completed, null, `part ${part.part + 1} of ${plan.length} failed: ${detail}`));
+            setSummaryResult(mergeBookSummaryParts(material.title, totalSections, completed, null, `indexed sections ${part.startSection}–${part.endSection} failed: ${detail}`));
           }
-          setSummaryError(`Complete coverage stopped at part ${part.part + 1} of ${plan.length}. ${completed.length ? "The completed sections are shown as a partial result." : "No notes were generated."} ${detail}`);
+          setSummaryError(`Complete coverage stopped at indexed sections ${part.startSection}–${part.endSection}. ${completed.length ? "The completed sections are shown as a partial result." : "No notes were generated."} ${detail}`);
           return;
         }
       }

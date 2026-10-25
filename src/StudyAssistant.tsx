@@ -14,7 +14,7 @@ import {
 } from "./lib/ai";
 import { Markdown } from "./Markdown";
 import { materialVisibleToLevel } from "./lib/learnerAdaptation";
-import { bookSummaryPartPrompt, bookSummarySynthesisPrompt, extractBookPartRecap, mergeBookSummaryParts, planBookSummary, type CompletedBookSummaryPart } from "./lib/bookSummary";
+import { bookSummarySynthesisPrompt, extractBookPartRecap, mergeBookSummaryParts, planBookSummary, requestBookSummaryPart, type CompletedBookSummaryPart } from "./lib/bookSummary";
 import { downloadPdf, downloadWord } from "./export";
 import "./assistant.css";
 
@@ -508,23 +508,16 @@ export function StudyAssistant({ learnerLevel = "" }: { learnerLevel?: string })
             ? { ...item, progress: `Reading indexed sections ${part.startSection}–${part.endSection} of ${totalSections}` }
             : item));
           try {
-            const result = await askAI({
-              feature: "summarize",
-              mode: useMode,
-              messages: [{ role: "user", content: bookSummaryPartPrompt(text, part) }],
-              docIds: [selected[0]],
-              part: part.part,
-              size: part.size,
-            });
-            if (!result.answer.trim() || !result.sources.length || result.basis === "none") {
-              throw new Error("The source section was not returned to the model. No partial section summary was accepted.");
-            }
-            completed.push({ plan: part, result });
+            await requestBookSummaryPart(text, part, selected[0], useMode, askAI, (split) => {
+              setTurns((all) => all.map((item) => item.id === turn.id
+                ? { ...item, progress: `Provider size limit reached for sections ${split.startSection}–${split.endSection}; retrying smaller contiguous ranges` }
+                : item));
+            }, (finished) => completed.push(finished));
           } catch (cause) {
             const detail = cause instanceof Error ? cause.message : "an AI request failed";
-            const partial = mergeBookSummaryParts(bookTitle, totalSections, completed, null, `part ${part.part + 1} of ${plan.length} failed: ${detail}`);
+            const partial = mergeBookSummaryParts(bookTitle, totalSections, completed, null, `indexed sections ${part.startSection}–${part.endSection} failed: ${detail}`);
             setTurns((all) => all.map((item) => item.id === turn.id
-              ? { ...item, result: partial, error: `Complete coverage stopped at part ${part.part + 1} of ${plan.length}. The completed sections are available below but are not a complete book summary. ${detail}`, progress: undefined }
+              ? { ...item, result: partial, error: `Complete coverage stopped at indexed sections ${part.startSection}–${part.endSection}. The completed sections are available below but are not a complete book summary. ${detail}`, progress: undefined }
               : item));
             return;
           }

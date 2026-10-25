@@ -116,6 +116,7 @@ type AskAIArgs = {
   docIds?: string[];
   part?: number; // Paged notes or complete-source book summary block
   size?: number; // How many indexed sections per paged block
+  startIndex?: number; // Zero-based absolute offset for exact book-summary ranges
   learnerLevel?: LearningProfile["learnerLevel"];
 };
 

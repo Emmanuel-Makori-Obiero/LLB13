@@ -1,4 +1,4 @@
-import type { AIResult } from "./ai";
+import type { AIResult, AIMode } from "./ai";
 
 export const BOOK_SUMMARY_SECTIONS_PER_PART = 10;
 export const MAX_BOOK_SUMMARY_SECTIONS = 1000;
@@ -15,6 +15,66 @@ export type CompletedBookSummaryPart = {
   plan: BookSummaryPartPlan;
   result: AIResult;
 };
+
+export type BookSummaryRequester = (args: {
+  feature: "summarize";
+  mode: AIMode;
+  messages: { role: "user"; content: string }[];
+  docIds: string[];
+  part: number;
+  size: number;
+  startIndex: number;
+}) => Promise<AIResult>;
+
+export function splitBookSummaryPart(plan: BookSummaryPartPlan): BookSummaryPartPlan[] | null {
+  if (plan.size < 2) return null;
+  const firstSize = Math.floor(plan.size / 2);
+  const secondSize = plan.size - firstSize;
+  const middle = plan.startSection + firstSize - 1;
+  return [
+    { ...plan, endSection: middle, size: firstSize },
+    { ...plan, startSection: middle + 1, size: secondSize },
+  ];
+}
+
+/** Retry oversized provider requests on smaller contiguous source ranges; never sample or truncate. */
+export async function requestBookSummaryPart(
+  request: string,
+  plan: BookSummaryPartPlan,
+  docId: string,
+  mode: AIMode,
+  sendRequest: BookSummaryRequester,
+  onSplit?: (plan: BookSummaryPartPlan) => void,
+  onComplete?: (part: CompletedBookSummaryPart) => void,
+): Promise<CompletedBookSummaryPart[]> {
+  const requestRange = async (range: BookSummaryPartPlan): Promise<CompletedBookSummaryPart[]> => {
+    try {
+      const result = await sendRequest({
+        feature: "summarize",
+        mode,
+        messages: [{ role: "user", content: bookSummaryPartPrompt(request, range) }],
+        docIds: [docId],
+        part: range.part,
+        size: range.size,
+        startIndex: range.startSection - 1,
+      });
+      if (!result.answer.trim() || !result.sources.length || result.basis === "none") {
+        throw new Error("The source section was not returned to the summarizer.");
+      }
+      const completed = { plan: range, result };
+      onComplete?.(completed);
+      return [completed];
+    } catch (error) {
+      const halves = splitBookSummaryPart(range);
+      if (!halves || !/\b413\b|too large/i.test(error instanceof Error ? error.message : String(error))) throw error;
+      onSplit?.(range);
+      const first = await requestRange(halves[0]);
+      const second = await requestRange(halves[1]);
+      return [...first, ...second];
+    }
+  };
+  return requestRange(plan);
+}
 
 export function planBookSummary(totalSections: number): BookSummaryPartPlan[] {
   if (!Number.isInteger(totalSections) || totalSections < 1) {
@@ -49,7 +109,7 @@ export function bookSummaryPartPrompt(
       : plan.part === plan.totalParts - 1
         ? "Earlier indexed sections are processed in separate ranges."
         : "Earlier and later indexed sections are processed in separate ranges.";
-  return `Create organized, natural-sounding study notes from this source range only. This is part ${plan.part + 1} of ${plan.totalParts}, covering indexed sections ${plan.startSection}–${plan.endSection}. ${scope} Do not imply you read sections outside this range in this request.\n\nThe student's focus, if any: ${focus}\n\nWrite like a careful human editor preparing useful revision notes: use clear, varied headings and direct language; avoid generic introductions, repetitive filler, stock AI phrases, and claims that sound more certain than the source. Preserve the important events or arguments, people/characters, concepts, examples, definitions, turning points, relationships, qualifications, and conclusions actually present in these sections. For novels, keep events and character changes in their source order. For non-fiction, preserve the author's central claims, supporting reasoning, and meaningful limits. Do not invent missing chapters, facts, quotations, or context from memory. If the source is unclear, say so. Compress repetition, not main points. Use Markdown headings and bullets; use a compact Markdown table only when it genuinely clarifies a comparison.\n\nStart with exactly one short line in this format: > Part recap: [one sentence, at most 45 words, covering only this source range]. Then add a useful heading and the organized notes for this range. Do not claim that the whole book was covered.`;
+  return `Create organized, natural-sounding study notes from this source range only. This request covers indexed sections ${plan.startSection}–${plan.endSection}. ${scope} Do not imply you read sections outside this range in this request.\n\nThe student's focus, if any: ${focus}\n\nWrite like a careful human editor preparing useful revision notes: use clear, varied headings and direct language; avoid generic introductions, repetitive filler, stock AI phrases, and claims that sound more certain than the source. Preserve the important events or arguments, people/characters, concepts, examples, definitions, turning points, relationships, qualifications, and conclusions actually present in these sections. For novels, keep events and character changes in their source order. For non-fiction, preserve the author's central claims, supporting reasoning, and meaningful limits. Do not invent missing chapters, facts, quotations, or context from memory. If the source is unclear, say so. Compress repetition, not main points. Use Markdown headings and bullets; use a compact Markdown table only when it genuinely clarifies a comparison.\n\nStart with exactly one short line in this format: > Part recap: [one sentence, at most 45 words, covering only this source range]. Then add a useful heading and the organized notes for this range. Do not claim that the whole book was covered.`;
 }
 
 export function extractBookPartRecap(text: string): string {
@@ -64,7 +124,7 @@ export function bookSummarySynthesisPrompt(
   recaps: { plan: BookSummaryPartPlan; recap: string }[],
 ): string {
   const entries = recaps.map(({ plan, recap }) =>
-    `[Part ${plan.part + 1}, indexed sections ${plan.startSection}–${plan.endSection}] ${recap}`,
+    `[Indexed sections ${plan.startSection}–${plan.endSection}] ${recap}`,
   ).join("\n");
   return `Prepare a concise whole-book overview for “${title}” using only the ordered part recaps below. These recaps collectively cover all ${recaps.length ? recaps[recaps.length - 1].plan.endSection : 0} indexed sections. The full, more detailed notes for every part will follow this overview in the downloadable study document. Do not add outside knowledge or present details absent from these recaps.\n\nStudent focus: ${request.trim() || "Give a balanced overview."}\n\nWrite in natural, specific, well-edited prose without generic AI preambles or repetitive template language. For a novel, explain the premise, central conflict, major character arcs, turning points, themes, and resolution only where supported. For a textbook or other non-fiction, explain its thesis, structure, key ideas, reasoning, and conclusions. Use short headings and a few purposeful bullets or a small comparison table only if useful. Do not claim that a recap contains detail that it does not.\n\nORDERED PART RECAPS\n${entries}`;
 }
@@ -96,7 +156,7 @@ export function mergeBookSummaryParts(
       const globalTag = localToGlobal.get(tag);
       return globalTag ? `[${globalTag}]` : match;
     });
-    return `## Part ${plan.part + 1} · indexed sections ${plan.startSection}–${plan.endSection}\n\n${answer}`;
+    return `## Indexed sections ${plan.startSection}–${plan.endSection}\n\n${answer}`;
   });
 
   const finishedSections = completed.length

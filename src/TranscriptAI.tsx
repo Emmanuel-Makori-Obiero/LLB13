@@ -23,7 +23,7 @@ import {
 } from "./lib/ai";
 import { Answer, type Turn } from "./StudyAssistant";
 import { selectTranscriptRunSource } from "./lib/transcriptRunSource";
-import { bookSummaryPartPrompt, bookSummarySynthesisPrompt, extractBookPartRecap, mergeBookSummaryParts, planBookSummary, type CompletedBookSummaryPart } from "./lib/bookSummary";
+import { bookSummarySynthesisPrompt, extractBookPartRecap, mergeBookSummaryParts, planBookSummary, requestBookSummaryPart, type CompletedBookSummaryPart } from "./lib/bookSummary";
 import "./assistant.css";
 import { downloadBlob, downloadPdf, downloadWord } from "./export";
 import {
@@ -324,26 +324,17 @@ export function TranscriptAI({
         for (const part of plan) {
           setStep(`Summarising transcript sections ${part.startSection}–${part.endSection} of ${doc.chunks}`);
           try {
-            const result = await askAI({
-              feature: "summarize",
-              mode: "materials",
-              messages: [{ role: "user", content: bookSummaryPartPrompt(generationPrompt, part) }],
-              docIds: [doc.id],
-              part: part.part,
-              size: part.size,
-            });
-            if (!result.answer.trim() || !result.sources.length || result.basis === "none") {
-              throw new Error("The transcript source section was not returned to the model.");
-            }
-            completed.push({ plan: part, result });
+            await requestBookSummaryPart(generationPrompt, part, doc.id, "materials", askAI, (split) => {
+              setStep(`Provider size limit reached for transcript sections ${split.startSection}–${split.endSection}; retrying smaller ranges`);
+            }, (finished) => completed.push(finished));
             const partial = mergeBookSummaryParts(title, doc.chunks, completed, null, `processing part ${part.part + 1} of ${plan.length}`);
             setNotesText(partial.answer);
             setTurn({ id: 1, task, prompt: generationPrompt, result: partial, mode: "materials", docIds: [doc.id] });
           } catch (cause) {
             const detail = cause instanceof Error ? cause.message : "an AI request failed";
-            const partial = mergeBookSummaryParts(title, doc.chunks, completed, null, `part ${part.part + 1} of ${plan.length} failed: ${detail}`);
+            const partial = mergeBookSummaryParts(title, doc.chunks, completed, null, `indexed sections ${part.startSection}–${part.endSection} failed: ${detail}`);
             setNotesText(partial.answer);
-            setTurn({ id: 1, task, prompt: generationPrompt, result: partial, error: `Complete transcript coverage stopped at part ${part.part + 1} of ${plan.length}. Completed sections are shown below but are not a complete summary. ${detail}`, mode: "materials", docIds: [doc.id] });
+            setTurn({ id: 1, task, prompt: generationPrompt, result: partial, error: `Complete transcript coverage stopped at indexed sections ${part.startSection}–${part.endSection}. Completed sections are shown below but are not a complete summary. ${detail}`, mode: "materials", docIds: [doc.id] });
             setQuality({ status: "review", score: 0, summary: "This is a partial result. Retry the summary or check the source sections manually.", spelling_issues: [], meaning_issues: [], unsupported_claims: [], missing_points: [], authority_checks: [] });
             return;
           }

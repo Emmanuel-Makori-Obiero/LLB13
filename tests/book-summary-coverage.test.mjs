@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
-import { bookSummaryPartPrompt, bookSummarySynthesisPrompt, extractBookPartRecap, mergeBookSummaryParts, planBookSummary } from "../src/lib/bookSummary.ts";
+import { bookSummaryPartPrompt, bookSummarySynthesisPrompt, extractBookPartRecap, mergeBookSummaryParts, planBookSummary, requestBookSummaryPart, splitBookSummaryPart } from "../src/lib/bookSummary.ts";
 
 const result = (answer, sourceTag = "S1") => ({
   answer,
@@ -42,6 +42,42 @@ test("part prompts preserve the main points in order and request a concise sourc
   assert.match(prompt, /character arcs/);
 });
 
+test("provider 413 retries split only the oversized range and preserve exact absolute section offsets", async () => {
+  const initial = planBookSummary(625)[4];
+  const requests = [];
+  const completed = [];
+  const sendRequest = async (args) => {
+    requests.push(args);
+    if (args.size > 2) throw new Error("Provider rejected request (HTTP 413)");
+    return result(`> Part recap: Sections ${args.startIndex + 1} through ${args.startIndex + args.size}.`);
+  };
+  const results = await requestBookSummaryPart("Summarise this book", initial, "book-doc", "materials", sendRequest, undefined, (entry) => completed.push(entry));
+  const coveredSections = results.flatMap(({ plan }) => Array.from({ length: plan.size }, (_, index) => plan.startSection + index));
+  assert.deepEqual(coveredSections, Array.from({ length: 10 }, (_, index) => 41 + index));
+  assert.deepEqual(completed, results);
+  assert.ok(requests.some((request) => request.size === 10));
+  assert.ok(requests.some((request) => request.size === 5));
+  assert.ok(requests.every((request) => request.startIndex >= 40 && request.startIndex < 50));
+  assert.ok(requests.every((request) => {
+    const match = /indexed sections (\d+)–(\d+)/.exec(request.messages[0].content);
+    return match && request.size === Number(match[2]) - Number(match[1]) + 1;
+  }));
+});
+
+test("a failed single-section request is not split, hidden, or marked complete", async () => {
+  const oneSection = planBookSummary(1)[0];
+  const requests = [];
+  await assert.rejects(
+    requestBookSummaryPart("Summarise this source", oneSection, "book-doc", "materials", async (args) => {
+      requests.push(args);
+      throw new Error("HTTP 413");
+    }),
+    /413/,
+  );
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].size, 1);
+});
+
 test("whole-book merge preserves every part in order and deduplicates source tags", () => {
   const plan = planBookSummary(21);
   const completed = plan.map((part) => ({ plan: part, result: result(`> Part recap: Part ${part.part + 1} follows the source.\n\nPoint [S1].`) }));
@@ -49,8 +85,8 @@ test("whole-book merge preserves every part in order and deduplicates source tag
   const merged = mergeBookSummaryParts("The Grit", 21, completed, overview);
   assert.equal(merged.grounded, true);
   assert.match(merged.answer, /processed all 21 readable indexed sections/);
-  assert.ok(merged.answer.indexOf("Part 1 · indexed sections 1–10") < merged.answer.indexOf("Part 2 · indexed sections 11–20"));
-  assert.ok(merged.answer.indexOf("Part 2 · indexed sections 11–20") < merged.answer.indexOf("Part 3 · indexed sections 21–21"));
+  assert.ok(merged.answer.indexOf("Indexed sections 1–10") < merged.answer.indexOf("Indexed sections 11–20"));
+  assert.ok(merged.answer.indexOf("Indexed sections 11–20") < merged.answer.indexOf("Indexed sections 21–21"));
   assert.equal((merged.answer.match(/\[S1\]/g) ?? []).length, 3);
   assert.equal(merged.sources.length, 1);
 });
@@ -83,15 +119,21 @@ test("production routes batch all book sections and expose both document downloa
   const server = fs.readFileSync(new URL("../supabase/functions/ai/index.ts", import.meta.url), "utf8");
   assert.match(page, /countMaterialChunks\(selected\[0\]\)/);
   assert.match(page, /for \(const part of plan\)/);
-  assert.match(page, /part: part\.part/);
+  assert.match(page, /requestBookSummaryPart\(text, part, selected\[0\], useMode, askAI/);
   assert.match(page, /Download DOCX/);
   assert.match(page, /Download PDF/);
   assert.match(api, /countMaterialChunks/);
+  const bookSummary = fs.readFileSync(new URL("../src/lib/bookSummary.ts", import.meta.url), "utf8");
+  assert.match(bookSummary, /startIndex: range\.startSection - 1/);
+  assert.match(bookSummary, /splitBookSummaryPart\(range\)/);
+  assert.match(server, /body\.startIndex/);
+  assert.match(server, /feature === "summarize" \? 1 : 3/);
   assert.match(server, /Complete book summaries require one selected readable book and an exact section batch/);
   assert.match(server, /\["notes", "notes_research", "notes_review", "summarize"\]/);
   assert.match(library, /getLibraryMaterialDocumentId\(material\.id\)/);
   assert.match(library, /supabase\.storage\.from\("materials"\)\.download\(material\.storage_path\)/);
   assert.match(library, /if \(!documentId \|\| totalSections === 0\)[\s\S]*?const indexed = await uploadLibraryMaterial\([\s\S]*?material\.id/);
+  assert.match(library, /requestBookSummaryPart\(request, part, documentId, "materials", askAI/);
   assert.match(library, /onClick=\{\(\) => void summarizeLibraryMaterial\(material\)\}/);
   assert.match(library, /Download DOCX/);
   assert.match(library, /Download PDF/);

@@ -639,6 +639,7 @@ async function retrieve(
   docIds?: string[],
   part?: number,
   size = CHUNKS_PART,
+  startIndex?: number,
   learnerLevel?: string,
   articleBatch?: number[],
   constitutionHistoryOnly = false,
@@ -737,7 +738,9 @@ async function retrieve(
       });
   } else if (["notes", "notes_research", "notes_review", "summarize"].includes(feature) && docIds?.length === 1 && selectedIds.length === 1 && part !== undefined) {
     // Notes and book summaries walk selected source ranges in order; they never sample sections.
-    const from = part * size;
+    const from = feature === "summarize" && Number.isInteger(startIndex) && (startIndex as number) >= 0
+      ? startIndex as number
+      : part * size;
     let expected = size;
     if (feature === "summarize") {
       const { count, error: countError } = await db
@@ -1024,6 +1027,7 @@ Deno.serve(async (req) => {
     docIds?: string[];
     part?: number;
     size?: number;
+    startIndex?: number;
     learnerLevel?: string;
     constitutionArticles?: number[];
     constitutionHistoryOnly?: boolean;
@@ -1050,7 +1054,7 @@ Deno.serve(async (req) => {
       ? (body.part as number)
       : undefined;
   const size = Number.isInteger(body.size)
-    ? Math.min(10, Math.max(3, body.size as number))
+    ? Math.min(10, Math.max(feature === "summarize" ? 1 : 3, body.size as number))
     : CHUNKS_PART;
   const allowedLearnerLevels = new Set(["llb-year-1", "llb-year-2", "llb-year-3", "llb-year-4", "masters", "phd", "prefer-not-to-say"]);
   const learnerLevel = typeof body.learnerLevel === "string" && allowedLearnerLevels.has(body.learnerLevel) ? body.learnerLevel : undefined;
@@ -1162,6 +1166,7 @@ Deno.serve(async (req) => {
       docIds,
       part,
       size,
+      body.startIndex,
       learnerLevel,
       constitutionArticles,
       constitutionHistoryOnly,
@@ -1345,7 +1350,13 @@ Deno.serve(async (req) => {
         error: typeof publicMessage === "string" ? publicMessage : requestTooLarge
           ? feature === "exam_analysis"
             ? "One or more providers rejected the exam-review request as too large (HTTP 413). The unrelated prompt overhead has been removed; the selected paper was not truncated. If this persists, shorten the student-answer text and retry."
-            : "One or more providers rejected the Legal what-if request as too large (HTTP 413). Your question was not truncated; the request uses bounded, relevant source context and output. If this persists, shorten unnecessary scenario detail and retry."
+            : feature === "summarize"
+              ? size > 1
+                ? "Even after provider fallback, a book-summary section request was rejected as too large (HTTP 413). The source was not truncated; the app will retry smaller contiguous section ranges automatically."
+                : "Even one indexed book section was rejected as too large by all available providers (HTTP 413). The text was not truncated; check whether this section contains an unusually long or malformed page, then retry."
+              : feature === "legal_process" || feature === "legal_explain"
+                ? "One or more providers rejected the Legal what-if request as too large (HTTP 413). Your question was not truncated; the request uses bounded, relevant source context and output. If this persists, shorten unnecessary scenario detail and retry."
+                : "One or more providers rejected this request as too large (HTTP 413). The source was not truncated; try a smaller request or retry later."
           : invalidCardResponse
             ? "The providers did not return a usable Legal what-if card structure. Invalid card replies were skipped and the other models were tried; switch to Normal explanation or retry Cards later."
           : "Each failed API-key slot and provider route was skipped and the same request was sent to the next available alternative, but none returned a result. Check provider keys, model IDs, and quota, then retry.",
