@@ -6,11 +6,11 @@
 
 ## Kenya Law case finder
 
-`/cases` is public and available without an account. It sends case-name, citation and topic searches to Kenya Law's official judgments search and links to the court-specific collections. The page also links directly to the [official Constitution of Kenya](https://kenyalaw.org/akn/ke/act/2010/constitution). It does not copy or locally index judgments.
+`/cases` can be opened without an account, but in-app search and judgment preview require sign-in. Search checks public search indexes and the official Kenya Law judgment search. It returns only verified official judgment links; when no result is verified, it shows no match rather than substituting a hardcoded case. The preview summarizes only readable official judgment text and never substitutes a prewritten case summary. The page links directly to the [official Constitution of Kenya](https://kenyalaw.org/akn/ke/act/2010/constitution) and court-specific collections. It does not copy or locally index judgments.
 
 The AI guidance treats Article 2 of the Constitution as the hierarchy baseline and does not cite cases or exact provisions from model memory. For case-specific AI analysis, students save the full judgment text or PDF as an AI-readable Library document and select it; a linked Library record alone is metadata, not source text. When case text is absent, research tools suggest neutral search phrases and the assistant directs the student to the official case finder rather than guessing.
 
-Kenya Law's [Tausi API documentation](https://tausi-dev.docs.laws.africa/api.html) describes an authenticated read-only API that requires an API token and a dedicated permission. The documentation marks the full search specification as unfinished. The current implementation therefore uses Kenya Law's public search links and does not scrape the case database or claim to provide live API retrieval. Automated in-app case search requires an authorized production API route and credentials.
+Kenya Law's [Tausi API documentation](https://tausi-dev.docs.laws.africa/api.html) describes an authenticated read-only API that requires an API token and a dedicated permission. The documentation marks the full search specification as unfinished. The current implementation therefore uses public search indexes and Kenya Law's public search route; it does not scrape the case database or claim to provide complete/live API retrieval. Search may return no results when those public providers are unavailable or do not expose a verified judgment link. Automated multi-user search through Tausi still requires an authorized production route and credentials.
 
 ## Scan & notes
 

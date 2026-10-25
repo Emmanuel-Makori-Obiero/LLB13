@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { EXTRA_FEATURES, handleExtra } from "./exam.ts";
+import { extractArticleNumbers, findArticleChunkIndexes, isConstitutionQuestion, type ConstitutionChunkRef } from "./constitution.ts";
 import { failoverKeyCandidates, secretKeyEntries } from "../_shared/keys.ts";
 import { reserveAiQuota } from "../_shared/quotas.ts";
 import { recordProviderUsage } from "../_shared/usage.ts";
@@ -301,6 +302,7 @@ const JURISDICTION = Deno.env.get("AI_DEFAULT_JURISDICTION") ?? "Kenya";
 const CHUNKS_PER_QUERY = 12;
 const CHUNKS_PART = 10; // sections per 'notes' call: the client walks through a transcript part by part
 const CHUNKS_DOC_WIDE = 24; // about 29k characters: enough to cover a long lecture in broad strokes
+const MAX_EXPLICIT_ARTICLES_PER_REQUEST = 12;
 
 // ---------- features: add one entry per AI-powered screen/button in the app ----------
 const FEATURES: Record<
@@ -517,16 +519,92 @@ function toTsQuery(text: string): string {
   return [...terms].slice(0, 24).join(" | ");
 }
 
-function isConstitutionQuestion(text: string): boolean {
-  return /\bconstitution(?:al)?\b|\barticles?\s*\d{1,3}\b|bill of rights|fundamental rights|devolution|national security|defence forces|defense forces|KDF\b/i.test(text);
-}
-
 interface Source {
   tag: string;
   title: string;
   author: string | null;
   ref: string | null;
   content: string;
+}
+
+type ConstitutionIndexedChunk = ConstitutionChunkRef & {
+  ai_documents?: { title?: string; author?: string | null; citation?: string | null } | null;
+};
+
+type RetrievalRow = {
+  document_id: string;
+  idx?: number;
+  title: string;
+  author: string | null;
+  citation: string | null;
+  content: string;
+};
+
+type RetrievedConstitutionRows = {
+  primary: RetrievalRow[];
+  neighboring: RetrievalRow[];
+  missing: number[];
+};
+
+const constitutionChunkCache = new Map<string, Promise<ConstitutionIndexedChunk[]>>();
+
+// deno-lint-ignore no-explicit-any
+async function exactConstitutionRows(db: any, documentIds: string[], articleNumbers: number[]): Promise<RetrievedConstitutionRows> {
+  const cacheKey = [...documentIds].sort().join(",");
+  let pending = constitutionChunkCache.get(cacheKey);
+  if (!pending) {
+    pending = (async () => {
+      const { data, error } = await db
+        .from("ai_chunks")
+        .select("document_id, idx, content, ai_documents(title, author, citation)")
+        .in("document_id", documentIds)
+        .order("idx")
+        .limit(3000);
+      if (error) throw new Error("Constitution article index retrieval failed");
+      return (data ?? []) as ConstitutionIndexedChunk[];
+    })();
+    constitutionChunkCache.set(cacheKey, pending);
+  }
+
+  let chunks: ConstitutionIndexedChunk[];
+  try {
+    chunks = await pending;
+  } catch (error) {
+    constitutionChunkCache.delete(cacheKey);
+    throw error;
+  }
+
+  const locations = findArticleChunkIndexes(chunks, articleNumbers);
+  const missing = articleNumbers.filter((number) => !locations.has(number));
+  const byKey = new Map(chunks.map((chunk) => [`${chunk.document_id}:${chunk.idx}`, chunk]));
+  const primary = new Map<string, ConstitutionIndexedChunk>();
+  const neighboring = new Map<string, ConstitutionIndexedChunk>();
+
+  for (const number of articleNumbers) {
+    const location = locations.get(number);
+    if (!location) continue;
+    const key = `${location.document_id}:${location.idx}`;
+    const core = byKey.get(key);
+    if (core) primary.set(key, core);
+    for (const offset of [-1, 1]) {
+      const neighborKey = `${location.document_id}:${location.idx + offset}`;
+      const neighbor = byKey.get(neighborKey);
+      if (neighbor && !primary.has(neighborKey)) neighboring.set(neighborKey, neighbor);
+    }
+  }
+
+  const normalize = (rows: Map<string, ConstitutionIndexedChunk>) => [...rows.values()]
+    .sort((a, b) => a.document_id.localeCompare(b.document_id) || a.idx - b.idx)
+    .map((row) => ({
+      document_id: row.document_id,
+      idx: row.idx,
+      title: row.ai_documents?.title ?? "Constitution of Kenya",
+      author: row.ai_documents?.author ?? null,
+      citation: row.ai_documents?.citation ?? null,
+      content: row.content,
+    }));
+
+  return { primary: normalize(primary), neighboring: normalize(neighboring), missing };
 }
 
 // deno-lint-ignore no-explicit-any
@@ -570,6 +648,11 @@ async function retrieve(
     throw Object.assign(new Error(message), { status: 400, publicMessage: message });
   }
   const constitutionQuestion = shouldAutoRetrieveConstitution(feature, isConstitutionQuestion(query));
+  const articleNumbers = constitutionQuestion ? extractArticleNumbers(query) : [];
+  if (articleNumbers.length > MAX_EXPLICIT_ARTICLES_PER_REQUEST) {
+    const message = `This request names ${articleNumbers.length} Constitution Articles. To avoid silently omitting provisions, ask about no more than ${MAX_EXPLICIT_ARTICLES_PER_REQUEST} Articles at a time.`;
+    throw Object.assign(new Error(message), { status: 413, publicMessage: message });
+  }
   if (mode === "general" && !constitutionQuestion && feature !== "exam_analysis") return [];
 
   // The complete Constitution is indexed as a shared Library document. Add it
@@ -610,19 +693,17 @@ async function retrieve(
       }
     }
   }
+  if (articleNumbers.length && !constitutionIds.length) {
+    const message = "The complete shared Constitution text is not available for exact Article lookup. No partial constitutional analysis was generated; please retry or report this issue.";
+    throw Object.assign(new Error(message), { status: 503, publicMessage: message });
+  }
 
   // An explicit document selection remains authoritative for ordinary queries;
   // the shared Constitution is the deliberate exception for constitutional law.
   const scope = selectedIds.length
     ? "any"
     : mode === "materials" ? "user" : mode === "library" ? "library" : "any";
-  let rows: {
-    document_id: string;
-    title: string;
-    author: string | null;
-    citation: string | null;
-    content: string;
-  }[] = [];
+  let rows: RetrievalRow[] = [];
   const limits = retrievalLimits(feature, {
     query: CHUNKS_PER_QUERY,
     neighbors: 12,
@@ -727,24 +808,15 @@ async function retrieve(
     });
     if (error) throw new Error("retrieval failed");
     rows = await filterRowsByLearnerLevel(db, data ?? [], learnerLevel);
-    // Broad natural-language searches can rank a table of contents or a later
-    // cross-reference above the requested provision. When the student names
-    // Article numbers, run a second exact-number pass against the Constitution
-    // source and merge those hits before adding adjacent context.
-    if (constitutionQuestion && constitutionIds.length) {
-      const articleNumbers = [...query.matchAll(/\b\d{1,3}\b/g)]
-        .map((match) => Number(match[0]))
-        .filter((number) => number >= 1 && number <= 300);
-      for (const number of [...new Set(articleNumbers)].slice(0, 8)) {
-        const { data: exact } = await db.rpc("ai_search", {
-          q: `article | ${number}`,
-          p_scope: "any",
-          p_doc_ids: constitutionIds,
-          p_limit: 4,
-        });
-        rows.push(...(exact ?? []));
+    let articleChunkReserve = 0;
+    if (constitutionQuestion && constitutionIds.length && articleNumbers.length) {
+      const exact = await exactConstitutionRows(db, constitutionIds, articleNumbers);
+      if (exact.missing.length) {
+        const message = `The full text for Constitution Article${exact.missing.length === 1 ? "" : "s"} ${exact.missing.join(", ")} could not be located in the shared source. No partial Article analysis was generated; please retry or report this issue.`;
+        throw Object.assign(new Error(message), { status: 503, publicMessage: message });
       }
-      rows = await filterRowsByLearnerLevel(db, rows, learnerLevel);
+      rows = [...exact.primary, ...exact.neighboring, ...rows];
+      articleChunkReserve = exact.primary.length + exact.neighboring.length;
     }
     // A single matching chunk can omit the definition or exception immediately
     // before/after it. Pull a small amount of adjacent text for book-like reading.
@@ -760,6 +832,7 @@ async function retrieve(
         .limit(3);
       for (const item of nearby ?? []) contextRows.push({
         document_id: item.document_id,
+        idx: item.idx,
         title: item.ai_documents?.title,
         author: item.ai_documents?.author,
         citation: item.ai_documents?.citation,
@@ -767,8 +840,8 @@ async function retrieve(
       });
     }
     const unique = new Map<string, typeof rows[number]>();
-    for (const row of [...rows, ...contextRows]) unique.set(`${row.document_id}:${row.content}`, row);
-    rows = [...unique.values()].slice(0, limits.total);
+    for (const row of [...rows, ...contextRows]) unique.set(`${row.document_id}:${row.idx ?? row.content}`, row);
+    rows = [...unique.values()].slice(0, Math.max(limits.total, articleChunkReserve));
   }
   if (feature === "exam_analysis" && !rows.length) {
     const message = "No readable indexed text is available for the selected paper. Check its upload or access permissions and retry.";
@@ -814,11 +887,11 @@ NON-NEGOTIABLE RULES
 12. HUMAN WORK FIRST: never encourage submitting unedited AI text as the student's own. AI-like style signals are not proof of authorship; explain them and suggest adding the student's own reasoning, class context, concrete examples, uncertainty and original transitions.
 
 VERIFIED CONSTITUTION ARTICLE CROSS-CHECK
-The complete Constitution of Kenya is indexed as a shared Library source and is automatically retrieved for constitutional questions, including questions that mention an Article number, rights, devolution, national security or the Defence Forces. Use the retrieved Constitution text as the primary authority for ANY Article, Chapter, Part or constitutional provision—not only the examples listed below. Before assigning an Article number, compare it with the retrieved text. The reference facts below are fallback study summaries for a concise paraphrase, never for a verbatim quotation. Article 2(4) concerns constitutional supremacy; Article 23 concerns court authority and remedies for the Bill of Rights; Article 24 concerns limitation of rights and fundamental freedoms; Article 37 protects peaceful and unarmed assembly, demonstration, picketing and petition; Article 58 concerns a state of emergency; Article 165(3)(d) concerns the High Court's constitutional jurisdiction, not parliamentary authorisation for KDF deployment; Article 238 defines national security; Article 241 establishes the Kenya Defence Forces; and Article 241(3) requires National Assembly approval when the Defence Forces are deployed to restore peace in a part of Kenya affected by unrest or instability. Do not attribute one Article's subject matter to another. If retrieved text conflicts with these reference facts, follow the retrieved text and flag the conflict. If a provision is absent from both the retrieved Constitution text and the fallback facts, say that verification is needed rather than guessing.
-VERIFIED KENYAN CONSTITUTIONAL REFERENCE (official Kenya Law text)
-The following are verified study summaries, not verbatim quotations: Article 2(1) makes the Constitution supreme and binding on all persons and State organs; Article 2(4) makes inconsistent law void to the extent of inconsistency and makes unconstitutional acts or omissions invalid; Article 24 governs limitation of rights; Article 37 protects peaceful and unarmed assembly, demonstration, picketing and petition; Article 241 establishes the Kenya Defence Forces and Article 241(3) requires National Assembly approval for deployment to restore peace in a part of Kenya affected by unrest or instability.
+The shared Library source contains the full Constitution of Kenya, and Article-aware retrieval can supply any numbered provision. Use retrieved Constitution text as the primary authority for any Article, Chapter, Part or constitutional provision; the summaries below are examples, not an allowlist or complete list. Before assigning an Article number, compare it with the retrieved text. Never attribute one Article's subject matter to another. If retrieved text conflicts with a fallback example, follow the retrieved text and flag the conflict. When a requested Article's text was not retrieved, say so and use the neutral official-source search marker rather than guessing from memory.
+VERIFIED KENYAN CONSTITUTIONAL REFERENCE EXAMPLES (official Kenya Law text)
+The following are verified study summaries, not verbatim quotations or a complete list: Article 2(1) makes the Constitution supreme and binding on all persons and State organs; Article 2(4) makes inconsistent law void to the extent of inconsistency and makes unconstitutional acts or omissions invalid; Article 24 governs limitation of rights; Article 37 protects peaceful and unarmed assembly, demonstration, picketing and petition; Article 241 establishes the Kenya Defence Forces and Article 241(3) requires National Assembly approval for deployment to restore peace in a part of Kenya affected by unrest or instability. Use these only for those verified facts when retrieved text is unavailable; they do not limit what can be answered from supplied full-text sources.
 Primary source: https://kenyalaw.org/akn/ke/act/2010/constitution
-You may answer a question about one of these listed Articles directly and confidently using the verified summary, while saying "this is a paraphrase, not the exact wording" if the student asks for exact text. Do not use a refusal or a Kenya Law search marker merely because the full Constitution chunk was not retrieved. Use the marker only for a Kenyan authority or provision not covered by these verified facts and not present in <sources>. When relevant, cite [Constitution of Kenya, 2010](https://kenyalaw.org/akn/ke/act/2010/constitution).`;
+When a retrieved source contains the requested Article, answer from that source and cite its [S#] marker. If it is absent, do not infer its text or meaning from memory; state that its source text was not retrieved and use [[KENYA_LAW_SEARCH: neutral constitutional issue or Article number]]. When relevant, cite [Constitution of Kenya, 2010](https://kenyalaw.org/akn/ke/act/2010/constitution).`;
 
   const task = `\nTASK: ${FEATURES[feature]?.task ?? FEATURES.chat.task}`;
 
