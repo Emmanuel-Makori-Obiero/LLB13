@@ -111,6 +111,7 @@ const GuidedStudyPage = lazy(() => import("./GuidedStudyPage"));
 const AssignmentHelperPage = lazy(() => import("./AssignmentHelperPage"));
 import { addYouTubeItem, loadPublicYouTubePlaylist, loadYouTubePlaylist, removeYouTubeItem, updateYouTubePlaylist, youtubePlaylistExportJson, youtubePlaylistExportText, type YouTubePlaylist } from "./lib/youtubePlaylist";
 import { useTheme, type Theme } from "./theme";
+import { extractPastPaperArchive } from "./lib/pastPaperArchive";
 import GamesHub from "./GamesHub";
 import { readDebateInviteCode } from "./lib/debate-links";
 import {
@@ -291,6 +292,7 @@ function App() {
   const [activeMeeting, setActiveMeeting] = useState<Discussion | null>(null);
   const [activeMaterial, setActiveMaterial] = useState<Material | null>(null);
   const [materialFormOpen, setMaterialFormOpen] = useState(false);
+  const [bulkImportBusy, setBulkImportBusy] = useState(false);
   const [editingMaterial, setEditingMaterial] = useState<Material | null>(null);
   const [assignmentFormOpen, setAssignmentFormOpen] = useState(false);
   const [musicQueue, setMusicQueue] = useState<PlayerTrack[]>([]);
@@ -657,6 +659,57 @@ function App() {
           ? error.message
           : "Could not delete the material.",
       );
+    }
+  };
+  const importPastPaperArchive = async (archive: File) => {
+    if (bulkImportBusy) return;
+    setBulkImportBusy(true);
+    try {
+      setNotice(`Opening ${archive.name} and extracting readable papers…`);
+      const entries = await extractPastPaperArchive(archive);
+      if (!entries.length) throw new Error("No readable PDF, DOC, DOCX, TXT, or Markdown papers were found in that archive.");
+      let imported = 0;
+      let indexed = 0;
+      let failed = 0;
+      for (const [index, entry] of entries.entries()) {
+        setNotice(`Importing paper ${index + 1} of ${entries.length}: ${entry.title}`);
+        try {
+          const created = await repository.createMaterial({
+            title: entry.title,
+            author: profile.displayName || undefined,
+            type: "Past paper",
+            unit: entry.courseCode,
+            topic: `${entry.courseCode} · ${entry.examSession}`,
+            date: entry.examYear ? String(entry.examYear) : new Date().toISOString().slice(0, 10),
+            source: `Bulk archive · ${entry.semester}`,
+            url: "",
+            archive_path: entry.archivePath,
+            exam_year: entry.examYear,
+            exam_session: entry.examSession,
+            course_code: entry.courseCode,
+            paper_variant: entry.paperVariant,
+            mime_type: entry.file.type,
+            file_size: entry.file.size,
+            metadata_confidence: entry.confidence,
+            ingestion_status: "indexing",
+          }, entry.file);
+          setMaterials((current) => current.some((item) => item.id === created.id) ? current : [created, ...current]);
+          imported += 1;
+          try {
+            const result = await uploadLibraryMaterial(entry.file, `Past paper · ${entry.courseCode} · ${entry.examSession}`, created.author ?? undefined, [], created.id);
+            indexed += result.chunks;
+          } catch {
+            failed += 1;
+          }
+        } catch {
+          failed += 1;
+        }
+      }
+      setNotice(`Archive import complete: ${imported} papers added, ${indexed} AI sections indexed${failed ? `, ${failed} files need review` : ""}.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not import that archive.");
+    } finally {
+      setBulkImportBusy(false);
     }
   };
   const updateMaterial = async (
@@ -1203,6 +1256,8 @@ function App() {
               openCreate={() => setMaterialFormOpen(true)}
               openEdit={setEditingMaterial}
               openReader={openReader}
+              onBulkImport={importPastPaperArchive}
+              bulkImportBusy={bulkImportBusy}
               canDelete={(material) =>
                 isAdmin || (!!userId && material.owner_id === userId)
               }
@@ -3867,6 +3922,8 @@ function LibraryPageReal({
   openCreate,
   openEdit,
   openReader,
+  onBulkImport,
+  bulkImportBusy,
   canDelete,
   onDelete,
 }: {
@@ -3877,6 +3934,8 @@ function LibraryPageReal({
   openCreate: () => void;
   openEdit: (material: Material) => void;
   openReader: (material: Material) => void;
+  onBulkImport: (file: File) => Promise<void>;
+  bulkImportBusy: boolean;
   canDelete: (material: Material) => boolean;
   onDelete: (material: Material) => void;
 }) {
@@ -3890,6 +3949,7 @@ function LibraryPageReal({
   useEffect(() => setYearFilter(learnerLevel || "all"), [learnerLevel]);
   const [sortBy, setSortBy] = useState("date-desc");
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const archiveInputRef = useRef<HTMLInputElement>(null);
   const [summaryMaterial, setSummaryMaterial] = useState<Material | null>(null);
   const [summaryResult, setSummaryResult] = useState<AIResult | null>(null);
   const [summaryBusy, setSummaryBusy] = useState(false);
@@ -4110,6 +4170,20 @@ function LibraryPageReal({
             </select>
           </label>
         </div>
+        <input
+          ref={archiveInputRef}
+          type="file"
+          accept=".rar,.zip,.7z,application/x-rar-compressed,application/zip"
+          hidden
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            if (file) void onBulkImport(file);
+          }}
+        />
+        <button className="secondary-button" type="button" disabled={bulkImportBusy} onClick={() => archiveInputRef.current?.click()}>
+          <FolderOpen size={14} /> {bulkImportBusy ? "Importing archive…" : "Import archive"}
+        </button>
         <button className="primary-button" onClick={openCreate}>
           <Plus size={14} style={{ verticalAlign: "middle" }} /> Add material
         </button>

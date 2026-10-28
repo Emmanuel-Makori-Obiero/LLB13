@@ -15,6 +15,7 @@
     "@supabase/supabase-js": "^2.45.4",
     "@vitejs/plugin-react": "^6.1.1",
     "jszip": "^3.10.2",
+    "libarchive.js": "^2.0.2",
     "lucide-react": "^0.468.0",
     "mammoth": "^1.13.0",
     "pdfjs-dist": "^4.10.38",
