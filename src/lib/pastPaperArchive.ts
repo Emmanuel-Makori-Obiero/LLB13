@@ -12,6 +12,12 @@ export type PastPaperEntry = {
   confidence: number;
 };
 
+export type ArchiveExtractionProgress = {
+  total: number;
+  done: number;
+  current: string;
+};
+
 const SUPPORTED = /\.(pdf|docx?|txt|md)$/i;
 const NESTED_ARCHIVE = /\.(rar|zip|7z)$/i;
 const COURSE_CODE = /\b([A-Z]{2,5}\s?-?\d{3,4})\b/i;
@@ -49,22 +55,23 @@ function mimeFor(name: string): string {
   return "text/plain";
 }
 
-async function extractArchiveLevel(archiveFile: File, prefix = "", depth = 0): Promise<PastPaperEntry[]> {
+async function extractArchiveLevel(archiveFile: File, prefix = "", depth = 0, onProgress?: (progress: ArchiveExtractionProgress) => void): Promise<PastPaperEntry[]> {
   if (depth > 5) return [];
   Archive.init();
   const archive = await Archive.open(archiveFile);
   try {
     const entries = await archive.getFilesArray();
     const extracted: PastPaperEntry[] = [];
-    for (const entry of entries) {
+    for (const [entryIndex, entry] of entries.entries()) {
       const compressed = entry?.file as { name?: string; extract?: () => Promise<File> } | undefined;
       const name = compressed?.name ?? "";
       const archivePath = `${prefix}${entry?.path ?? ""}${name}`;
+      onProgress?.({ total: entries.length, done: entryIndex, current: archivePath || name });
       if (!compressed?.extract) continue;
       try {
         const original = await compressed.extract();
         if (NESTED_ARCHIVE.test(name)) {
-          extracted.push(...await extractArchiveLevel(original, `${archivePath}/`, depth + 1));
+          extracted.push(...await extractArchiveLevel(original, `${archivePath}/`, depth + 1, onProgress));
           continue;
         }
         if (!SUPPORTED.test(archivePath)) continue;
@@ -74,12 +81,13 @@ async function extractArchiveLevel(archiveFile: File, prefix = "", depth = 0): P
         // Keep importing the rest of the archive; the UI reports the number of readable entries.
       }
     }
+    onProgress?.({ total: entries.length, done: entries.length, current: "Archive scan complete" });
     return extracted;
   } finally {
     await archive.close();
   }
 }
 
-export async function extractPastPaperArchive(archiveFile: File): Promise<PastPaperEntry[]> {
-  return extractArchiveLevel(archiveFile, "", 0);
+export async function extractPastPaperArchive(archiveFile: File, onProgress?: (progress: ArchiveExtractionProgress) => void): Promise<PastPaperEntry[]> {
+  return extractArchiveLevel(archiveFile, "", 0, onProgress);
 }

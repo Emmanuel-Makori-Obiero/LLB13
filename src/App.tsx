@@ -668,7 +668,9 @@ function App() {
     try {
       setBulkImportProgress({ phase: "extracting", total: 0, done: 0, indexed: 0, failed: 0, current: archive.name });
       setNotice(`Opening ${archive.name} and extracting readable papers…`);
-      const entries = await extractPastPaperArchive(archive);
+      const entries = await extractPastPaperArchive(archive, (progress) => {
+        setBulkImportProgress((current) => ({ ...current, phase: "extracting", total: progress.total, done: progress.done, current: progress.current }));
+      });
       if (!entries.length) throw new Error("No readable PDF, DOC, DOCX, TXT, or Markdown papers were found in that archive.");
       setBulkImportProgress({ phase: "importing", total: entries.length, done: 0, indexed: 0, failed: 0, current: "Starting…" });
       let imported = 0;
@@ -4214,7 +4216,9 @@ function LibraryPageReal({
             <div style={{ height: "100%", width: `${bulkImportProgress.total ? (bulkImportProgress.done / bulkImportProgress.total) * 100 : 0}%`, background: "var(--accent, #b56b42)", transition: "width .2s ease" }} />
           </div>
           <div className="field-hint">
-            {bulkImportProgress.done} of {bulkImportProgress.total} files processed · {bulkImportProgress.indexed} AI sections indexed · {bulkImportProgress.failed} failed
+            {bulkImportProgress.phase === "extracting" && !bulkImportProgress.total
+              ? "Scanning archive entries… the file count will appear shortly."
+              : `${bulkImportProgress.done} of ${bulkImportProgress.total} files processed · ${bulkImportProgress.indexed} AI sections indexed · ${bulkImportProgress.failed} failed`}
           </div>
           <div className="field-hint" style={{ marginTop: 6 }}>Each paper is uploaded and indexed separately, so one failure does not stop the rest. Nested RAR, ZIP, and 7Z archives are opened automatically.</div>
         </section>
