@@ -73,6 +73,16 @@ export default function AdminPage({
   const [organizerJob, setOrganizerJob] = useState<OrganizerJob | null>(null);
   const [organizerBusy, setOrganizerBusy] = useState(false);
   const [organizerMessage, setOrganizerMessage] = useState("");
+  useEffect(() => {
+    let active = true;
+    if (supabase) void supabase.functions.invoke("organize-library", { body: { action: "latest" } }).then(({ data }) => {
+      if (active && data?.job) {
+        setOrganizerJob(data.job as OrganizerJob);
+        setOrganizerMessage(data.job.status === "completed" ? "The last organization run is complete." : "Saved progress loaded. Press Organize Library to resume.");
+      }
+    });
+    return () => { active = false; };
+  }, []);
   const runOrganizer = async () => {
     if (!supabase || organizerBusy) return;
     setOrganizerBusy(true);

@@ -51,12 +51,16 @@ Deno.serve(async (req) => {
   try { body = await req.json(); } catch { return json({ error: "Invalid request." }, 400); }
 
   if (body.action === "start") {
-    const { data: active } = await admin.from("library_organize_jobs").select("*").eq("status", "running").order("created_at", { ascending: false }).limit(1).maybeSingle();
+    const { data: active } = await admin.from("library_organize_jobs").select("*").in("status", ["running", "paused"]).order("created_at", { ascending: false }).limit(1).maybeSingle();
     if (active) return json({ job: active, resumed: true });
-    const { count } = await admin.from("materials").select("id", { count: "exact", head: true }).not("archive_path", "is", null).neq("organization_status", "ready");
+    const { count } = await admin.from("materials").select("id", { count: "exact", head: true }).not("archive_path", "is", null).eq("organization_status", "pending");
     const { data: job, error } = await admin.from("library_organize_jobs").insert({ started_by: user.id, status: "running", total: count ?? 0 }).select("*").single();
     if (error) return json({ error: error.message }, 500);
     return json({ job, resumed: false });
+  }
+  if (body.action === "latest") {
+    const { data: latest } = await admin.from("library_organize_jobs").select("*").order("created_at", { ascending: false }).limit(1).maybeSingle();
+    return json({ job: latest ?? null });
   }
   if (!body.job_id) return json({ error: "job_id is required." }, 400);
   const { data: job, error: jobError } = await admin.from("library_organize_jobs").select("*").eq("id", body.job_id).limit(1).maybeSingle();
@@ -65,7 +69,7 @@ Deno.serve(async (req) => {
   if (body.action !== "step") return json({ error: "Unknown action." }, 400);
   if (job.next_retry_at && new Date(job.next_retry_at).getTime() > Date.now()) return json({ job, paused: true, retry_after_seconds: Math.ceil((new Date(job.next_retry_at).getTime() - Date.now()) / 1000) });
 
-  const { data: material } = await admin.from("materials").select("id,title,storage_path,mime_type,archive_path,organization_status").not("archive_path", "is", null).neq("organization_status", "ready").order("created_at", { ascending: true }).limit(1).maybeSingle();
+  const { data: material } = await admin.from("materials").select("id,title,storage_path,mime_type,archive_path,organization_status").not("archive_path", "is", null).eq("organization_status", "pending").order("created_at", { ascending: true }).limit(1).maybeSingle();
   if (!material) {
     const { data: completed } = await admin.from("library_organize_jobs").update({ status: "completed", next_retry_at: null }).eq("id", job.id).select("*").single();
     return json({ job: completed ?? { ...job, status: "completed" }, done: true });
