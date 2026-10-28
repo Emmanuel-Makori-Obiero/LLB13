@@ -29,7 +29,7 @@ async function modelsForKey(key: string) {
   if (cached) return cached;
   const fallback = ["gemini-3.8-flash"];
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`);
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`, { signal: AbortSignal.timeout(8000) });
     if (!response.ok) { modelCache.set(key, fallback); return fallback; }
     const body = await response.json();
     const discovered = (Array.isArray(body?.models) ? body.models : [])
@@ -40,7 +40,7 @@ async function modelsForKey(key: string) {
       const score = (model: string) => (model.includes("pro") ? 40 : 20) + (model.includes("3.8") ? 30 : model.includes("3.") ? 20 : 0) + (model.includes("flash") ? 10 : 0) - (model.includes("exp") || model.includes("preview") ? 5 : 0);
       return score(right) - score(left);
     });
-    const result = ranked.length ? ranked : fallback;
+    const result = ranked.length ? ranked.slice(0, 4) : fallback;
     modelCache.set(key, result);
     return result;
   } catch { modelCache.set(key, fallback); return fallback; }
@@ -48,6 +48,7 @@ async function modelsForKey(key: string) {
 async function gemini(file: Uint8Array, mimeType: string, key: string, model: string) {
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`, {
     method: "POST", headers: { "Content-Type": "application/json" },
+    signal: AbortSignal.timeout(25000),
     body: JSON.stringify({ contents: [{ parts: [
       { inlineData: { mimeType: mimeType || "application/octet-stream", data: toBase64(file) } },
       { text: `You are organizing a law-school past-paper library. Read the attached paper itself; do not trust its filename or folder names. Return ONLY valid JSON with exactly these fields: {"title":"","unit":"","course_code":"","topic":"","exam_year":null,"exam_session":"","paper_variant":"Regular","confidence":0}. Derive the best human-readable title from the paper heading and contents. Identify the actual law unit from the paper, including a new unit name such as Family Law when appropriate. CRITICAL: unit must be a subject name, never a month, date, semester label, academic year, filename fragment, or folder name. CRITICAL: course_code must be a code visibly printed in the paper; never use a month/year such as APRIL 2024, AUG 2025, or DEC 2022 as a course code. If the paper does not show a reliable course code, return an empty string. Use null only when the paper truly does not contain the value. exam_session should be a concise label such as "April 2021", "August 2022", or "December 2023". paper_variant may be Regular, Supplementary, Resit, Evening, Morning, Special, or another clearly stated variant. Do not invent a course code or year. confidence is a number from 0 to 1. Keep title under 180 characters.` },
@@ -109,9 +110,11 @@ Deno.serve(async (req) => {
   let metadata: Record<string, unknown> | null = null;
   let lastError = "";
   const paperBytes = new Uint8Array(await downloaded.data.arrayBuffer());
+  const fallbackDeadline = Date.now() + 115000;
   for (const candidate of keys) {
     const models = await modelsForKey(candidate.value);
     for (const model of models) {
+      if (Date.now() >= fallbackDeadline) { lastError = "Fallback deadline reached before another model could be tried."; break; }
       try { metadata = await gemini(paperBytes, material.mime_type ?? "application/pdf", candidate.value, model); break; }
       catch (cause) { lastError = `Model ${model} with key #${candidate.slot}: ${cause instanceof Error ? cause.message : String(cause)}`; const status = Number((cause as { providerStatus?: number }).providerStatus ?? 0); if (status === 429 || status === 404 || status >= 500) continue; }
     }
