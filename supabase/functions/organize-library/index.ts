@@ -28,7 +28,7 @@ async function gemini(file: Uint8Array, mimeType: string, key: string) {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ contents: [{ parts: [
       { inlineData: { mimeType: mimeType || "application/octet-stream", data: toBase64(file) } },
-      { text: `You are organizing a law-school past-paper library. Read the attached paper itself; do not trust its filename or folder names. Return ONLY valid JSON with exactly these fields: {"title":"","unit":"","course_code":"","topic":"","exam_year":null,"exam_session":"","paper_variant":"Regular","confidence":0}. Derive the best human-readable title from the paper heading and contents. Identify the actual unit, including a new unit name such as Family Law when appropriate. Use null only when the paper truly does not contain the value. exam_session should be a concise label such as "April 2021", "August 2022", or "December 2023". paper_variant may be Regular, Supplementary, Resit, Evening, Morning, Special, or another clearly stated variant. Do not invent a course code or year. confidence is a number from 0 to 1. Keep title under 180 characters.` },
+      { text: `You are organizing a law-school past-paper library. Read the attached paper itself; do not trust its filename or folder names. Return ONLY valid JSON with exactly these fields: {"title":"","unit":"","course_code":"","topic":"","exam_year":null,"exam_session":"","paper_variant":"Regular","confidence":0}. Derive the best human-readable title from the paper heading and contents. Identify the actual law unit from the paper, including a new unit name such as Family Law when appropriate. CRITICAL: unit must be a subject name, never a month, date, semester label, academic year, filename fragment, or folder name. CRITICAL: course_code must be a code visibly printed in the paper; never use a month/year such as APRIL 2024, AUG 2025, or DEC 2022 as a course code. If the paper does not show a reliable course code, return an empty string. Use null only when the paper truly does not contain the value. exam_session should be a concise label such as "April 2021", "August 2022", or "December 2023". paper_variant may be Regular, Supplementary, Resit, Evening, Morning, Special, or another clearly stated variant. Do not invent a course code or year. confidence is a number from 0 to 1. Keep title under 180 characters.` },
     ] }], generationConfig: { temperature: 0.1, responseMimeType: "application/json" } }),
   });
   const text = await response.text();
@@ -93,10 +93,13 @@ Deno.serve(async (req) => {
     return json({ job: pausedJob ?? job, paused: true, retry_after_seconds: pause, error: lastError });
   }
   const clean = (value: unknown, fallback = "") => typeof value === "string" ? value.trim().slice(0, 240) || fallback : fallback;
+  const looksLikeDateOrSession = (value: string) => /^(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)[\s_-]*20\d{2}$/i.test(value) || /\b20\d{2}\b/.test(value) && /\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i.test(value);
+  const validUnit = (value: unknown) => { const candidate = clean(value, "Unclassified"); return looksLikeDateOrSession(candidate) ? "Unclassified" : candidate; };
+  const validCourseCode = (value: unknown) => { const candidate = clean(value); if (!candidate || looksLikeDateOrSession(candidate) || !/[A-Za-z]/.test(candidate) || !/\d/.test(candidate)) return null; return candidate; };
   const year = Number(metadata.exam_year);
   const { error: updateError } = await admin.from("materials").update({
-    title: clean(metadata.title, material.title), unit: clean(metadata.unit, "Unclassified"), topic: clean(metadata.topic, material.title),
-    course_code: clean(metadata.course_code) || null, exam_year: Number.isInteger(year) && year >= 1900 && year <= 2100 ? year : null,
+    title: clean(metadata.title, material.title), unit: validUnit(metadata.unit), topic: clean(metadata.topic, material.title),
+    course_code: validCourseCode(metadata.course_code), exam_year: Number.isInteger(year) && year >= 1900 && year <= 2100 ? year : null,
     exam_session: clean(metadata.exam_session, "Unspecified session"), paper_variant: clean(metadata.paper_variant, "Regular"),
     metadata_confidence: Math.min(1, Math.max(0, Number(metadata.confidence) || 0)), organization_status: "ready", organization_error: null, organized_at: new Date().toISOString(),
   }).eq("id", material.id);
