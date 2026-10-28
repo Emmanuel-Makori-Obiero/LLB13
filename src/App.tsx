@@ -293,6 +293,7 @@ function App() {
   const [activeMaterial, setActiveMaterial] = useState<Material | null>(null);
   const [materialFormOpen, setMaterialFormOpen] = useState(false);
   const [bulkImportBusy, setBulkImportBusy] = useState(false);
+  const [bulkImportProgress, setBulkImportProgress] = useState<{ phase: string; total: number; done: number; indexed: number; failed: number; current: string }>({ phase: "idle", total: 0, done: 0, indexed: 0, failed: 0, current: "" });
   const [editingMaterial, setEditingMaterial] = useState<Material | null>(null);
   const [assignmentFormOpen, setAssignmentFormOpen] = useState(false);
   const [musicQueue, setMusicQueue] = useState<PlayerTrack[]>([]);
@@ -665,13 +666,16 @@ function App() {
     if (bulkImportBusy) return;
     setBulkImportBusy(true);
     try {
+      setBulkImportProgress({ phase: "extracting", total: 0, done: 0, indexed: 0, failed: 0, current: archive.name });
       setNotice(`Opening ${archive.name} and extracting readable papers…`);
       const entries = await extractPastPaperArchive(archive);
       if (!entries.length) throw new Error("No readable PDF, DOC, DOCX, TXT, or Markdown papers were found in that archive.");
+      setBulkImportProgress({ phase: "importing", total: entries.length, done: 0, indexed: 0, failed: 0, current: "Starting…" });
       let imported = 0;
       let indexed = 0;
       let failed = 0;
       for (const [index, entry] of entries.entries()) {
+        setBulkImportProgress((current) => ({ ...current, current: entry.title, done: index }));
         setNotice(`Importing paper ${index + 1} of ${entries.length}: ${entry.title}`);
         try {
           const created = await repository.createMaterial({
@@ -704,9 +708,12 @@ function App() {
         } catch {
           failed += 1;
         }
+        setBulkImportProgress({ phase: "importing", total: entries.length, done: index + 1, indexed, failed, current: index + 1 === entries.length ? "Finishing…" : entries[index + 1].title });
       }
+      setBulkImportProgress((current) => ({ ...current, phase: "complete", done: entries.length, indexed, failed, current: "Complete" }));
       setNotice(`Archive import complete: ${imported} papers added, ${indexed} AI sections indexed${failed ? `, ${failed} files need review` : ""}.`);
     } catch (error) {
+      setBulkImportProgress((current) => ({ ...current, phase: "failed", current: error instanceof Error ? error.message : "Import failed" }));
       setNotice(error instanceof Error ? error.message : "Could not import that archive.");
     } finally {
       setBulkImportBusy(false);
@@ -1258,6 +1265,7 @@ function App() {
               openReader={openReader}
               onBulkImport={importPastPaperArchive}
               bulkImportBusy={bulkImportBusy}
+              bulkImportProgress={bulkImportProgress}
               canDelete={(material) =>
                 isAdmin || (!!userId && material.owner_id === userId)
               }
@@ -3924,6 +3932,7 @@ function LibraryPageReal({
   openReader,
   onBulkImport,
   bulkImportBusy,
+  bulkImportProgress,
   canDelete,
   onDelete,
 }: {
@@ -3936,6 +3945,7 @@ function LibraryPageReal({
   openReader: (material: Material) => void;
   onBulkImport: (file: File) => Promise<void>;
   bulkImportBusy: boolean;
+  bulkImportProgress: { phase: string; total: number; done: number; indexed: number; failed: number; current: string };
   canDelete: (material: Material) => boolean;
   onDelete: (material: Material) => void;
 }) {
@@ -4188,6 +4198,26 @@ function LibraryPageReal({
           <Plus size={14} style={{ verticalAlign: "middle" }} /> Add material
         </button>
       </div>
+      {bulkImportProgress.phase !== "idle" && (
+        <section className="card card-pad" style={{ marginBottom: 16 }} aria-live="polite">
+          <div className="detail-title">
+            <div>
+              <div className="eyebrow">BULK LIBRARY IMPORT</div>
+              <h2 style={{ fontSize: 20, margin: "6px 0" }}>
+                {bulkImportProgress.phase === "complete" ? "Archive import complete" : bulkImportProgress.phase === "failed" ? "Archive import stopped" : "Importing your archive…"}
+              </h2>
+              <p className="field-hint">{bulkImportProgress.current || "Preparing files…"}</p>
+            </div>
+            <strong>{bulkImportProgress.total ? `${Math.round((bulkImportProgress.done / bulkImportProgress.total) * 100)}%` : "0%"}</strong>
+          </div>
+          <div style={{ height: 8, borderRadius: 99, background: "var(--line, #e5ded2)", overflow: "hidden", margin: "12px 0" }}>
+            <div style={{ height: "100%", width: `${bulkImportProgress.total ? (bulkImportProgress.done / bulkImportProgress.total) * 100 : 0}%`, background: "var(--accent, #b56b42)", transition: "width .2s ease" }} />
+          </div>
+          <div className="field-hint">
+            {bulkImportProgress.done} of {bulkImportProgress.total} files processed · {bulkImportProgress.indexed} AI sections indexed · {bulkImportProgress.failed} failed
+          </div>
+        </section>
+      )}
       {summaryMaterial && (
         <section className="card card-pad library-summary-panel">
           <div className="detail-title">
