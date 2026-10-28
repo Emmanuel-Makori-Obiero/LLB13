@@ -30,7 +30,7 @@ async function modelsForKey(key: string) { const cached = modelCache.get(key); i
     const discovered = (Array.isArray(body?.models) ? body.models : [])
       .filter((model: { supportedGenerationMethods?: string[] }) => model.supportedGenerationMethods?.includes("generateContent"))
       .map((model: { name?: string }) => String(model.name ?? "").replace(/^models\//, ""))
-      .filter((model: string) => /^gemini-/i.test(model) && !/(?:tts|image|embedding|live|robotics|aqa|computer-use)/i.test(model));
+      .filter((model: string) => /^gemini-/i.test(model) && /flash/i.test(model) && !/(?:pro|preview|exp|tts|image|embedding|live|robotics|aqa|computer-use)/i.test(model));
     const ranked = [...new Set(discovered)].sort((left, right) => {
       const score = (model: string) => (model.includes("pro") ? 40 : 20) + (model.includes("3.8") ? 30 : model.includes("3.") ? 20 : 0) + (model.includes("flash") ? 10 : 0) - (model.includes("exp") || model.includes("preview") ? 5 : 0);
       return score(right) - score(left);
