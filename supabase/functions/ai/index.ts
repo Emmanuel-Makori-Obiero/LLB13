@@ -1380,7 +1380,7 @@ Deno.serve(async (req) => {
                 : "Even one indexed book section was rejected as too large by all available providers (HTTP 413). The text was not truncated; check whether this section contains an unusually long or malformed page, then retry."
               : feature === "legal_process" || feature === "legal_explain"
                 ? "One or more providers rejected the Legal what-if request as too large (HTTP 413). Your question was not truncated; the request uses bounded, relevant source context and output. If this persists, shorten unnecessary scenario detail and retry."
-                : "One or more providers rejected this request as too large (HTTP 413). The app retried with fewer old chat turns and, where safe, fewer complete retrieved passages; no source text was truncated. If this persists, ask a narrower question or select a smaller source section."
+                : "One or more providers rejected this request as too large (HTTP 413). The endpoint can retry with fewer old chat turns and, for ordinary retrieval only, fewer whole passages; complete-document review text is preserved and no source passage is truncated. If this persists, ask a narrower question or select a smaller source section."
           : invalidCardResponse
             ? "The providers did not return a usable Legal what-if card structure. Invalid card replies were skipped and the other models were tried; switch to Normal explanation or retry Cards later."
           : "Each failed API-key slot and provider route was skipped and the same request was sent to the next available alternative, but none returned a result. Check provider keys, model IDs, and quota, then retry.",
