@@ -85,6 +85,7 @@ test("failed model routes cool down for later requests without delaying current-
   assert.equal(modelRouteCooldownMs(401), 15 * 60_000);
   assert.equal(modelRouteCooldownMs(404), 30 * 60_000);
   assert.equal(modelRouteCooldownMs(503), 45_000);
+  assert.equal(modelRouteCooldownMs(413), 0, "input-size failures should be retryable with smaller context");
 });
 
 test("ordinary provider calls are bounded between three and eight seconds", () => {
