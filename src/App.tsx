@@ -3980,6 +3980,7 @@ function LibraryPageReal({
   useEffect(() => setYearFilter(learnerLevel || "all"), [learnerLevel]);
   const [sortBy, setSortBy] = useState("date-desc");
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [libraryGuideOpen, setLibraryGuideOpen] = useState(false);
   const [libraryPage, setLibraryPage] = useState(1);
   const libraryPageSize = 18;
   useEffect(() => setLibraryPage(1), [search, unitFilter, typeFilter, paperYearFilter, sessionFilter, courseFilter, ingestionFilter, yearFilter, sortBy]);
@@ -4289,10 +4290,23 @@ function LibraryPageReal({
         {isAdmin && <button className="secondary-button" type="button" onClick={openAdmin}>
           <Sparkles size={14} /> Organize Library
         </button>}
+        <button className="secondary-button" type="button" onClick={() => setLibraryGuideOpen((open) => !open)} aria-expanded={libraryGuideOpen}>
+          <BookOpen size={14} /> {libraryGuideOpen ? "Hide Library guide" : "How to use Library"}
+        </button>
         <button className="primary-button" onClick={openCreate}>
           <Plus size={14} style={{ verticalAlign: "middle" }} /> Add material
         </button>
       </div>
+      {libraryGuideOpen && <section className="card card-pad library-guide" style={{ marginBottom: 16 }}>
+        <div className="card-header"><div><div className="section-label">How to use the Library</div><div className="field-hint">A quick guide to finding, understanding, and studying from the collection.</div></div><button className="icon-button" type="button" onClick={() => setLibraryGuideOpen(false)} aria-label="Close Library guide"><X size={15} /></button></div>
+        <div className="page-grid" style={{ marginTop: 14 }}>
+          <div><strong>1. Search normally</strong><p className="field-hint">Use the large search box for titles, topics, units, course codes, exam sessions, and variants. Small spelling mistakes are supported.</p></div>
+          <div><strong>2. Filter and move through pages</strong><p className="field-hint">Open <b>Filters</b> to narrow by unit, category, course code, exam year, exam session, indexing status, or study level. Use Previous and Next below the table.</p></div>
+          <div><strong>3. Ask Library AI</strong><p className="field-hint">Ask questions in ordinary language, such as “Find Constitutional Law questions about separation of powers.” AI uses indexed Library sources and shows the papers it found.</p></div>
+          <div><strong>4. Read and study</strong><p className="field-hint"><b>Preview & read</b> opens the paper. <b>Summarise</b> creates organized study notes from its indexed sections. Use <b>Retry AI</b> when indexing has failed.</p></div>
+          {isAdmin && <div><strong>5. Organize imported papers</strong><p className="field-hint">Use <b>Organize Library</b> to extract titles, units, course codes, years, sessions, and variants from the paper itself. Progress is saved and can resume.</p></div>}
+        </div>
+      </section>}
       <section className="card card-pad" style={{ marginBottom: 16 }}>
         <div className="card-header">
           <div><div className="section-label">AI Library search</div><div className="field-hint">Ask in ordinary language, for example: “Find Constitutional Law questions about separation of powers.”</div></div>
