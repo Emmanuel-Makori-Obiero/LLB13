@@ -1502,7 +1502,7 @@ function App() {
         <MaterialForm
           units={units}
           onClose={() => setMaterialFormOpen(false)}
-          onCreated={async (material, file) => {
+          onCreated={async (material, file, extractedText) => {
             try {
               const created = await repository.createMaterial(material, file);
               setMaterials((current) => [created, ...current]);
@@ -1515,6 +1515,7 @@ function App() {
                     created.author ?? undefined,
                     created.target_years ?? [],
                     created.id,
+                    extractedText,
                   );
                   setNotice(`Material uploaded and added to AI knowledge (${indexed.chunks} sections).`);
                 } catch (indexError) {
@@ -4318,10 +4319,11 @@ function MaterialForm({
   units: Unit[];
   initial?: Material;
   onClose: () => void;
-  onCreated?: (material: Omit<Material, "id">, file?: File) => Promise<void>;
+  onCreated?: (material: Omit<Material, "id">, file?: File, extractedText?: string) => Promise<void>;
   onUpdated?: (material: Omit<Material, "id">) => Promise<void>;
 }) {
   const [file, setFile] = useState<File>();
+  const extractedTextRef = useRef<{ file: File; text: string } | null>(null);
   const imagePickerRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
   const [extracting, setExtracting] = useState(false);
@@ -4372,6 +4374,7 @@ function MaterialForm({
           "OCR could not find readable text in this file. Try a clearer scan or enter the details manually.",
         );
       }
+      extractedTextRef.current = { file: selectedFile, text };
       if (text.length < 60) {
         setExtractNote("OCR found only a small amount of text. AI will still try to identify the details; review them carefully.");
       }
@@ -4382,7 +4385,8 @@ function MaterialForm({
         messages: [
           {
             role: "user",
-            content: `Inspect this uploaded book. Available units are: ${availableUnits || "none"}. Choose a matching unit only from that list. File name: ${selectedFile.name}\n\nBOOK TEXT:\n${text.slice(0, 60000)}`,
+            // Metadata only needs an opening sample; full text is indexed after the user saves the Library item.
+            content: `Inspect this uploaded book. Available units are: ${availableUnits || "none"}. Choose a matching unit only from that list. File name: ${selectedFile.name}\n\nBOOK TEXT (opening sample):\n${text.slice(0, 12_000)}`,
           },
         ],
       });
@@ -4452,7 +4456,10 @@ function MaterialForm({
           if (savingMaterial || extracting) return;
           setSavingMaterial(true);
           try {
-            await (initial ? onUpdated?.(form) : onCreated?.(form, file));
+            const extractedText = file && extractedTextRef.current?.file === file
+              ? extractedTextRef.current.text
+              : undefined;
+            await (initial ? onUpdated?.(form) : onCreated?.(form, file, extractedText));
           } finally {
             setSavingMaterial(false);
           }

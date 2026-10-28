@@ -9,6 +9,7 @@ import {
   selectDocumentChunkIndexes,
   shouldAutoRetrieveConstitution,
 } from "./retrieval.ts";
+import { hasProviderPayloadTooLarge, keepRecentConversation, onlyAttemptedProvidersRejectedForSize, shrinkRetrievedPassages } from "./requestSizing.ts";
 import {
   ARENA_CASE_SYSTEM_PROMPT,
   EXAM_ANALYSIS_SYSTEM_PROMPT,
@@ -1203,45 +1204,66 @@ Deno.serve(async (req) => {
         ? "materials"
         : "mixed"
     : "general";
-  const ctx = sources.length
-    ? `<sources>\n${sources.map((s) => `<source id="${s.tag}" title="${s.title.replace(/"/g, "'")}"${s.author ? ` author="${s.author.replace(/"/g, "'")}"` : ""}${s.ref ? ` ref="${s.ref.replace(/"/g, "'")}"` : ""}>\n${s.content}\n</source>`).join("\n")}\n</sources>`
+  const formatSourceContext = (contextSources: Source[]) => contextSources.length
+    ? `<sources>\n${contextSources.map((s) => `<source id="${s.tag}" title="${s.title.replace(/"/g, "'")}"${s.author ? ` author="${s.author.replace(/"/g, "'")}"` : ""}${s.ref ? ` ref="${s.ref.replace(/"/g, "'")}"` : ""}>\n${s.content}\n</source>`).join("\n")}\n</sources>`
     : "";
-
-  const msgs: Msg[] = [
-    {
-      role: "system",
-      content: systemPrompt(mode, sources.length > 0, feature),
-    },
-    ...history.slice(0, -1),
-    {
-      role: "user",
-      content: ctx
-        ? `${ctx}\n\nStudent request:\n${last.content}`
-        : last.content,
-    },
-  ];
+  let requestSources = sources;
+  let priorHistory = history.slice(0, -1);
+  let historyContextReduced = false;
+  let sourceContextReduced = false;
+  const canReduceRetrievedPassages = !FEATURES[feature]?.docWide &&
+    !["quality_check", "notes", "notes_review", "notes_research", "summarize"].includes(feature);
 
   try {
-    const r = await callChain(msgs, {
-      feature,
-      temperature: strict ? 0.1 : 0.3,
-      json: FEATURES[feature].json,
-      fast: feature === "study_plan",
-      maxTokens: feature === "study_plan" || feature === "notes_review" ? 10_000 : undefined,
-      validateResponse: feature === "legal_process"
-        ? (text) => hasLegalProcessSteps(parseJsonObject(text))
-        : feature === "notes_review"
-        ? (text) => {
-            const value = parseJsonObject(text);
-            return typeof value?.corrected_notes === "string" && value.corrected_notes.trim().length >= 20 && Array.isArray(value.corrections) && Array.isArray(value.authority_checks);
-          }
-        : feature === "notes_research"
-        ? (text) => {
-            const value = parseJsonObject(text);
-            return Array.isArray(value?.legalIssues) && Array.isArray(value?.authorities) && Array.isArray(value?.searchQueries);
-          }
-        : undefined,
-    });
+    let r: Awaited<ReturnType<typeof callChain>> | undefined;
+    let lastProviderError: unknown;
+    for (let adaptiveRetry = 0; adaptiveRetry <= 2; adaptiveRetry += 1) {
+      const ctx = formatSourceContext(requestSources);
+      const msgs: Msg[] = [
+        { role: "system", content: systemPrompt(mode, requestSources.length > 0, feature) },
+        ...priorHistory,
+        { role: "user", content: ctx ? `${ctx}\n\nStudent request:\n${last.content}` : last.content },
+      ];
+      try {
+        r = await callChain(msgs, {
+          feature,
+          temperature: strict ? 0.1 : 0.3,
+          json: FEATURES[feature].json,
+          fast: feature === "study_plan",
+          maxTokens: feature === "study_plan" || feature === "notes_review" ? 10_000 : undefined,
+          validateResponse: feature === "legal_process"
+            ? (text) => hasLegalProcessSteps(parseJsonObject(text))
+            : feature === "notes_review"
+            ? (text) => {
+                const value = parseJsonObject(text);
+                return typeof value?.corrected_notes === "string" && value.corrected_notes.trim().length >= 20 && Array.isArray(value.corrections) && Array.isArray(value.authority_checks);
+              }
+            : feature === "notes_research"
+            ? (text) => {
+                const value = parseJsonObject(text);
+                return Array.isArray(value?.legalIssues) && Array.isArray(value?.authorities) && Array.isArray(value?.searchQueries);
+              }
+            : undefined,
+        });
+        break;
+      } catch (error) {
+        lastProviderError = error;
+        if (!hasProviderPayloadTooLarge(error) || adaptiveRetry === 2) throw error;
+        const recentHistory = keepRecentConversation(priorHistory, 4);
+        if (recentHistory.length < priorHistory.length) {
+          priorHistory = recentHistory;
+          historyContextReduced = true;
+          continue;
+        }
+        const smallerSources = canReduceRetrievedPassages
+          ? shrinkRetrievedPassages(requestSources)
+          : null;
+        if (!smallerSources) throw error;
+        requestSources = smallerSources;
+        sourceContextReduced = true;
+      }
+    }
+    if (!r) throw lastProviderError ?? new Error("No AI provider returned a response.");
     await admin.from("ai_usage").insert({
       user_id: u.user.id,
       feature,
@@ -1251,6 +1273,8 @@ Deno.serve(async (req) => {
 
     // post-checks
     const warnings: string[] = [];
+    if (historyContextReduced) warnings.push("Older conversation turns were removed to fit provider input limits; the current request was kept intact.");
+    if (sourceContextReduced) warnings.push("To fit provider input limits, lower-ranked retrieved passages were omitted as whole passages; no source text was truncated. Ask a narrower question for more detail.");
   let answer = r.text;
     // Convert model-generated neutral research leads into official, specific
     // Kenya Law searches without allowing the model to invent a judgment URL.
@@ -1258,7 +1282,7 @@ Deno.serve(async (req) => {
       const q = phrase.trim();
       return `[Search Kenya Law judgments for: ${q}](https://kenyalaw.org/search/?q=${encodeURIComponent(q)}&nature=Judgment)`;
     });
-    const valid = new Set(sources.map((s) => s.tag));
+    const valid = new Set(requestSources.map((s) => s.tag));
     const cited = new Set([...answer.matchAll(/\[(S\d+)\]/g)].map((m) => m[1]));
     for (const c of cited)
       if (!valid.has(c)) {
@@ -1266,7 +1290,7 @@ Deno.serve(async (req) => {
         warnings.push(`Removed an invalid citation (${c}).`);
       }
     if (
-      sources.length &&
+      requestSources.length &&
       ![...cited].some((c) => valid.has(c)) &&
       !FEATURES[feature].json &&
       feature !== "notes"
@@ -1280,7 +1304,7 @@ Deno.serve(async (req) => {
           .replace(/[^a-z0-9 ]+/g, " ")
           .replace(/\s+/g, " ")
           .trim();
-      const srcText = norm(sources.map((s) => s.content).join(" "));
+      const srcText = norm(requestSources.map((s) => s.content).join(" "));
       let flagged = false;
       answer = answer.replace(
         /\u201c([^\u201d]{60,})\u201d|"([^"\n]{60,})"/g,
@@ -1326,9 +1350,9 @@ Deno.serve(async (req) => {
       answer,
       data,
       basis,
-      grounded: sources.length > 0,
+      grounded: requestSources.length > 0,
       warnings,
-      sources: sources
+      sources: requestSources
         .filter((s) => cited.has(s.tag) || FEATURES[feature].docWide)
         .map((s) => ({ tag: s.tag, title: s.title, author: s.author, ref: s.ref })),
       provider: r.provider,
@@ -1340,14 +1364,16 @@ Deno.serve(async (req) => {
     const safeStatus = Number.isInteger(status) && status >= 400 && status < 600 ? status : 503;
     const publicMessage = (err as { publicMessage?: unknown }).publicMessage;
     const attempts = (err as { attempts?: unknown }).attempts;
-    const requestTooLarge = Array.isArray(attempts) && attempts.some((attempt) => (attempt as { status?: unknown }).status === "413");
+    const requestTooLarge = onlyAttemptedProvidersRejectedForSize(attempts);
     const invalidCardResponse =
       feature === "legal_process" &&
       Array.isArray(attempts) &&
       attempts.some((attempt) => (attempt as { status?: unknown }).status === "invalid_response");
     return json(
       {
-        error: typeof publicMessage === "string" ? publicMessage : requestTooLarge
+        error: typeof publicMessage === "string" ? publicMessage : feature === "book_metadata"
+          ? "Automatic book-detail extraction could not complete because the available AI providers rejected or could not process the request. Your file is still selected; enter the details manually and continue uploading."
+          : requestTooLarge
           ? feature === "exam_analysis"
             ? "One or more providers rejected the exam-review request as too large (HTTP 413). The unrelated prompt overhead has been removed; the selected paper was not truncated. If this persists, shorten the student-answer text and retry."
             : feature === "summarize"
@@ -1356,7 +1382,7 @@ Deno.serve(async (req) => {
                 : "Even one indexed book section was rejected as too large by all available providers (HTTP 413). The text was not truncated; check whether this section contains an unusually long or malformed page, then retry."
               : feature === "legal_process" || feature === "legal_explain"
                 ? "One or more providers rejected the Legal what-if request as too large (HTTP 413). Your question was not truncated; the request uses bounded, relevant source context and output. If this persists, shorten unnecessary scenario detail and retry."
-                : "One or more providers rejected this request as too large (HTTP 413). The source was not truncated; try a smaller request or retry later."
+                : "One or more providers rejected this request as too large (HTTP 413). The endpoint can retry with fewer old chat turns and, for ordinary retrieval only, fewer whole passages; complete-document review text is preserved and no source passage is truncated. If this persists, ask a narrower question or select a smaller source section."
           : invalidCardResponse
             ? "The providers did not return a usable Legal what-if card structure. Invalid card replies were skipped and the other models were tried; switch to Normal explanation or retry Cards later."
           : "Each failed API-key slot and provider route was skipped and the same request was sent to the next available alternative, but none returned a result. Check provider keys, model IDs, and quota, then retry.",

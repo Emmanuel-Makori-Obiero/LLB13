@@ -26,6 +26,9 @@ export function combineProviderChains(
 }
 
 export function modelRouteCooldownMs(status: number, retryAfterSeconds = 0): number {
+  // A 413 describes this request's size, not provider health. The same route
+  // may succeed immediately when a later request carries less context.
+  if (status === 413) return 0;
   if (status === 429) return Math.max(60_000, retryAfterSeconds * 1000);
   if (status === 401 || status === 403) return 15 * 60_000;
   if (status === 400 || status === 404) return 30 * 60_000;
