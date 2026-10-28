@@ -107,7 +107,7 @@ export default function AdminPage({
       while (job.status === "running" || job.status === "queued" || job.status === "paused") {
         const wait = Number(started.data.retry_after_seconds ?? 0);
         if (job.status === "paused" && wait > 0) {
-          setOrganizerMessage(`Gemini rate limit reached. Waiting ${wait}s, then continuing…`);
+          setOrganizerMessage(`Some AI models are temporarily unavailable. Waiting ${wait}s, then trying another eligible model…`);
           await new Promise((resolve) => window.setTimeout(resolve, wait * 1000));
         }
         let textSample: string | undefined;
@@ -117,7 +117,7 @@ export default function AdminPage({
         job = step.data.job as OrganizerJob;
         setOrganizerJob(job);
         if (step.data.paused && step.data.retry_after_seconds) {
-          setOrganizerMessage(`Gemini rate limit reached. Waiting ${step.data.retry_after_seconds}s, then continuing…`);
+          setOrganizerMessage(`Some AI models are temporarily unavailable. Waiting ${step.data.retry_after_seconds}s, then trying another eligible model…`);
           await new Promise((resolve) => window.setTimeout(resolve, Number(step.data.retry_after_seconds) * 1000));
         } else setOrganizerMessage(job.status === "completed" ? "Organization complete." : `Checking paper ${Math.min(job.processed + 1, job.total)} of ${job.total}…`);
         if (job.status === "failed") break;
@@ -317,7 +317,7 @@ export default function AdminPage({
           <button className="primary-button" type="button" disabled={organizerBusy} onClick={() => void runOrganizer()}><Play size={14} /> {organizerBusy ? "Organizing…" : organizerJob?.status === "paused" ? "Resume organization" : "Organize Library"}</button>
           {organizerJob && <div className="field-hint" style={{ marginTop: 12 }}>{organizerJob.processed} of {organizerJob.total} papers checked · {organizerJob.succeeded} corrected · {organizerJob.failed} failed · {organizerJob.total ? Math.round(organizerJob.processed / organizerJob.total * 100) : 100}%</div>}
           {organizerMessage && <div className="field-hint" style={{ marginTop: 6 }}>{organizerMessage}</div>}
-          {organizerJob?.last_error && <div className="connection-error" style={{ marginTop: 10 }}>{organizerJob.last_error}</div>}
+          {organizerJob?.status === "paused" && <div className="field-hint" style={{ marginTop: 10 }}>The unavailable model was skipped. Saved progress will continue automatically after the retry delay.</div>}
         </div>
         <AdminOversight />
         <AdminTimetablePlanner

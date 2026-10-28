@@ -35,7 +35,7 @@ async function modelsForKey(key: string) { const cached = modelCache.get(key); i
       const score = (model: string) => (model.includes("pro") ? 40 : 20) + (model.includes("3.8") ? 30 : model.includes("3.") ? 20 : 0) + (model.includes("flash") ? 10 : 0) - (model.includes("exp") || model.includes("preview") ? 5 : 0);
       return score(right) - score(left);
     });
-    const result = ranked.length ? ranked.slice(0, 2) : fallback;
+    const result = ranked.length ? ranked : fallback;
     modelCache.set(key, result);
     return result;
   } catch { modelCache.set(key, fallback); return fallback; }
@@ -104,7 +104,9 @@ Deno.serve(async (req) => {
   const paperBytes = new Uint8Array(await downloaded.data.arrayBuffer());
   const fallbackDeadline = Date.now() + 40000;
   for (const candidate of keys) {
-    const models = await modelsForKey(candidate.value);
+    const availableModels = await modelsForKey(candidate.value);
+    const modelStart = job.processed % Math.max(1, availableModels.length);
+    const models = [...availableModels.slice(modelStart), ...availableModels.slice(0, modelStart)].slice(0, 2);
     for (const model of models) {
       if (Date.now() >= fallbackDeadline) { lastError = "Fallback deadline reached before another model could be tried."; break; }
       try { metadata = await gemini(paperBytes, material.mime_type ?? "application/pdf", candidate.value, model, typeof body.text_sample === "string" ? body.text_sample : undefined); break; }
