@@ -45,7 +45,7 @@ Deno.serve(async (req) => {
   const { data: { user } } = await userClient.auth.getUser();
   if (!user) return json({ error: "Sign in required." }, 401);
   const admin = adminClient();
-  const { data: allowed } = await admin.rpc("is_admin", {});
+  const { data: allowed } = await userClient.rpc("is_admin", {});
   if (!allowed) return json({ error: "Admin access required." }, 403);
   let body: { action?: string; job_id?: string } = {};
   try { body = await req.json(); } catch { return json({ error: "Invalid request." }, 400); }
