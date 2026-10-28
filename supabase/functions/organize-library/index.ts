@@ -23,8 +23,30 @@ function retrySeconds(status: number, text: string) {
   const match = text.match(/retry[^\d]*(\d+(?:\.\d+)?)\s*s/i);
   return Math.min(3600, Math.max(20, Math.ceil(Number(match?.[1] ?? (status === 429 ? 60 : 30)))));
 }
-async function gemini(file: Uint8Array, mimeType: string, key: string) {
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(key)}`, {
+const modelCache = new Map<string, string[]>();
+async function modelsForKey(key: string) {
+  const cached = modelCache.get(key);
+  if (cached) return cached;
+  const fallback = ["gemini-3.8-flash"];
+  try {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`);
+    if (!response.ok) { modelCache.set(key, fallback); return fallback; }
+    const body = await response.json();
+    const discovered = (Array.isArray(body?.models) ? body.models : [])
+      .filter((model: { supportedGenerationMethods?: string[] }) => model.supportedGenerationMethods?.includes("generateContent"))
+      .map((model: { name?: string }) => String(model.name ?? "").replace(/^models\//, ""))
+      .filter((model: string) => /^gemini-/i.test(model));
+    const ranked = [...new Set(discovered)].sort((left, right) => {
+      const score = (model: string) => (model.includes("pro") ? 40 : 20) + (model.includes("3.8") ? 30 : model.includes("3.") ? 20 : 0) + (model.includes("flash") ? 10 : 0) - (model.includes("exp") || model.includes("preview") ? 5 : 0);
+      return score(right) - score(left);
+    });
+    const result = ranked.length ? ranked : fallback;
+    modelCache.set(key, result);
+    return result;
+  } catch { modelCache.set(key, fallback); return fallback; }
+}
+async function gemini(file: Uint8Array, mimeType: string, key: string, model: string) {
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`, {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ contents: [{ parts: [
       { inlineData: { mimeType: mimeType || "application/octet-stream", data: toBase64(file) } },
@@ -86,9 +108,14 @@ Deno.serve(async (req) => {
   if (!keys.length) return json({ error: "No GEMINI_API_KEY_* secret is configured." }, 503);
   let metadata: Record<string, unknown> | null = null;
   let lastError = "";
+  const paperBytes = new Uint8Array(await downloaded.data.arrayBuffer());
   for (const candidate of keys) {
-    try { metadata = await gemini(new Uint8Array(await downloaded.data.arrayBuffer()), material.mime_type ?? "application/pdf", candidate.value); break; }
-    catch (cause) { lastError = cause instanceof Error ? cause.message : String(cause); const status = Number((cause as { providerStatus?: number }).providerStatus ?? 0); if (status === 429 || status >= 500) continue; break; }
+    const models = await modelsForKey(candidate.value);
+    for (const model of models) {
+      try { metadata = await gemini(paperBytes, material.mime_type ?? "application/pdf", candidate.value, model); break; }
+      catch (cause) { lastError = `Model ${model} with key #${candidate.slot}: ${cause instanceof Error ? cause.message : String(cause)}`; const status = Number((cause as { providerStatus?: number }).providerStatus ?? 0); if (status === 429 || status === 404 || status >= 500) continue; }
+    }
+    if (metadata) break;
   }
   if (!metadata) {
     const pause = retrySeconds(429, lastError);
