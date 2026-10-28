@@ -1083,3 +1083,52 @@ html, body { background-size: contain; background-position: center center; backg
 .public-playlist-item iframe { display:block; width:100%; min-height:180px; border:0; background:#111; }
 .public-playlist-item .chip { flex:none; }
 @media (min-width:700px) { .public-playlist-item iframe { min-height:260px; } }
+
+/* Library search is the primary navigation control, not a compact utility field. */
+.library-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  width: 100%;
+  margin: 10px 0 18px;
+}
+.library-search-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 560px;
+  min-width: min(100%, 360px);
+  min-height: 50px;
+  padding: 0 16px;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  color: var(--forest);
+  box-shadow: 0 3px 0 color-mix(in srgb, var(--forest) 16%, transparent);
+}
+.library-search-box:focus-within {
+  outline: 2px solid var(--forest);
+  outline-offset: 2px;
+}
+.library-search-box input {
+  width: 100%;
+  min-width: 0;
+  min-height: 46px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+}
+.library-search-box input::placeholder { color: var(--muted); }
+.library-toolbar > .library-filter-toggle,
+.library-toolbar > .secondary-button,
+.library-toolbar > .primary-button { min-height: 50px; }
+@media (max-width: 700px) {
+  .library-toolbar { align-items: stretch; }
+  .library-search-box { flex-basis: 100%; min-width: 100%; }
+  .library-toolbar > .library-filter-toggle,
+  .library-toolbar > .secondary-button,
+  .library-toolbar > .primary-button { flex: 1 1 auto; }
+}

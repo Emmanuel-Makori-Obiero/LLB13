@@ -4192,8 +4192,8 @@ function LibraryPageReal({
         title="The library."
         subtitle="Find the authority, note, or past paper you need without digging through folders."
       />
-      <div className="toolbar">
-        <div className="search">
+      <div className="toolbar library-toolbar">
+        <div className="search library-search-box">
           <Search size={15} />
           <input
             value={search}
