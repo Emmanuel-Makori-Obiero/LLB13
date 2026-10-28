@@ -14,6 +14,7 @@ import {
   CalendarDays,
   Check,
   CheckSquare,
+  ChevronLeft,
   ChevronRight,
   Clock3,
   Download,
@@ -1269,6 +1270,8 @@ function App() {
             <LibraryPageReal
               materials={filteredMaterials}
               learnerLevel={profile.learnerLevel}
+              isAdmin={isAdmin}
+              openAdmin={() => setView("admin")}
               search={search}
               setSearch={setSearch}
               openCreate={() => setMaterialFormOpen(true)}
@@ -3937,6 +3940,8 @@ function PracticeCoach() {
 function LibraryPageReal({
   materials,
   learnerLevel,
+  isAdmin,
+  openAdmin,
   search,
   setSearch,
   openCreate,
@@ -3951,6 +3956,8 @@ function LibraryPageReal({
 }: {
   materials: Material[];
   learnerLevel: LearnerLevel | "";
+  isAdmin: boolean;
+  openAdmin: () => void;
   search: string;
   setSearch: (value: string) => void;
   openCreate: () => void;
@@ -3973,6 +3980,9 @@ function LibraryPageReal({
   useEffect(() => setYearFilter(learnerLevel || "all"), [learnerLevel]);
   const [sortBy, setSortBy] = useState("date-desc");
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [libraryPage, setLibraryPage] = useState(1);
+  const libraryPageSize = 18;
+  useEffect(() => setLibraryPage(1), [search, unitFilter, typeFilter, paperYearFilter, sessionFilter, courseFilter, ingestionFilter, yearFilter, sortBy]);
   const archiveInputRef = useRef<HTMLInputElement>(null);
   const [summaryMaterial, setSummaryMaterial] = useState<Material | null>(null);
   const [summaryResult, setSummaryResult] = useState<AIResult | null>(null);
@@ -4119,7 +4129,27 @@ function LibraryPageReal({
   const paperYears = [...new Set(materials.map((material) => material.exam_year).filter((year): year is number => Number.isFinite(year)))].sort((a, b) => b - a);
   const examSessions = [...new Set(materials.map((material) => material.exam_session).filter((value): value is string => Boolean(value)))].sort((a, b) => a.localeCompare(b));
   const courseCodes = [...new Set(materials.map((material) => material.course_code).filter((value): value is string => Boolean(value)))].sort((a, b) => a.localeCompare(b));
+  const normalizedSearch = search.trim().toLocaleLowerCase().replace(/[^a-z0-9\s]/g, " ");
+  const levenshtein = (left: string, right: string) => {
+    const row = Array.from({ length: right.length + 1 }, (_, index) => index);
+    for (let i = 1; i <= left.length; i += 1) {
+      let diagonal = row[0]; row[0] = i;
+      for (let j = 1; j <= right.length; j += 1) {
+        const above = row[j];
+        row[j] = left[i - 1] === right[j - 1] ? diagonal : Math.min(row[j] + 1, row[j - 1] + 1, diagonal + 1);
+        diagonal = above;
+      }
+    }
+    return row[right.length];
+  };
+  const fuzzyMatches = (material: Material) => {
+    if (!normalizedSearch) return true;
+    const haystack = [material.title, material.topic, material.unit, material.course_code, material.exam_session, material.paper_variant, material.type].filter(Boolean).join(" ").toLocaleLowerCase();
+    const words = haystack.split(/\s+/).filter(Boolean);
+    return normalizedSearch.split(/\s+/).filter(Boolean).every((token) => haystack.includes(token) || words.some((word) => word.length > 2 && levenshtein(token, word) <= Math.max(1, Math.floor(token.length * 0.34))));
+  };
   const visibleMaterials = [...materials]
+    .filter(fuzzyMatches)
     .filter((material) => unitFilter === "all" || material.unit === unitFilter)
     .filter((material) => typeFilter === "all" || material.type === typeFilter)
     .filter((material) => paperYearFilter === "all" || String(material.exam_year ?? "") === paperYearFilter)
@@ -4133,6 +4163,8 @@ function LibraryPageReal({
       if (sortBy === "title-desc") return b.title.localeCompare(a.title);
       return (Date.parse(b.date) || 0) - (Date.parse(a.date) || 0);
     });
+  const totalLibraryPages = Math.max(1, Math.ceil(visibleMaterials.length / libraryPageSize));
+  const pagedMaterials = visibleMaterials.slice((libraryPage - 1) * libraryPageSize, libraryPage * libraryPageSize);
   return (
     <>
       <PageHeading
@@ -4146,7 +4178,7 @@ function LibraryPageReal({
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search title, topic, unit…"
+            placeholder="Search papers, units, or codes (typos okay)…"
           />
         </div>
         <button
@@ -4234,6 +4266,9 @@ function LibraryPageReal({
         <button className="secondary-button" type="button" disabled={bulkImportBusy} onClick={() => archiveInputRef.current?.click()}>
           <FolderOpen size={14} /> {bulkImportBusy ? "Importing archive…" : "Import archive"}
         </button>
+        {isAdmin && <button className="secondary-button" type="button" onClick={openAdmin}>
+          <Sparkles size={14} /> Organize Library
+        </button>}
         <button className="primary-button" onClick={openCreate}>
           <Plus size={14} style={{ verticalAlign: "middle" }} /> Add material
         </button>
@@ -4307,7 +4342,7 @@ function LibraryPageReal({
             </tr>
           </thead>
           <tbody>
-            {visibleMaterials.map((material) => (
+            {pagedMaterials.map((material) => (
               <tr key={material.id}>
                 <td>
                   <span className="material-title">{material.title}</span>
@@ -4387,6 +4422,14 @@ function LibraryPageReal({
             No materials match these search and filter choices. Adjust the filters or add a material.
           </div>
         )}
+        {visibleMaterials.length > 0 && <div className="library-pagination" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "14px 4px 2px" }}>
+          <span className="field-hint">Showing {(libraryPage - 1) * libraryPageSize + 1}–{Math.min(libraryPage * libraryPageSize, visibleMaterials.length)} of {visibleMaterials.length}</span>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button className="secondary-button small-action" type="button" disabled={libraryPage <= 1} onClick={() => setLibraryPage((page) => Math.max(1, page - 1))}><ChevronLeft size={13} /> Previous</button>
+            <span className="chip">Page {libraryPage} of {totalLibraryPages}</span>
+            <button className="secondary-button small-action" type="button" disabled={libraryPage >= totalLibraryPages} onClick={() => setLibraryPage((page) => Math.min(totalLibraryPages, page + 1))}>Next <ChevronRight size={13} /></button>
+          </div>
+        </div>}
       </div>
     </>
   );
