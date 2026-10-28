@@ -3882,6 +3882,10 @@ function LibraryPageReal({
 }) {
   const [unitFilter, setUnitFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [paperYearFilter, setPaperYearFilter] = useState("all");
+  const [sessionFilter, setSessionFilter] = useState("all");
+  const [courseFilter, setCourseFilter] = useState("all");
+  const [ingestionFilter, setIngestionFilter] = useState("all");
   const [yearFilter, setYearFilter] = useState(learnerLevel || "all");
   useEffect(() => setYearFilter(learnerLevel || "all"), [learnerLevel]);
   const [sortBy, setSortBy] = useState("date-desc");
@@ -4002,9 +4006,16 @@ function LibraryPageReal({
   };
   const units = [...new Set(materials.map((material) => material.unit).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   const types = [...new Set(materials.map((material) => material.type).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const paperYears = [...new Set(materials.map((material) => material.exam_year).filter((year): year is number => Number.isFinite(year)))].sort((a, b) => b - a);
+  const examSessions = [...new Set(materials.map((material) => material.exam_session).filter((value): value is string => Boolean(value)))].sort((a, b) => a.localeCompare(b));
+  const courseCodes = [...new Set(materials.map((material) => material.course_code).filter((value): value is string => Boolean(value)))].sort((a, b) => a.localeCompare(b));
   const visibleMaterials = [...materials]
     .filter((material) => unitFilter === "all" || material.unit === unitFilter)
     .filter((material) => typeFilter === "all" || material.type === typeFilter)
+    .filter((material) => paperYearFilter === "all" || String(material.exam_year ?? "") === paperYearFilter)
+    .filter((material) => sessionFilter === "all" || material.exam_session === sessionFilter)
+    .filter((material) => courseFilter === "all" || material.course_code === courseFilter)
+    .filter((material) => ingestionFilter === "all" || (material.ingestion_status || "ready") === ingestionFilter)
     .filter((material) => yearFilter === "all" || materialVisibleToLevel(material.target_years, yearFilter))
     .sort((a, b) => {
       if (sortBy === "date-asc") return (Date.parse(a.date) || 0) - (Date.parse(b.date) || 0);
@@ -4050,6 +4061,36 @@ function LibraryPageReal({
             <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
               <option value="all">All categories</option>
               {types.map((type) => <option key={type} value={type}>{type}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>Course code</span>
+            <select value={courseFilter} onChange={(event) => setCourseFilter(event.target.value)}>
+              <option value="all">All courses</option>
+              {courseCodes.map((code) => <option key={code} value={code}>{code}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>Exam year</span>
+            <select value={paperYearFilter} onChange={(event) => setPaperYearFilter(event.target.value)}>
+              <option value="all">All years</option>
+              {paperYears.map((year) => <option key={year} value={String(year)}>{year}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>Exam session</span>
+            <select value={sessionFilter} onChange={(event) => setSessionFilter(event.target.value)}>
+              <option value="all">All sessions</option>
+              {examSessions.map((session) => <option key={session} value={session}>{session}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>Index status</span>
+            <select value={ingestionFilter} onChange={(event) => setIngestionFilter(event.target.value)}>
+              <option value="all">All statuses</option>
+              <option value="ready">Ready</option>
+              <option value="embedding">Embedding</option>
+              <option value="failed">Failed</option>
             </select>
           </label>
           <label>
@@ -4123,7 +4164,7 @@ function LibraryPageReal({
               <tr key={material.id}>
                 <td>
                   <span className="material-title">{material.title}</span>
-                  <span className="material-sub">{material.author ? `By ${material.author} · ` : ""}{material.topic}{material.target_years?.length ? ` · ${material.target_years.map((id) => learnerLevels.find((level) => level.id === id)?.label ?? id).join(", ")}` : " · All cohorts"}</span>
+                  <span className="material-sub">{material.author ? `By ${material.author} · ` : ""}{material.topic}{material.paper_variant && material.paper_variant !== "Regular" ? ` · ${material.paper_variant}` : ""}{material.target_years?.length ? ` · ${material.target_years.map((id) => learnerLevels.find((level) => level.id === id)?.label ?? id).join(", ")}` : " · All cohorts"}</span>
                 </td>
                 <td>
                   <span className="chip">
@@ -4134,6 +4175,7 @@ function LibraryPageReal({
                 <td>{material.unit}</td>
                 <td>{material.date}</td>
                 <td>
+                  {material.ingestion_status && material.ingestion_status !== "ready" && <span className="chip">{material.ingestion_status}</span>}
                   {material.url ? (
                     <div className="resource-actions">
                       <button

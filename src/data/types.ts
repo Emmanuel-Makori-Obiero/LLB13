@@ -22,6 +22,16 @@ export type Material = {
   owner_id?: string | null;
   file_sha256?: string | null;
   target_years?: string[] | null;
+  archive_path?: string | null;
+  exam_year?: number | null;
+  exam_session?: string | null;
+  course_code?: string | null;
+  paper_variant?: string | null;
+  mime_type?: string | null;
+  file_size?: number | null;
+  ingestion_status?: "queued" | "extracting" | "indexing" | "embedding" | "ready" | "failed" | string | null;
+  ingestion_error?: string | null;
+  metadata_confidence?: number | null;
 };
 export type AssignmentStatus =
   | "Not Started"

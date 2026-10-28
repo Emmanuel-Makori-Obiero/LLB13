@@ -632,6 +632,39 @@ async function filterRowsByLearnerLevel(db: any, rows: any[], learnerLevel?: str
   return rows.filter((row) => visibleIds.has(String(row.document_id)));
 }
 
+async function vectorRows(db: any, query: string, scope: string, selectedIds: string[], limit: number): Promise<RetrievalRow[]> {
+  const key = Deno.env.get("OPENAI_API_KEY");
+  if (!key || !query.trim()) return [];
+  try {
+    const response = await fetch("https://api.openai.com/v1/embeddings", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: Deno.env.get("EMBEDDING_MODEL") ?? "text-embedding-3-small", input: query, dimensions: 1536 }),
+    });
+    if (!response.ok) return [];
+    const body = await response.json();
+    const embedding = body?.data?.[0]?.embedding;
+    if (!Array.isArray(embedding)) return [];
+    const { data } = await db.rpc("ai_vector_search", {
+      query_embedding: embedding,
+      p_scope: scope,
+      p_limit: Math.max(limit, 12),
+      p_document_ids: selectedIds.length ? selectedIds : null,
+    });
+    return (data ?? []).map((row: any) => ({
+      document_id: row.document_id,
+      idx: row.idx,
+      title: row.title,
+      author: null,
+      citation: row.citation,
+      content: row.content,
+    }));
+  } catch {
+    // Semantic search is additive; provider or extension failures fall back to tsvector.
+    return [];
+  }
+}
+
 async function retrieve(
   db: any,
   mode: Mode,
@@ -839,6 +872,10 @@ async function retrieve(
     });
     if (error) throw new Error("retrieval failed");
     rows = await filterRowsByLearnerLevel(db, data ?? [], learnerLevel);
+    const semanticRows = await vectorRows(db, query, scope, selectedIds, limits.query);
+    const combined = new Map<string, RetrievalRow>();
+    for (const row of [...rows, ...semanticRows]) combined.set(`${row.document_id}:${row.idx ?? row.content}`, row);
+    rows = [...combined.values()];
     let articleChunkReserve = 0;
     if (constitutionQuestion && constitutionIds.length && articleNumbers.length) {
       const exact = await exactConstitutionRows(db, constitutionIds, articleNumbers);

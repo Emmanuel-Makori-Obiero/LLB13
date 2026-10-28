@@ -41,6 +41,25 @@ When both values are present, `src/data/repository.ts` uses Supabase as the only
 
 The Library accepts either a web link or a file upload and stores uploaded files in the `materials` Supabase Storage bucket.
 
+### Bulk past-paper ingestion
+
+For a large archive, use `tools/past-paper-ingest.mjs` instead of adding papers one by one. Apply `supabase/migrations/036_library_past_papers_ingestion.sql`, then run a dry run first:
+
+```shell
+node tools/past-paper-ingest.mjs --archive /path/to/ALLLAWPASTPAPERS.rar --dry-run
+```
+
+The dry run extracts supported DOCX/PDF/text files, reports the detected course code, exam year, session, paper variant, text-chunk count, and metadata confidence, and writes `past-paper-ingestion-manifest.json`. A real run needs the Supabase project URL and service-role key in the shell environment:
+
+```shell
+SUPABASE_URL=https://your-project.supabase.co \
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key \
+OPENAI_API_KEY=your-embedding-key \
+node tools/past-paper-ingest.mjs --archive /path/to/ALLLAWPASTPAPERS.rar
+```
+
+`OPENAI_API_KEY` is optional. Without it, each paper is still uploaded, metadata-tagged, chunked, and added to the exact full-text (`tsvector`) index. With it, the importer also writes `text-embedding-3-small` vectors to `ai_chunks.embedding` for semantic retrieval. The importer is restartable by archive path and keeps the original relative path, SHA-256, extraction status, and failed-file details for audit. Never expose the service-role key in the browser or commit it to the repository.
+
 ## Live discussion rooms
 
 Discussion rooms use browser WebRTC for peer-to-peer audio/video and Supabase Realtime Broadcast/Presence for signaling and participant presence. No paid meeting provider is required. Camera and microphone access requires HTTPS in production or `localhost` during development.
