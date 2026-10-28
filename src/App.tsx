@@ -79,6 +79,7 @@ import type {
   Unit,
 } from "./data/types";
 import { unitReps } from "./data/types";
+type LibraryOrganizerJob = { id: string; status: string; total: number; processed: number; succeeded: number; failed: number; last_error?: string | null; next_retry_at?: string | null };
 import MeetingRoom from "./MeetingRoom";
 import LoginPage, { ResetPasswordPage } from "./AuthPage";
 import LandingPage, { HelpButton } from "./LandingPage";
@@ -3984,6 +3985,22 @@ function LibraryPageReal({
   const [libraryPage, setLibraryPage] = useState(1);
   const libraryPageSize = 18;
   useEffect(() => setLibraryPage(1), [search, unitFilter, typeFilter, paperYearFilter, sessionFilter, courseFilter, ingestionFilter, yearFilter, sortBy]);
+  const [organizerJob, setOrganizerJob] = useState<LibraryOrganizerJob | null>(null);
+  const [organizerLoadError, setOrganizerLoadError] = useState("");
+  useEffect(() => {
+    let active = true;
+    const loadOrganizerProgress = async () => {
+      if (!isAdmin || !supabase) return;
+      const { data, error } = await supabase.functions.invoke("organize-library", { body: { action: "latest" } });
+      if (!active) return;
+      if (error) { setOrganizerLoadError(error.message || "Could not load organizer progress."); return; }
+      setOrganizerLoadError("");
+      setOrganizerJob(data?.job ? data.job as LibraryOrganizerJob : null);
+    };
+    void loadOrganizerProgress();
+    const timer = window.setInterval(() => void loadOrganizerProgress(), 5000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [isAdmin]);
   const archiveInputRef = useRef<HTMLInputElement>(null);
   const [summaryMaterial, setSummaryMaterial] = useState<Material | null>(null);
   const [summaryResult, setSummaryResult] = useState<AIResult | null>(null);
@@ -4297,6 +4314,10 @@ function LibraryPageReal({
           <Plus size={14} style={{ verticalAlign: "middle" }} /> Add material
         </button>
       </div>
+      {(organizerJob || organizerLoadError) && <section className="card card-pad library-organizer-progress" style={{ marginBottom: 16 }}>
+        <div className="card-header"><div><div className="section-label">Library organization progress</div><div className="field-hint">This panel updates automatically while imported papers are being checked.</div></div><span className={`chip ${organizerJob?.status === "completed" ? "green" : ""}`}>{organizerJob?.status ?? "unavailable"}</span></div>
+        {organizerLoadError ? <div className="connection-error" style={{ marginTop: 10 }}>{organizerLoadError}</div> : organizerJob && <><div className="library-progress-summary"><strong>{organizerJob.processed} of {organizerJob.total}</strong><span>{organizerJob.succeeded} corrected · {organizerJob.failed} failed · {organizerJob.total ? Math.round(organizerJob.processed / organizerJob.total * 100) : 100}%</span></div><div className="progress library-progress-track"><span style={{ width: `${organizerJob.total ? Math.min(100, organizerJob.processed / organizerJob.total * 100) : 100}%` }} /></div>{organizerJob.next_retry_at && <div className="field-hint" style={{ marginTop: 8 }}>Paused temporarily and will resume after the saved retry time.</div>}{organizerJob.last_error && <div className="connection-error" style={{ marginTop: 10 }}>{organizerJob.last_error}</div>}<button className="secondary-button" type="button" style={{ marginTop: 10 }} onClick={openAdmin}>{organizerJob.status === "completed" ? "View organizer details" : "Open organizer controls"}</button></>}
+      </section>}
       {libraryGuideOpen && <section className="card card-pad library-guide" style={{ marginBottom: 16 }}>
         <div className="card-header"><div><div className="section-label">How to use the Library</div><div className="field-hint">A quick guide to finding, understanding, and studying from the collection.</div></div><div className="library-demo-animation" aria-label="Animated Library walkthrough: type a search, click Filters, then ask Library AI"><div className="demo-step demo-search-step"><span className="demo-step-label">1 · Type</span><span className="demo-search-field"><Search size={11} /><span className="demo-typing">constitutional law</span><i /></span></div><div className="demo-step demo-filter-step"><span className="demo-step-label">2 · Filter</span><span className="demo-filter-button"><Filter size={11} /> Filters</span><span className="demo-cursor" aria-hidden="true">⌁</span></div><div className="demo-step demo-ai-step"><span className="demo-step-label">3 · Ask AI</span><span className="demo-ai-question">Find separation of powers</span><span className="demo-ai-response">Found 8 related papers</span></div></div><button className="icon-button" type="button" onClick={() => setLibraryGuideOpen(false)} aria-label="Close Library guide"><X size={15} /></button></div>
         <div className="page-grid" style={{ marginTop: 14 }}>

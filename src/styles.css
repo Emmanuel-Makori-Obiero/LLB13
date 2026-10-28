@@ -1214,3 +1214,9 @@ html, body { background-size: contain; background-position: center center; backg
 @keyframes demoResponse { 0%, 61% { opacity: 0; transform: translateY(5px); } 72%, 100% { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { .demo-typing, .demo-search-field i, .demo-filter-button, .demo-cursor, .demo-ai-question, .demo-ai-response { animation: none; } .demo-typing { width: 100%; } .demo-ai-response { opacity: 1; } }
 @media (max-width: 700px) { .library-demo-animation { order: 3; flex-basis: 100%; width: 100%; } }
+
+.library-progress-summary { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; margin-top: 14px; color: var(--muted); font-size: 12px; }
+.library-progress-summary strong { color: var(--ink); font-size: 16px; }
+.library-progress-track { height: 9px; margin-top: 8px; overflow: hidden; background: var(--soft); }
+.library-progress-track span { display: block; height: 100%; background: var(--forest); transition: width .35s ease; }
+@media (max-width: 560px) { .library-progress-summary { align-items: flex-start; flex-direction: column; gap: 4px; } }
