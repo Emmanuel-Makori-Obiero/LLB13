@@ -13,6 +13,7 @@ export type PastPaperEntry = {
 };
 
 const SUPPORTED = /\.(pdf|docx?|txt|md)$/i;
+const NESTED_ARCHIVE = /\.(rar|zip|7z)$/i;
 const COURSE_CODE = /\b([A-Z]{2,5}\s?-?\d{3,4})\b/i;
 const YEAR = /\b(20\d{2})\b/;
 const SESSION = /\b(JAN\s*(?:-|–|TO)\s*APRIL|MAY\s*(?:-|–|TO)\s*AUGUST|SEPT\s*(?:-|–|TO)\s*DEC(?:EMBER)?)\b/i;
@@ -48,7 +49,8 @@ function mimeFor(name: string): string {
   return "text/plain";
 }
 
-export async function extractPastPaperArchive(archiveFile: File): Promise<PastPaperEntry[]> {
+async function extractArchiveLevel(archiveFile: File, prefix = "", depth = 0): Promise<PastPaperEntry[]> {
+  if (depth > 5) return [];
   Archive.init();
   const archive = await Archive.open(archiveFile);
   try {
@@ -57,10 +59,15 @@ export async function extractPastPaperArchive(archiveFile: File): Promise<PastPa
     for (const entry of entries) {
       const compressed = entry?.file as { name?: string; extract?: () => Promise<File> } | undefined;
       const name = compressed?.name ?? "";
-      const archivePath = `${entry?.path ?? ""}${name}`;
-      if (!compressed?.extract || !SUPPORTED.test(archivePath)) continue;
+      const archivePath = `${prefix}${entry?.path ?? ""}${name}`;
+      if (!compressed?.extract) continue;
       try {
         const original = await compressed.extract();
+        if (NESTED_ARCHIVE.test(name)) {
+          extracted.push(...await extractArchiveLevel(original, `${archivePath}/`, depth + 1));
+          continue;
+        }
+        if (!SUPPORTED.test(archivePath)) continue;
         const file = new File([original], name, { type: mimeFor(name), lastModified: original.lastModified });
         extracted.push({ file, archivePath, ...inferMetadata(archivePath, name) });
       } catch {
@@ -71,4 +78,8 @@ export async function extractPastPaperArchive(archiveFile: File): Promise<PastPa
   } finally {
     await archive.close();
   }
+}
+
+export async function extractPastPaperArchive(archiveFile: File): Promise<PastPaperEntry[]> {
+  return extractArchiveLevel(archiveFile, "", 0);
 }

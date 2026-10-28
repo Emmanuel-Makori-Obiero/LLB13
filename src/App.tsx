@@ -4216,6 +4216,7 @@ function LibraryPageReal({
           <div className="field-hint">
             {bulkImportProgress.done} of {bulkImportProgress.total} files processed · {bulkImportProgress.indexed} AI sections indexed · {bulkImportProgress.failed} failed
           </div>
+          <div className="field-hint" style={{ marginTop: 6 }}>Each paper is uploaded and indexed separately, so one failure does not stop the rest. Nested RAR, ZIP, and 7Z archives are opened automatically.</div>
         </section>
       )}
       {summaryMaterial && (
