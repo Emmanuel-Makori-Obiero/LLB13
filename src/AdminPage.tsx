@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { ShieldCheck, ShieldOff, Trash2, UserPlus } from "lucide-react";
-import { repository } from "./data/repository";
+import { Play, ShieldCheck, ShieldOff, Trash2, UserPlus } from "lucide-react";
+import { repository, supabase } from "./data/repository";
 import type { AdminAccount, Member, Unit } from "./data/types";
 import { unitReps } from "./data/types";
 import type { Lesson } from "./data/types";
@@ -19,6 +19,7 @@ type Props = {
   lessons: Lesson[];
   onTimetableApplied: (lessons: Lesson[]) => void;
 };
+type OrganizerJob = { id: string; status: string; total: number; processed: number; succeeded: number; failed: number; last_error?: string | null; next_retry_at?: string | null };
 
 const TONES = [
   "#8F3E32",
@@ -69,6 +70,40 @@ export default function AdminPage({
   const [newSection, setNewSection] = useState<"A" | "B">("A");
   const [unitName, setUnitName] = useState("");
   const [unitCode, setUnitCode] = useState("");
+  const [organizerJob, setOrganizerJob] = useState<OrganizerJob | null>(null);
+  const [organizerBusy, setOrganizerBusy] = useState(false);
+  const [organizerMessage, setOrganizerMessage] = useState("");
+  const runOrganizer = async () => {
+    if (!supabase || organizerBusy) return;
+    setOrganizerBusy(true);
+    setOrganizerMessage("Finding unfinished past papers…");
+    try {
+      const started = await supabase.functions.invoke("organize-library", { body: { action: "start" } });
+      if (started.error) throw started.error;
+      let job = started.data.job as OrganizerJob;
+      setOrganizerJob(job);
+      while (job.status === "running" || job.status === "queued" || job.status === "paused") {
+        const wait = Number(started.data.retry_after_seconds ?? 0);
+        if (job.status === "paused" && wait > 0) {
+          setOrganizerMessage(`Gemini rate limit reached. Waiting ${wait}s, then continuing…`);
+          await new Promise((resolve) => window.setTimeout(resolve, wait * 1000));
+        }
+        const step = await supabase.functions.invoke("organize-library", { body: { action: "step", job_id: job.id } });
+        if (step.error) throw step.error;
+        job = step.data.job as OrganizerJob;
+        setOrganizerJob(job);
+        if (step.data.paused && step.data.retry_after_seconds) {
+          setOrganizerMessage(`Gemini rate limit reached. Waiting ${step.data.retry_after_seconds}s, then continuing…`);
+          await new Promise((resolve) => window.setTimeout(resolve, Number(step.data.retry_after_seconds) * 1000));
+        } else setOrganizerMessage(job.status === "completed" ? "Organization complete." : `Checking paper ${Math.min(job.processed + 1, job.total)} of ${job.total}…`);
+        if (job.status === "failed") break;
+      }
+    } catch (caught) {
+      setOrganizerMessage(caught instanceof Error ? caught.message : "The organizer stopped. Press Resume to continue from the saved checkpoint.");
+    } finally {
+      setOrganizerBusy(false);
+    }
+  };
   const addUnit = async () => {
     if (!unitName.trim() || !unitCode.trim()) {
       setNotice("Enter the unit name and code.");
@@ -252,6 +287,14 @@ export default function AdminPage({
       </div>
 
       <div className="admin-stack">
+        <div className="card card-pad">
+          <div className="card-header"><span className="section-label">Library organization</span><span className="quiet">Admin only</span></div>
+          <p className="field-hint">Read each imported past paper itself and correct titles, units, course codes, exam sessions, years, and variants. Completed papers are skipped automatically; reloads and rate limits resume from the saved checkpoint.</p>
+          <button className="primary-button" type="button" disabled={organizerBusy} onClick={() => void runOrganizer()}><Play size={14} /> {organizerBusy ? "Organizing…" : organizerJob?.status === "paused" ? "Resume organization" : "Organize Library"}</button>
+          {organizerJob && <div className="field-hint" style={{ marginTop: 12 }}>{organizerJob.processed} of {organizerJob.total} papers checked · {organizerJob.succeeded} corrected · {organizerJob.failed} failed · {organizerJob.total ? Math.round(organizerJob.processed / organizerJob.total * 100) : 100}%</div>}
+          {organizerMessage && <div className="field-hint" style={{ marginTop: 6 }}>{organizerMessage}</div>}
+          {organizerJob?.last_error && <div className="connection-error" style={{ marginTop: 10 }}>{organizerJob.last_error}</div>}
+        </div>
         <AdminOversight />
         <AdminTimetablePlanner
           lessons={lessons}
