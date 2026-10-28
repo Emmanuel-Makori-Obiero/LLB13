@@ -21,6 +21,7 @@ type Props = {
   onTimetableApplied: (lessons: Lesson[]) => void;
 };
 type OrganizerJob = { id: string; status: string; total: number; processed: number; succeeded: number; failed: number; last_error?: string | null; next_retry_at?: string | null };
+type OrganizerRequest = Record<string, unknown>;
 
 const TONES = [
   "#8F3E32",
@@ -74,14 +75,28 @@ export default function AdminPage({
   const [organizerJob, setOrganizerJob] = useState<OrganizerJob | null>(null);
   const [organizerBusy, setOrganizerBusy] = useState(false);
   const [organizerMessage, setOrganizerMessage] = useState("");
+  const invokeOrganizer = async (body: OrganizerRequest) => {
+    if (!supabase) throw new Error("The organizer is not available in this environment.");
+    let result = await supabase.functions.invoke("organize-library", { body });
+    const status = Number((result.error as { context?: { status?: number } } | null)?.context?.status ?? 0);
+    if (status === 401 || /non-2xx|unauthorized|session/i.test(result.error?.message ?? "")) {
+      const refreshed = await supabase.auth.refreshSession();
+      if (!refreshed.error && refreshed.data.session) {
+        result = await supabase.functions.invoke("organize-library", { body });
+      } else {
+        throw new Error("Your admin session expired. Sign in again to resume the saved organizer job.");
+      }
+    }
+    return result;
+  };
   useEffect(() => {
     let active = true;
-    if (supabase) void supabase.functions.invoke("organize-library", { body: { action: "latest" } }).then(({ data }) => {
+    if (supabase) void invokeOrganizer({ action: "latest" }).then(({ data }) => {
       if (active && data?.job) {
         setOrganizerJob(data.job as OrganizerJob);
         setOrganizerMessage(data.job.status === "completed" ? "The last organization run is complete." : "Saved progress loaded. Press Organize Library to resume.");
       }
-    });
+    }).catch(() => undefined);
     return () => { active = false; };
   }, []);
   const extractOrganizerSample = async (): Promise<string | undefined> => {
@@ -100,7 +115,7 @@ export default function AdminPage({
     setOrganizerBusy(true);
     setOrganizerMessage("Finding unfinished past papers…");
     try {
-      const started = await supabase.functions.invoke("organize-library", { body: { action: "start" } });
+      const started = await invokeOrganizer({ action: "start" });
       if (started.error) throw started.error;
       let job = started.data.job as OrganizerJob;
       setOrganizerJob(job);
@@ -112,7 +127,7 @@ export default function AdminPage({
         }
         let textSample: string | undefined;
         try { textSample = await extractOrganizerSample(); } catch { /* Fall back to the original file if local extraction fails. */ }
-        const step = await supabase.functions.invoke("organize-library", { body: { action: "step", job_id: job.id, ...(textSample ? { text_sample: textSample } : {}) } });
+        const step = await invokeOrganizer({ action: "step", job_id: job.id, ...(textSample ? { text_sample: textSample } : {}) });
         if (step.error) throw step.error;
         job = step.data.job as OrganizerJob;
         setOrganizerJob(job);
@@ -123,7 +138,10 @@ export default function AdminPage({
         if (job.status === "failed") break;
       }
     } catch (caught) {
-      setOrganizerMessage(caught instanceof Error ? caught.message : "The organizer stopped. Press Resume to continue from the saved checkpoint.");
+      const message = caught instanceof Error ? caught.message : "";
+      setOrganizerMessage(/non-2xx|503|429|provider|model|gemini/i.test(message)
+        ? "AI providers are temporarily unavailable. Your saved progress is safe; press Resume later."
+        : message || "The organizer stopped. Press Resume to continue from the saved checkpoint.");
     } finally {
       setOrganizerBusy(false);
     }

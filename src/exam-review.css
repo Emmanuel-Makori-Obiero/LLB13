@@ -7,3 +7,5 @@
 .exam-review-answer-counter{display:flex;justify-content:space-between;gap:12px;margin:-7px 0 12px;color:var(--muted,#64748b);font-size:.8rem}.exam-review-answer-counter small{color:inherit}.exam-review-answer-counter.over-limit{color:#a33434;font-weight:700}
 
 .exam-review-paper-cover{display:grid;gap:7px;padding:14px 16px;border-left:3px solid #3159a5;background:#f5f8ff;line-height:1.5}.exam-review-paper-cover>span{font-weight:700;color:#3159a5}.exam-review-paper-cover p{margin:0}.exam-review-paper-cover small{color:var(--muted,#64748b)}
+
+.exam-review,.exam-review *{box-sizing:border-box;min-width:0}.exam-review-columns{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.exam-review-field textarea,.exam-review-question textarea{display:block;max-width:100%}.exam-review-count select{max-width:100%}

@@ -98,7 +98,7 @@ Deno.serve(async (req) => {
     return json({ job: failedJob ?? job, failed_material: material.id });
   }
   const keys = failoverKeyCandidates(secretKeyEntries("GEMINI_API_KEY"), job.processed).slice(0, 2);
-  if (!keys.length) return json({ error: "No GEMINI_API_KEY_* secret is configured." }, 503);
+  if (!keys.length) { const retryAt = new Date(Date.now() + 15 * 60 * 1000).toISOString(); const { data: pausedJob } = await admin.from("library_organize_jobs").update({ status: "paused", next_retry_at: retryAt, last_error: "No AI provider is currently configured." }).eq("id", job.id).select("*").single(); return json({ job: pausedJob ?? { ...job, status: "paused", next_retry_at: retryAt }, paused: true, retry_after_seconds: 900 }); }
   let metadata: Record<string, unknown> | null = null;
   let lastError = "";
   const paperBytes = new Uint8Array(await downloaded.data.arrayBuffer());
