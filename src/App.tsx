@@ -3990,6 +3990,26 @@ function LibraryPageReal({
   const [summaryProgress, setSummaryProgress] = useState("");
   const [summaryError, setSummaryError] = useState("");
   const [retryingMaterialId, setRetryingMaterialId] = useState<string | null>(null);
+  const [aiLibraryQuery, setAiLibraryQuery] = useState("");
+  const [aiLibraryResult, setAiLibraryResult] = useState<AIResult | null>(null);
+  const [aiLibraryBusy, setAiLibraryBusy] = useState(false);
+  const [aiLibraryError, setAiLibraryError] = useState("");
+  const searchLibraryWithAI = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const question = aiLibraryQuery.trim();
+    if (!question || aiLibraryBusy) return;
+    setAiLibraryBusy(true); setAiLibraryError(""); setAiLibraryResult(null);
+    try {
+      const result = await askAI({
+        feature: "chat",
+        mode: "library",
+        messages: [{ role: "user", content: `Search the shared Library and answer this request using the indexed past papers and Library sources only: ${question}. Prefer naming the relevant paper titles, exam years, sessions, and units. If the Library does not contain enough evidence, say so clearly instead of inventing sources.` }],
+      });
+      setAiLibraryResult(result);
+    } catch (cause) {
+      setAiLibraryError(cause instanceof Error ? cause.message : "The Library AI search is unavailable right now.");
+    } finally { setAiLibraryBusy(false); }
+  };
   const readLibraryAttachment = async (material: Material): Promise<File> => {
     let blob: Blob | null = null;
     let storageError = "";
@@ -4273,6 +4293,18 @@ function LibraryPageReal({
           <Plus size={14} style={{ verticalAlign: "middle" }} /> Add material
         </button>
       </div>
+      <section className="card card-pad" style={{ marginBottom: 16 }}>
+        <div className="card-header">
+          <div><div className="section-label">AI Library search</div><div className="field-hint">Ask in ordinary language, for example: “Find Constitutional Law questions about separation of powers.”</div></div>
+          <span className="chip">Indexed sources only</span>
+        </div>
+        <form onSubmit={searchLibraryWithAI} style={{ display: "flex", gap: 8, marginTop: 10 }}>
+          <input value={aiLibraryQuery} onChange={(event) => setAiLibraryQuery(event.target.value)} placeholder="Ask about units, topics, years, or repeated questions…" style={{ flex: 1 }} />
+          <button className="primary-button" type="submit" disabled={aiLibraryBusy || !aiLibraryQuery.trim()}>{aiLibraryBusy ? "Searching…" : "Ask Library AI"}</button>
+        </form>
+        {aiLibraryError && <div className="connection-error" style={{ marginTop: 10 }}>{aiLibraryError}</div>}
+        {aiLibraryResult && <div style={{ marginTop: 14 }}><div className="sa-answer"><Markdown text={aiLibraryResult.answer} /></div>{aiLibraryResult.sources.length > 0 && <div className="sa-sources" style={{ marginTop: 12 }}><div className="section-label">Sources found</div>{aiLibraryResult.sources.map((source) => <div className="sa-source" key={`${source.tag}-${source.title}`}><sup className="md-cite">{source.tag}</sup><span>{source.title}{source.ref ? ` · ${source.ref}` : ""}</span></div>)}</div>}</div>}
+      </section>
       {bulkImportProgress.phase !== "idle" && (
         <section className="card card-pad" style={{ marginBottom: 16 }} aria-live="polite">
           <div className="detail-title">
