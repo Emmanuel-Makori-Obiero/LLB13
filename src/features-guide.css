@@ -111,4 +111,14 @@
   .fg-footer { align-items: flex-start; flex-wrap: wrap; }
   .fg-footer > span { order: 3; width: 100%; }
 }
+@media (max-width: 520px) {
+  .features-guide-page, .features-guide-page * { box-sizing: border-box; min-width: 0; }
+  .fg-header, .fg-hero, .fg-directory, .fg-caution, .fg-footer { max-width: 100%; overflow-wrap: anywhere; }
+  .fg-hero-meta, .fg-directory-heading, .fg-category-heading, .fg-feature-title-line, .fg-caution, .fg-footer { align-items: flex-start; }
+  .fg-category-heading { grid-template-columns: 25px minmax(0,1fr); }
+  .fg-category-heading > span:last-child { grid-column: 2; }
+  .fg-no-results { align-items: stretch; flex-direction: column; }
+  .fg-no-results button { width: 100%; }
+  .fg-brand, .fg-nav a, .fg-primary { max-width: 100%; }
+}
 @media (prefers-reduced-motion: reduce) { .features-guide-page * { scroll-behavior: auto !important; transition-duration: .01ms !important; } }

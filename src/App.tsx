@@ -4333,7 +4333,7 @@ function LibraryPageReal({
           <div><div className="section-label">AI Library search</div><div className="field-hint">Ask in ordinary language, for example: “Find Constitutional Law questions about separation of powers.”</div></div>
           <span className="chip">Indexed sources only</span>
         </div>
-        <form onSubmit={searchLibraryWithAI} style={{ display: "flex", gap: 8, marginTop: 10 }}>
+        <form className="library-ai-search-form" onSubmit={searchLibraryWithAI} style={{ display: "flex", gap: 8, marginTop: 10 }}>
           <input value={aiLibraryQuery} onChange={(event) => setAiLibraryQuery(event.target.value)} placeholder="Ask about units, topics, years, or repeated questions…" style={{ flex: 1 }} />
           <button className="primary-button" type="submit" disabled={aiLibraryBusy || !aiLibraryQuery.trim()}>{aiLibraryBusy ? "Searching…" : "Ask Library AI"}</button>
         </form>
