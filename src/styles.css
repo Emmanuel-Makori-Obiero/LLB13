@@ -1164,3 +1164,53 @@ html, body { background-size: contain; background-position: center center; backg
 @keyframes guidePulse { 0%,100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--forest) 22%, transparent); } 50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--forest) 10%, transparent); } }
 @media (prefers-reduced-motion: reduce) { .guide-orbit, .guide-orbit-core { animation: none; } }
 @media (max-width: 700px) { .library-guide-illustration { width: 100%; flex-basis: 100%; order: 3; } }
+
+/* The guide demonstrates the Library workflow rather than showing a decorative animation. */
+.library-demo-animation {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  width: min(470px, 100%);
+  flex: 1 1 420px;
+  min-height: 82px;
+}
+.demo-step {
+  position: relative;
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  min-width: 0;
+  flex: 1;
+  padding: 7px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  font-size: 9px;
+}
+.demo-step-label { color: var(--muted); font-size: 9px; font-weight: 700; }
+.demo-search-field, .demo-filter-button, .demo-ai-question, .demo-ai-response {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 5px;
+  border: 1px solid var(--line);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.demo-search-field { color: var(--forest); }
+.demo-typing { width: 0; overflow: hidden; animation: demoType 5.4s steps(18, end) infinite; }
+.demo-search-field i { width: 1px; height: 12px; background: var(--accent); animation: demoCaret .75s step-end infinite; }
+.demo-filter-button { justify-content: center; background: var(--soft); animation: demoFilterClick 5.4s ease-in-out infinite; }
+.demo-cursor { position: absolute; right: 16px; bottom: 13px; color: var(--accent); font-size: 22px; line-height: 1; transform: rotate(-35deg); animation: demoCursorClick 5.4s ease-in-out infinite; }
+.demo-ai-question { opacity: .78; animation: demoQuestion 5.4s ease-in-out infinite; }
+.demo-ai-response { color: var(--forest); background: color-mix(in srgb, var(--forest) 9%, var(--paper)); opacity: 0; animation: demoResponse 5.4s ease-in-out infinite; }
+@keyframes demoType { 0%, 10% { width: 0; } 42%, 70% { width: 100%; } 82%, 100% { width: 0; } }
+@keyframes demoCaret { 0%, 48% { opacity: 1; } 49%, 100% { opacity: 0; } }
+@keyframes demoFilterClick { 0%, 35% { transform: scale(1); box-shadow: none; } 40%, 48% { transform: scale(.94); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); } 52%, 100% { transform: scale(1); box-shadow: none; } }
+@keyframes demoCursorClick { 0%, 28% { transform: translate(16px, 7px) rotate(-35deg); opacity: 0; } 38% { transform: translate(0, 0) rotate(-35deg); opacity: 1; } 47% { transform: translate(0, 3px) rotate(-35deg); opacity: 1; } 56%, 100% { transform: translate(16px, 7px) rotate(-35deg); opacity: 0; } }
+@keyframes demoQuestion { 0%, 52% { opacity: .25; transform: translateY(5px); } 62%, 100% { opacity: .78; transform: translateY(0); } }
+@keyframes demoResponse { 0%, 61% { opacity: 0; transform: translateY(5px); } 72%, 100% { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .demo-typing, .demo-search-field i, .demo-filter-button, .demo-cursor, .demo-ai-question, .demo-ai-response { animation: none; } .demo-typing { width: 100%; } .demo-ai-response { opacity: 1; } }
+@media (max-width: 700px) { .library-demo-animation { order: 3; flex-basis: 100%; width: 100%; } }
