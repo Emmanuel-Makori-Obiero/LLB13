@@ -429,9 +429,10 @@ export async function uploadLibraryMaterial(
   author?: string,
   targetYears: string[] = [],
   materialId?: string,
+  extractedText?: string,
 ): Promise<{ id: string; chunks: number }> {
   if (!file.size) throw new Error("The selected file is empty. Choose a file with at least 1 byte.");
-  const text = (await extractText(file)).trim();
+  const text = (extractedText ?? await extractText(file)).trim();
   if (!text.length)
     throw new Error("No readable text found after OCR. Try a clearer scan, or save the Word file as .docx before indexing.");
   return storeText(file.name.replace(/\.[^.]+$/, ""), text, citation, "library", author, targetYears, materialId);

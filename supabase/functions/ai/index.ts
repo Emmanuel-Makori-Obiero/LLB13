@@ -9,7 +9,7 @@ import {
   selectDocumentChunkIndexes,
   shouldAutoRetrieveConstitution,
 } from "./retrieval.ts";
-import { hasProviderPayloadTooLarge, keepRecentConversation, shrinkRetrievedPassages } from "./requestSizing.ts";
+import { hasProviderPayloadTooLarge, keepRecentConversation, onlyAttemptedProvidersRejectedForSize, shrinkRetrievedPassages } from "./requestSizing.ts";
 import {
   ARENA_CASE_SYSTEM_PROMPT,
   EXAM_ANALYSIS_SYSTEM_PROMPT,
@@ -1364,14 +1364,16 @@ Deno.serve(async (req) => {
     const safeStatus = Number.isInteger(status) && status >= 400 && status < 600 ? status : 503;
     const publicMessage = (err as { publicMessage?: unknown }).publicMessage;
     const attempts = (err as { attempts?: unknown }).attempts;
-    const requestTooLarge = Array.isArray(attempts) && attempts.some((attempt) => (attempt as { status?: unknown }).status === "413");
+    const requestTooLarge = onlyAttemptedProvidersRejectedForSize(attempts);
     const invalidCardResponse =
       feature === "legal_process" &&
       Array.isArray(attempts) &&
       attempts.some((attempt) => (attempt as { status?: unknown }).status === "invalid_response");
     return json(
       {
-        error: typeof publicMessage === "string" ? publicMessage : requestTooLarge
+        error: typeof publicMessage === "string" ? publicMessage : feature === "book_metadata"
+          ? "Automatic book-detail extraction could not complete because the available AI providers rejected or could not process the request. Your file is still selected; enter the details manually and continue uploading."
+          : requestTooLarge
           ? feature === "exam_analysis"
             ? "One or more providers rejected the exam-review request as too large (HTTP 413). The unrelated prompt overhead has been removed; the selected paper was not truncated. If this persists, shorten the student-answer text and retry."
             : feature === "summarize"
