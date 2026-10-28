@@ -45,13 +45,13 @@ async function modelsForKey(key: string) {
     return result;
   } catch { modelCache.set(key, fallback); return fallback; }
 }
-async function gemini(file: Uint8Array, mimeType: string, key: string, model: string) {
+async function gemini(file: Uint8Array, mimeType: string, key: string, model: string, textSample?: string) {
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`, {
     method: "POST", headers: { "Content-Type": "application/json" },
     signal: AbortSignal.timeout(25000),
     body: JSON.stringify({ contents: [{ parts: [
-      { inlineData: { mimeType: mimeType || "application/octet-stream", data: toBase64(file) } },
-      { text: `You are organizing a law-school past-paper library. Read the attached paper itself; do not trust its filename or folder names. Return ONLY valid JSON with exactly these fields: {"title":"","unit":"","course_code":"","topic":"","exam_year":null,"exam_session":"","paper_variant":"Regular","confidence":0}. Derive the best human-readable title from the paper heading and contents. Identify the actual law unit from the paper, including a new unit name such as Family Law when appropriate. CRITICAL: unit must be a subject name, never a month, date, semester label, academic year, filename fragment, or folder name. CRITICAL: course_code must be a code visibly printed in the paper; never use a month/year such as APRIL 2024, AUG 2025, or DEC 2022 as a course code. If the paper does not show a reliable course code, return an empty string. Use null only when the paper truly does not contain the value. exam_session should be a concise label such as "April 2021", "August 2022", or "December 2023". paper_variant may be Regular, Supplementary, Resit, Evening, Morning, Special, or another clearly stated variant. Do not invent a course code or year. confidence is a number from 0 to 1. Keep title under 180 characters.` },
+      ...(textSample ? [] : [{ inlineData: { mimeType: mimeType || "application/octet-stream", data: toBase64(file) } }]),
+      { text: `You are organizing a law-school past-paper library. Read the attached paper itself; do not trust its filename or folder names. Return ONLY valid JSON with exactly these fields: {"title":"","unit":"","course_code":"","topic":"","exam_year":null,"exam_session":"","paper_variant":"Regular","confidence":0}. Derive the best human-readable title from the paper heading and contents. Identify the actual law unit from the paper, including a new unit name such as Family Law when appropriate. CRITICAL: unit must be a subject name, never a month, date, semester label, academic year, filename fragment, or folder name. CRITICAL: course_code must be a code visibly printed in the paper; never use a month/year such as APRIL 2024, AUG 2025, or DEC 2022 as a course code. If the paper does not show a reliable course code, return an empty string. Use null only when the paper truly does not contain the value. exam_session should be a concise label such as "April 2021", "August 2022", or "December 2023". paper_variant may be Regular, Supplementary, Resit, Evening, Morning, Special, or another clearly stated variant. Do not invent a course code or year. confidence is a number from 0 to 1. Keep title under 180 characters.${textSample ? `\n\nPAPER TEXT SAMPLE:\n${textSample.slice(0, 12000)}` : ""}` },
     ] }], generationConfig: { temperature: 0.1, responseMimeType: "application/json" } }),
   });
   const text = await response.text();
@@ -70,7 +70,7 @@ Deno.serve(async (req) => {
   const admin = adminClient();
   const { data: allowed } = await userClient.rpc("is_admin", {});
   if (!allowed) return json({ error: "Admin access required." }, 403);
-  let body: { action?: string; job_id?: string } = {};
+  let body: { action?: string; job_id?: string; text_sample?: string } = {};
   try { body = await req.json(); } catch { return json({ error: "Invalid request." }, 400); }
 
   if (body.action === "start") {
@@ -115,7 +115,7 @@ Deno.serve(async (req) => {
     const models = await modelsForKey(candidate.value);
     for (const model of models) {
       if (Date.now() >= fallbackDeadline) { lastError = "Fallback deadline reached before another model could be tried."; break; }
-      try { metadata = await gemini(paperBytes, material.mime_type ?? "application/pdf", candidate.value, model); break; }
+      try { metadata = await gemini(paperBytes, material.mime_type ?? "application/pdf", candidate.value, model, typeof body.text_sample === "string" ? body.text_sample : undefined); break; }
       catch (cause) { lastError = `Model ${model} with key #${candidate.slot}: ${cause instanceof Error ? cause.message : String(cause)}`; const status = Number((cause as { providerStatus?: number }).providerStatus ?? 0); if (status === 429 || status === 404 || status >= 500) continue; }
     }
     if (metadata) break;

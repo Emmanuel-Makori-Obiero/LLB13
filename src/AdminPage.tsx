@@ -6,6 +6,7 @@ import { unitReps } from "./data/types";
 import type { Lesson } from "./data/types";
 import AdminTimetablePlanner from "./AdminTimetablePlanner";
 import AdminOversight from "./AdminOversight";
+import { extractText } from "./lib/ai";
 import "./admin.css";
 
 type Props = {
@@ -83,6 +84,17 @@ export default function AdminPage({
     });
     return () => { active = false; };
   }, []);
+  const extractOrganizerSample = async (): Promise<string | undefined> => {
+    if (!supabase) return undefined;
+    const { data: target } = await supabase.from("materials").select("title,storage_path,mime_type,archive_path,organization_status").not("archive_path", "is", null).not("storage_path", "is", null).eq("organization_status", "pending").order("created_at", { ascending: true }).limit(1).maybeSingle();
+    if (!target?.storage_path) return undefined;
+    const stored = await supabase.storage.from("materials").download(target.storage_path);
+    if (stored.error || !stored.data) return undefined;
+    const filename = target.title.replace(/[^a-zA-Z0-9._-]/g, "-") || "past-paper.pdf";
+    const file = new File([stored.data], filename, { type: target.mime_type || stored.data.type || "application/pdf" });
+    const text = (await extractText(file)).trim();
+    return text ? text.slice(0, 12000) : undefined;
+  };
   const runOrganizer = async () => {
     if (!supabase || organizerBusy) return;
     setOrganizerBusy(true);
@@ -98,7 +110,9 @@ export default function AdminPage({
           setOrganizerMessage(`Gemini rate limit reached. Waiting ${wait}s, then continuing…`);
           await new Promise((resolve) => window.setTimeout(resolve, wait * 1000));
         }
-        const step = await supabase.functions.invoke("organize-library", { body: { action: "step", job_id: job.id } });
+        let textSample: string | undefined;
+        try { textSample = await extractOrganizerSample(); } catch { /* Fall back to the original file if local extraction fails. */ }
+        const step = await supabase.functions.invoke("organize-library", { body: { action: "step", job_id: job.id, ...(textSample ? { text_sample: textSample } : {}) } });
         if (step.error) throw step.error;
         job = step.data.job as OrganizerJob;
         setOrganizerJob(job);
