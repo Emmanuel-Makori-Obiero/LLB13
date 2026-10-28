@@ -24,12 +24,7 @@ function retrySeconds(status: number, text: string) {
   return Math.min(3600, Math.max(20, Math.ceil(Number(match?.[1] ?? (status === 429 ? 60 : 30)))));
 }
 const modelCache = new Map<string, string[]>();
-async function modelsForKey(key: string) {
-  const cached = modelCache.get(key);
-  if (cached) return cached;
-  const fallback = ["gemini-3.8-flash"];
-  try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`, { signal: AbortSignal.timeout(8000) });
+async function modelsForKey(key: string) { const cached = modelCache.get(key); if (cached) return cached; const fallback = ["gemini-3.8-flash"]; try { const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`, { signal: AbortSignal.timeout(3000) });
     if (!response.ok) { modelCache.set(key, fallback); return fallback; }
     const body = await response.json();
     const discovered = (Array.isArray(body?.models) ? body.models : [])
@@ -40,15 +35,12 @@ async function modelsForKey(key: string) {
       const score = (model: string) => (model.includes("pro") ? 40 : 20) + (model.includes("3.8") ? 30 : model.includes("3.") ? 20 : 0) + (model.includes("flash") ? 10 : 0) - (model.includes("exp") || model.includes("preview") ? 5 : 0);
       return score(right) - score(left);
     });
-    const result = ranked.length ? ranked.slice(0, 4) : fallback;
+    const result = ranked.length ? ranked.slice(0, 2) : fallback;
     modelCache.set(key, result);
     return result;
   } catch { modelCache.set(key, fallback); return fallback; }
 }
-async function gemini(file: Uint8Array, mimeType: string, key: string, model: string, textSample?: string) {
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    signal: AbortSignal.timeout(25000),
+async function gemini(file: Uint8Array, mimeType: string, key: string, model: string, textSample?: string) { const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`, { method: "POST", headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(12000),
     body: JSON.stringify({ contents: [{ parts: [
       ...(textSample ? [] : [{ inlineData: { mimeType: mimeType || "application/octet-stream", data: toBase64(file) } }]),
       { text: `You are organizing a law-school past-paper library. Read the attached paper itself; do not trust its filename or folder names. Return ONLY valid JSON with exactly these fields: {"title":"","unit":"","course_code":"","topic":"","exam_year":null,"exam_session":"","paper_variant":"Regular","confidence":0}. Derive the best human-readable title from the paper heading and contents. Identify the actual law unit from the paper, including a new unit name such as Family Law when appropriate. CRITICAL: unit must be a subject name, never a month, date, semester label, academic year, filename fragment, or folder name. CRITICAL: course_code must be a code visibly printed in the paper; never use a month/year such as APRIL 2024, AUG 2025, or DEC 2022 as a course code. If the paper does not show a reliable course code, return an empty string. Use null only when the paper truly does not contain the value. exam_session should be a concise label such as "April 2021", "August 2022", or "December 2023". paper_variant may be Regular, Supplementary, Resit, Evening, Morning, Special, or another clearly stated variant. Do not invent a course code or year. confidence is a number from 0 to 1. Keep title under 180 characters.${textSample ? `\n\nPAPER TEXT SAMPLE:\n${textSample.slice(0, 12000)}` : ""}` },
@@ -105,12 +97,12 @@ Deno.serve(async (req) => {
     const { data: failedJob } = await admin.from("library_organize_jobs").update({ processed: job.processed + 1, failed: job.failed + 1, last_material_id: material.id, last_error: detail }).eq("id", job.id).select("*").single();
     return json({ job: failedJob ?? job, failed_material: material.id });
   }
-  const keys = failoverKeyCandidates(secretKeyEntries("GEMINI_API_KEY"), job.processed);
+  const keys = failoverKeyCandidates(secretKeyEntries("GEMINI_API_KEY"), job.processed).slice(0, 2);
   if (!keys.length) return json({ error: "No GEMINI_API_KEY_* secret is configured." }, 503);
   let metadata: Record<string, unknown> | null = null;
   let lastError = "";
   const paperBytes = new Uint8Array(await downloaded.data.arrayBuffer());
-  const fallbackDeadline = Date.now() + 115000;
+  const fallbackDeadline = Date.now() + 40000;
   for (const candidate of keys) {
     const models = await modelsForKey(candidate.value);
     for (const model of models) {
