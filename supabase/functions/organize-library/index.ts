@@ -24,7 +24,7 @@ function retrySeconds(status: number, text: string) {
   return Math.min(3600, Math.max(20, Math.ceil(Number(match?.[1] ?? (status === 429 ? 60 : 30)))));
 }
 async function gemini(file: Uint8Array, mimeType: string, key: string) {
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(key)}`, {
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(key)}`, {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ contents: [{ parts: [
       { inlineData: { mimeType: mimeType || "application/octet-stream", data: toBase64(file) } },
