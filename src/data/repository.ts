@@ -41,6 +41,7 @@ export type Group13Repository = {
     id: string,
     material: Omit<Material, "id">,
   ) => Promise<Material>;
+  updateMaterialIngestion: (id: string, status: Material["ingestion_status"], error?: string | null) => Promise<Material>;
   createAssignment: (assignment: Omit<Assignment, "id">) => Promise<Assignment>;
   getTodos: () => Promise<Todo[]>;
   createTodo: (todo: Omit<Todo, "id">) => Promise<Todo>;
@@ -589,6 +590,17 @@ const supabaseRepository: Group13Repository = {
       .select(MATERIAL_COLUMNS)
       .single();
     if (error) throw new Error(`Could not update material: ${error.message}`);
+    return data as Material;
+  },
+  updateMaterialIngestion: async (id, status, ingestionError = null) => {
+    if (!supabase) throw new Error("Supabase is not configured.");
+    const { data, error } = await supabase
+      .from("materials")
+      .update({ ingestion_status: status ?? "ready", ingestion_error: ingestionError })
+      .eq("id", id)
+      .select(MATERIAL_COLUMNS)
+      .single();
+    if (error) throw new Error(`Could not update indexing status: ${error.message}`);
     return data as Material;
   },
   createAssignment: async (assignment) => {

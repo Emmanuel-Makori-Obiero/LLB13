@@ -704,8 +704,17 @@ function App() {
           try {
             const result = await uploadLibraryMaterial(entry.file, `Past paper · ${entry.courseCode} · ${entry.examSession}`, created.author ?? undefined, [], created.id);
             indexed += result.chunks;
-          } catch {
+            const ready = await repository.updateMaterialIngestion(created.id, "ready");
+            setMaterials((current) => current.map((item) => item.id === ready.id ? ready : item));
+          } catch (error) {
             failed += 1;
+            const detail = error instanceof Error ? error.message : "AI indexing failed";
+            try {
+              const marked = await repository.updateMaterialIngestion(created.id, "failed", detail);
+              setMaterials((current) => current.map((item) => item.id === marked.id ? marked : item));
+            } catch {
+              // Preserve the original import error even if the status update cannot be saved.
+            }
           }
         } catch {
           failed += 1;
@@ -1268,6 +1277,7 @@ function App() {
               onBulkImport={importPastPaperArchive}
               bulkImportBusy={bulkImportBusy}
               bulkImportProgress={bulkImportProgress}
+              onMaterialStatusChange={(updated) => setMaterials((current) => current.map((item) => item.id === updated.id ? updated : item))}
               canDelete={(material) =>
                 isAdmin || (!!userId && material.owner_id === userId)
               }
@@ -3935,6 +3945,7 @@ function LibraryPageReal({
   onBulkImport,
   bulkImportBusy,
   bulkImportProgress,
+  onMaterialStatusChange,
   canDelete,
   onDelete,
 }: {
@@ -3948,6 +3959,7 @@ function LibraryPageReal({
   onBulkImport: (file: File) => Promise<void>;
   bulkImportBusy: boolean;
   bulkImportProgress: { phase: string; total: number; done: number; indexed: number; failed: number; current: string };
+  onMaterialStatusChange: (material: Material) => void;
   canDelete: (material: Material) => boolean;
   onDelete: (material: Material) => void;
 }) {
@@ -3967,6 +3979,7 @@ function LibraryPageReal({
   const [summaryBusy, setSummaryBusy] = useState(false);
   const [summaryProgress, setSummaryProgress] = useState("");
   const [summaryError, setSummaryError] = useState("");
+  const [retryingMaterialId, setRetryingMaterialId] = useState<string | null>(null);
   const readLibraryAttachment = async (material: Material): Promise<File> => {
     let blob: Blob | null = null;
     let storageError = "";
@@ -4001,6 +4014,31 @@ function LibraryPageReal({
       filename = `${safeTitle}.${extension}`;
     }
     return new File([blob], filename, { type: blob.type || "application/octet-stream" });
+  };
+  const retryMaterialIndexing = async (material: Material) => {
+    if (retryingMaterialId) return;
+    setRetryingMaterialId(material.id);
+    try {
+      const extracting = await repository.updateMaterialIngestion(material.id, "indexing", null);
+      onMaterialStatusChange(extracting);
+      const file = await readLibraryAttachment(material);
+      const indexed = await uploadLibraryMaterial(file, `Past paper · ${material.course_code ?? material.unit} · ${material.exam_session ?? material.source}`, material.author ?? undefined, material.target_years ?? [], material.id);
+      const ready = await repository.updateMaterialIngestion(material.id, "ready", null);
+      onMaterialStatusChange(ready);
+      setSummaryError("");
+      setSummaryProgress(`Re-indexed ${indexed.chunks} AI sections successfully.`);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "AI indexing failed";
+      try {
+        const failed = await repository.updateMaterialIngestion(material.id, "failed", detail);
+        onMaterialStatusChange(failed);
+      } catch {
+        // Keep the user-facing error even if the status update fails.
+      }
+      setSummaryError(detail);
+    } finally {
+      setRetryingMaterialId(null);
+    }
   };
   const summarizeLibraryMaterial = async (material: Material) => {
     if (summaryBusy) return;
@@ -4285,6 +4323,7 @@ function LibraryPageReal({
                 <td>{material.date}</td>
                 <td>
                   {material.ingestion_status && material.ingestion_status !== "ready" && <span className="chip">{material.ingestion_status}</span>}
+                  {material.ingestion_error && <span className="material-sub" title={material.ingestion_error}>{material.ingestion_error}</span>}
                   {material.url ? (
                     <div className="resource-actions">
                       <button
@@ -4317,6 +4356,17 @@ function LibraryPageReal({
                     >
                       Edit
                     </button>
+                    {material.ingestion_status === "failed" && material.url && (
+                      <button
+                        className="secondary-button small-action"
+                        type="button"
+                        disabled={retryingMaterialId !== null}
+                        onClick={() => void retryMaterialIndexing(material)}
+                        aria-label={`Retry indexing ${material.title}`}
+                      >
+                        {retryingMaterialId === material.id ? "Retrying…" : "Retry AI"}
+                      </button>
+                    )}
                     {canDelete(material) && (
                       <button
                         className="small-danger"
