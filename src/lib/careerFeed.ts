@@ -16,6 +16,12 @@ export type CareerFeedResponse = {
 };
 
 export const CAREER_FEED_CACHE_KEY = "group13:career-feed:v1";
+const ALLOWED_LISTING_HOSTS = new Set([
+  "opportunitiesforyouth.org",
+  "www.opportunitiesforyouth.org",
+  "opportunitiesfeed.com",
+  "www.opportunitiesfeed.com",
+]);
 
 function validFeedItem(value: unknown): value is CareerFeedItem {
   if (!value || typeof value !== "object") return false;
@@ -23,7 +29,7 @@ function validFeedItem(value: unknown): value is CareerFeedItem {
   if (typeof item.title !== "string" || !item.title.trim() || typeof item.url !== "string") return false;
   try {
     const url = new URL(item.url);
-    if (url.protocol !== "https:" || !["opportunitiesforyouth.org", "www.opportunitiesforyouth.org"].includes(url.hostname)) return false;
+    if (url.protocol !== "https:" || !ALLOWED_LISTING_HOSTS.has(url.hostname)) return false;
   } catch {
     return false;
   }

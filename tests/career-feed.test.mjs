@@ -25,10 +25,16 @@ function memoryStorage() {
   };
 }
 
-test("accepts a valid feed and rejects unsafe listing URLs", () => {
+test("accepts the current provider and the explicitly approved fallback host", () => {
   assert.equal(normalizeCareerFeed({ items: [goodItem] })?.items?.length, 1);
+  const fallback = { ...goodItem, url: "https://opportunitiesfeed.com/2026/10/29/legal-internship/" };
+  assert.equal(normalizeCareerFeed({ items: [fallback] })?.items?.length, 1);
+});
+
+test("rejects unsafe and lookalike listing URLs", () => {
   assert.equal(normalizeCareerFeed({ items: [{ ...goodItem, url: "javascript:alert(1)" }] }), null);
   assert.equal(normalizeCareerFeed({ items: [{ ...goodItem, url: "https://example.com/fake" }] }), null);
+  assert.equal(normalizeCareerFeed({ items: [{ ...goodItem, url: "https://opportunitiesfeed.com.evil.example/fake" }] }), null);
 });
 
 test("stores and restores a validated last-successful feed", () => {
@@ -41,13 +47,15 @@ test("stores and restores a validated last-successful feed", () => {
   assert.equal(readCareerFeedCache(storage), null);
 });
 
-test("extracts the server's JSON message from Supabase's generic non-2xx error", async () => {
+test("extracts the server's provider failure details from Supabase's generic non-2xx error", async () => {
   const error = new Error("Edge Function returned a non-2xx status code");
-  error.context = new Response(JSON.stringify({ error: "The public opportunities feed returned HTTP 503. Try refreshing later." }), {
+  error.context = new Response(JSON.stringify({ error: "All public opportunities feeds failed (Opportunities Feed: HTTP 503; Opportunities for Youth: HTTP 403). Try refreshing later." }), {
     status: 502,
     headers: { "Content-Type": "application/json" },
   });
-  assert.equal(await careerFeedErrorMessage(error), "The public opportunities feed returned HTTP 503. Try refreshing later.");
+  const message = await careerFeedErrorMessage(error);
+  assert.match(message, /Opportunities Feed: HTTP 503/);
+  assert.match(message, /Opportunities for Youth: HTTP 403/);
 });
 
 test("reports a useful status when the Edge Function returns non-JSON", async () => {
