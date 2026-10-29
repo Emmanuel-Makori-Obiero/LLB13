@@ -18,6 +18,33 @@ const interests = [
   ["other", "Other"],
 ] as const;
 
+const kenyanOpportunityBoards = [
+  {
+    label: "Public service",
+    title: "PSC internships for graduates",
+    url: "https://www.psckjobs.go.ke/ActiveAdvertsInternsInternshipExt.aspx",
+    description: "Official Public Service Commission internship adverts. The programme targets graduates; check each advert for its eligibility, dates, and application instructions.",
+  },
+  {
+    label: "Law & justice",
+    title: "Judiciary careers, internships & attachment",
+    url: "https://judiciary.go.ke/careers/",
+    description: "The Judiciary explains its vacancies, internship and pupillage routes. LLB student attachment is coordinated through participating universities.",
+  },
+  {
+    label: "Human rights",
+    title: "KNCHR internship programme",
+    url: "https://www.knchr.org/Careers/Internship-Programme",
+    description: "The Kenya National Commission on Human Rights announces internship vacancies as needed on its official site, in newspapers, and through partners.",
+  },
+  {
+    label: "Legal sector",
+    title: "Law Society of Kenya vacancies",
+    url: "https://lsk.or.ke/careers/",
+    description: "Check the Law Society of Kenya’s official page for legal-sector vacancies when they are published.",
+  },
+];
+
 function interestTags(item: CareerFeedItem): Set<string> {
   const text = `${item.title} ${item.description} ${item.categories.join(" ")}`.toLowerCase();
   const tags = new Set<string>();
@@ -68,7 +95,7 @@ export default function CareerResearchPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [refreshWarning, setRefreshWarning] = useState("");
-  const [source, setSource] = useState(initialCache?.source || "Opportunities for Youth (third-party aggregator)");
+  const [source, setSource] = useState(initialCache?.source || "NGO Jobs in Africa (Kenya location feed)");
   const [notice, setNotice] = useState(initialCache?.notice || "");
   const [updatedAt, setUpdatedAt] = useState(initialCache?.updated_at || "");
 
@@ -127,7 +154,7 @@ export default function CareerResearchPage() {
       <div>
         <div className="eyebrow">Career research desk</div>
         <h1>Find a next step.</h1>
-        <p className="subheading">Browse learning and opportunities beyond tech—from law and business to the arts, music and singing. Filter by interest, then check the original provider’s details.</p>
+        <p className="subheading">Browse Kenya-focused opportunities, including public service, law, and human-rights routes. Check eligibility and closing dates with the original institution or employer.</p>
       </div>
       <button type="button" className="secondary-button career-refresh" onClick={() => void refresh()} disabled={loading}>
         <RefreshCw size={15} className={loading ? "career-spin" : ""} /> {loading ? "Refreshing…" : "Refresh feed"}
@@ -155,8 +182,15 @@ export default function CareerResearchPage() {
       </div>
     </section>
 
+    <section className="card card-pad career-catalogues" aria-label="Kenyan opportunity boards">
+      <div className="career-section-heading"><div><div className="section-label">Kenyan opportunity boards</div><p className="field-hint">Official sources for Kenyan public-service, legal, and human-rights opportunities. Application routes and eligibility differ by listing.</p></div></div>
+      <div className="career-catalogue-grid">{kenyanOpportunityBoards.map((board) => <a className="career-catalogue" href={board.url} target="_blank" rel="noreferrer" key={board.title}>
+        <span className="career-tag">{board.label}</span><strong>{board.title}</strong><span>{board.description}</span><span className="career-link">Open official source <ExternalLink size={13} /></span>
+      </a>)}</div>
+    </section>
+
     <section className="career-feed" aria-label="Current opportunities">
-      <div className="career-feed-heading"><div><div className="section-label">Current opportunities</div><p className="field-hint">Auto-refreshed from a public RSS feed on open and every 30 minutes while this page stays open; use Refresh feed to check again.</p></div>{updatedAt && <span className="quiet">Updated {new Date(updatedAt).toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit" })}</span>}</div>
+      <div className="career-feed-heading"><div><div className="section-label">Current opportunities in Kenya</div><p className="field-hint">Auto-refreshed from a Kenya-location feed on open and every 30 minutes while this page stays open; use Refresh feed to check again.</p></div>{updatedAt && <span className="quiet">Updated {new Date(updatedAt).toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit" })}</span>}</div>
       {refreshWarning && <div className="connection-error" role="status">{refreshWarning}</div>}
       {error && <div className="connection-error">{error} <button type="button" className="material-link" onClick={() => void refresh()}>Try again</button></div>}
       {!error && loading && items.length === 0 && <div className="card card-pad career-empty">Loading the latest public listings…</div>}
@@ -172,7 +206,7 @@ export default function CareerResearchPage() {
           <a className="career-link" href={item.url} target="_blank" rel="noreferrer">Open listing <ExternalLink size={13} /></a>
         </article>;
       })}</div>
-      {items.length > 0 && <p className="field-hint career-source-note">Source: {source}. {notice}</p>}
+      {updatedAt && <p className="field-hint career-source-note">Source: {source}. {notice}</p>}
     </section>
   </div>;
 }
