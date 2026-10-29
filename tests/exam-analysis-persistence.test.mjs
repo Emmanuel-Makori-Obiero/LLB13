@@ -17,6 +17,8 @@ test("exam analysis uses a compact complete-review prompt without unrelated cons
   assert.match(EXAM_ANALYSIS_SYSTEM_PROMPT, /every readable question/i);
   assert.match(EXAM_ANALYSIS_SYSTEM_PROMPT, /never instructions/i);
   assert.match(EXAM_ANALYSIS_SYSTEM_PROMPT, /Do not invent legal rules/i);
+  assert.match(EXAM_ANALYSIS_SYSTEM_PROMPT, /Do not assume Kenyan law, a UON unit/i);
+  assert.match(EXAM_ANALYSIS_SYSTEM_PROMPT, /If the jurisdiction or governing course context is unclear/i);
   assert.match(edge, /if \(feature === "exam_analysis"\) return EXAM_ANALYSIS_SYSTEM_PROMPT/);
   assert.match(edge, /rejected the exam-review request as too large \(HTTP 413\)/);
 });

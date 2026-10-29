@@ -1,22 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLink, GraduationCap, RefreshCw, Search } from "lucide-react";
 import { supabase } from "./data/repository";
+import { careerFeedErrorMessage, normalizeCareerFeed, readCareerFeedCache, writeCareerFeedCache, type CareerFeedItem, type CareerFeedResponse } from "./lib/careerFeed";
 import "./career-research.css";
-
-type FeedItem = {
-  title: string;
-  url: string;
-  description: string;
-  published_at: string | null;
-  categories: string[];
-};
-type FeedResponse = {
-  source?: string;
-  updated_at?: string;
-  items?: FeedItem[];
-  notice?: string;
-  error?: string;
-};
 
 const interests = [
   ["all", "All interests"],
@@ -32,7 +18,7 @@ const interests = [
   ["other", "Other"],
 ] as const;
 
-function interestTags(item: FeedItem): Set<string> {
+function interestTags(item: CareerFeedItem): Set<string> {
   const text = `${item.title} ${item.description} ${item.categories.join(" ")}`.toLowerCase();
   const tags = new Set<string>();
   if (/\b(tech|technology|software|coding|digital|cyber|data|artificial intelligence|\bai\b|engineering|computer|robotics)\b/.test(text)) tags.add("technology");
@@ -48,7 +34,7 @@ function interestTags(item: FeedItem): Set<string> {
   return tags;
 }
 
-function opportunityKind(item: FeedItem) {
+function opportunityKind(item: CareerFeedItem) {
   const text = `${item.title} ${item.description} ${item.categories.join(" ")}`.toLowerCase();
   if (/scholarship|bursary|fellowship/.test(text)) return "Scholarship / fellowship";
   if (/grant|funding|prize/.test(text)) return "Grant / funding";
@@ -71,29 +57,51 @@ function displayDate(value: string | null) {
 }
 
 export default function CareerResearchPage() {
-  const [items, setItems] = useState<FeedItem[]>([]);
+  const [initialCache] = useState<CareerFeedResponse | null>(() => {
+    try { return typeof window === "undefined" ? null : readCareerFeedCache(window.localStorage); }
+    catch { return null; }
+  });
+  const lastSuccess = useRef(initialCache);
+  const [items, setItems] = useState<CareerFeedItem[]>(() => initialCache?.items ?? []);
   const [category, setCategory] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [source, setSource] = useState("Opportunities for Youth (third-party aggregator)");
-  const [notice, setNotice] = useState("");
-  const [updatedAt, setUpdatedAt] = useState("");
+  const [refreshWarning, setRefreshWarning] = useState("");
+  const [source, setSource] = useState(initialCache?.source || "Opportunities for Youth (third-party aggregator)");
+  const [notice, setNotice] = useState(initialCache?.notice || "");
+  const [updatedAt, setUpdatedAt] = useState(initialCache?.updated_at || "");
 
   const refresh = async () => {
-    if (!supabase) { setError("The opportunities feed is not connected to Supabase."); return; }
+    if (!supabase) {
+      const message = "The opportunities feed is not connected to Supabase.";
+      if (lastSuccess.current?.items?.length) setRefreshWarning(`${message} Showing the last successful feed update from ${displayDate(lastSuccess.current.updated_at ?? null)}.`);
+      else setError(message);
+      return;
+    }
     setLoading(true);
     setError("");
     try {
-      const { data, error: invokeError } = await supabase.functions.invoke<FeedResponse>("career-opportunities");
-      if (invokeError) throw new Error(invokeError.message || "The public feed could not be reached.");
+      const { data, error: invokeError } = await supabase.functions.invoke<CareerFeedResponse>("career-opportunities");
+      if (invokeError) throw invokeError;
       if (!data || data.error) throw new Error(data?.error || "The public feed returned no usable data.");
-      setItems(Array.isArray(data.items) ? data.items : []);
-      setSource(data.source || "Public opportunities feed");
-      setNotice(data.notice || "");
-      setUpdatedAt(data.updated_at || new Date().toISOString());
+      const feed = normalizeCareerFeed(data);
+      if (!feed) throw new Error("The opportunities service returned an unexpected feed format. Please try again later.");
+      lastSuccess.current = feed;
+      try { writeCareerFeedCache(feed, window.localStorage); } catch { /* Continue if browser storage is unavailable. */ }
+      setItems(feed.items ?? []);
+      setSource(feed.source || "Public opportunities feed");
+      setNotice(feed.notice || "");
+      setUpdatedAt(feed.updated_at || new Date().toISOString());
+      setRefreshWarning("");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not refresh current opportunities.");
+      const message = await careerFeedErrorMessage(caught);
+      if (lastSuccess.current?.items?.length) {
+        setRefreshWarning(`Live feed update failed: ${message} Showing the last successful update from ${displayDate(lastSuccess.current.updated_at ?? null)}.`);
+      } else {
+        setError(message);
+        setRefreshWarning("");
+      }
     } finally { setLoading(false); }
   };
 
@@ -149,6 +157,7 @@ export default function CareerResearchPage() {
 
     <section className="career-feed" aria-label="Current opportunities">
       <div className="career-feed-heading"><div><div className="section-label">Current opportunities</div><p className="field-hint">Auto-refreshed from a public RSS feed on open and every 30 minutes while this page stays open; use Refresh feed to check again.</p></div>{updatedAt && <span className="quiet">Updated {new Date(updatedAt).toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit" })}</span>}</div>
+      {refreshWarning && <div className="connection-error" role="status">{refreshWarning}</div>}
       {error && <div className="connection-error">{error} <button type="button" className="material-link" onClick={() => void refresh()}>Try again</button></div>}
       {!error && loading && items.length === 0 && <div className="card card-pad career-empty">Loading the latest public listings…</div>}
       {!error && !loading && visibleItems.length === 0 && <div className="card card-pad career-empty">No current feed items match this filter. Try another interest or refresh.</div>}

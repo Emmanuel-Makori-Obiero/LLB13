@@ -21,11 +21,16 @@ create table if not exists public.materials (
   topic text not null,
   date text not null,
   source text not null,
+  target_years text[] not null default '{}',
   created_at timestamptz not null default now()
 );
 
 alter table public.materials add column if not exists url text;
 alter table public.materials add column if not exists storage_path text;
+alter table public.materials add column if not exists target_years text[] not null default '{}';
+-- ai_documents is created by migration 001_ai.sql before this starter schema runs.
+alter table public.ai_documents add column if not exists target_years text[] not null default '{}';
+alter table public.ai_documents add column if not exists material_id uuid;
 
 create table if not exists public.assignments (
   id text primary key,
