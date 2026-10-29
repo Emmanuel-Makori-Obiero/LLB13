@@ -52,7 +52,8 @@ test("live debate always renders the motion and the bot is instructed to stay on
 });
 
 test("exam UI explicitly requests and displays a full paper instead of a loose question list", () => {
-  assert.match(examPage, /Create ONE complete new Kenyan-law practice examination based on the uploaded paper/);
+  assert.match(examPage, /Create ONE complete new practice examination based only on the uploaded paper/);
+  assert.match(examPage, /Use the jurisdiction and course topics stated in that paper/);
   assert.match(examPage, /EXACTLY \$\{questionCount\} open-response questions/);
   assert.match(examPage, /marks must be positive whole numbers adding to exactly 100/i);
   assert.match(examPage, /COMPLETE PRACTICE EXAM/);

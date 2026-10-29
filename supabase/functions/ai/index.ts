@@ -18,6 +18,7 @@ import {
   hasLegalProcessSteps,
   legalWhatIfSystemPrompt,
 } from "./prompts.ts";
+import { materialVisibleToLevel, normalizeLearnerLevel } from "../_shared/cohort.js";
 
 // ===== providers (fallback chain) =====
 // Free-tier fallback chain. Every provider speaks the OpenAI chat-completions format.
@@ -622,13 +623,13 @@ async function documentAudienceTags(db: any, docs: any[]): Promise<Map<string, s
 }
 
 async function filterRowsByLearnerLevel(db: any, rows: any[], learnerLevel?: string): Promise<any[]> {
-  if (!learnerLevel || !rows.length) return rows;
+  if (!rows.length) return rows;
   const ids = [...new Set(rows.map((row) => String(row.document_id)).filter(Boolean))];
   if (!ids.length) return rows;
   const { data, error } = await db.from("ai_documents").select("id,target_years,material_id").in("id", ids).limit(200);
   if (error) throw new Error("cohort filter failed");
   const audiences = await documentAudienceTags(db, data ?? []);
-  const visibleIds = new Set((data ?? []).filter((doc: any) => { const targetYears = audiences.get(String(doc.id)) ?? []; return !targetYears.length || targetYears.includes(learnerLevel); }).map((doc: any) => String(doc.id)));
+  const visibleIds = new Set((data ?? []).filter((doc: any) => materialVisibleToLevel(audiences.get(String(doc.id)), learnerLevel)).map((doc: any) => String(doc.id)));
   return rows.filter((row) => visibleIds.has(String(row.document_id)));
 }
 
@@ -703,11 +704,11 @@ async function retrieve(
   // only relevant chunks, so the model can use all constitutional Articles over
   // time without stuffing the entire text into every prompt.
   let selectedIds = requestedIds;
-  if (learnerLevel && selectedIds.length) {
+  if (selectedIds.length) {
     const { data: selectedDocs, error } = await db.from("ai_documents").select("id,target_years,material_id").in("id", selectedIds).limit(20);
     if (error) throw new Error("cohort filter failed");
     const audiences = await documentAudienceTags(db, selectedDocs ?? []);
-    const allowed = new Set((selectedDocs ?? []).filter((doc: any) => { const targetYears = audiences.get(String(doc.id)) ?? []; return !targetYears.length || targetYears.includes(learnerLevel); }).map((doc: any) => String(doc.id)));
+    const allowed = new Set((selectedDocs ?? []).filter((doc: any) => materialVisibleToLevel(audiences.get(String(doc.id)), learnerLevel)).map((doc: any) => String(doc.id)));
     selectedIds = selectedIds.filter((id) => allowed.has(id));
     if (docIds?.length && !selectedIds.length) {
       if (["exam_analysis", "notes_review", "notes_research"].includes(feature)) {
@@ -1094,8 +1095,7 @@ Deno.serve(async (req) => {
   const size = Number.isInteger(body.size)
     ? Math.min(10, Math.max(feature === "summarize" ? 1 : 3, body.size as number))
     : CHUNKS_PART;
-  const allowedLearnerLevels = new Set(["llb-year-1", "llb-year-2", "llb-year-3", "llb-year-4", "masters", "phd", "prefer-not-to-say"]);
-  const learnerLevel = typeof body.learnerLevel === "string" && allowedLearnerLevels.has(body.learnerLevel) ? body.learnerLevel : undefined;
+  const learnerLevel = normalizeLearnerLevel(u.user.user_metadata?.learner_level);
   const docIds = Array.isArray(body.docIds)
     ? body.docIds.filter((x) => typeof x === "string").slice(0, 10)
     : undefined;

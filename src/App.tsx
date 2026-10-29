@@ -302,7 +302,8 @@ function App() {
   const [musicIndex, setMusicIndex] = useState(0);
   const [musicPlaying, setMusicPlaying] = useState(false);
   const isAdmin = adminState === "yes";
-  const visibleAssignments = useMemo(() => assignments.filter((assignment) => materialVisibleToLevel(assignment.target_years, profile.learnerLevel)), [assignments, profile.learnerLevel]);
+  const visibleMaterials = useMemo(() => materials.filter((material) => isAdmin || materialVisibleToLevel(material.target_years, profile.learnerLevel)), [materials, isAdmin, profile.learnerLevel]);
+  const visibleAssignments = useMemo(() => assignments.filter((assignment) => isAdmin || materialVisibleToLevel(assignment.target_years, profile.learnerLevel)), [assignments, isAdmin, profile.learnerLevel]);
   useEffect(() => {
     const wallpaper = profile.wallpaperUrl || window.localStorage.getItem("group13-wallpaper") || "";
     if (wallpaper) window.localStorage.setItem("group13-wallpaper", wallpaper);
@@ -547,16 +548,16 @@ function App() {
   }, [notice]);
 
   const selected = units.find((u) => u.id === selectedUnit) ?? units[0];
-  const selectedA = assignments.find((a) => a.id === selectedAssignment);
+  const selectedA = visibleAssignments.find((a) => a.id === selectedAssignment);
   const filteredMaterials = useMemo(
     () =>
-      materials.filter((m) =>
+      visibleMaterials.filter((m) =>
         [m.title, m.type, m.unit, m.topic]
           .join(" ")
           .toLowerCase()
           .includes(search.toLowerCase()),
       ),
-    [materials, search],
+    [visibleMaterials, search],
   );
   const visibleAssignmentIds = new Set(visibleAssignments.map((assignment) => assignment.id));
   const visibleTodos = todos.filter((todo) => !todo.assignment_id || visibleAssignmentIds.has(todo.assignment_id));
@@ -760,6 +761,10 @@ function App() {
   const openReader = (material: Material) => {
     if (!material.url) {
       setNotice("This material has no file or link yet.");
+      return;
+    }
+    if (!isAdmin && !materialVisibleToLevel(material.target_years, profile.learnerLevel)) {
+      setNotice("This material is not shared with your saved study level. Update your level in Account settings if it is incorrect.");
       return;
     }
     window.history.pushState({}, "", `/library/materials/${material.id}`);
@@ -1249,7 +1254,7 @@ function App() {
               selected={selected}
               selectedUnit={selectedUnit}
               setSelectedUnit={setSelectedUnit}
-              materials={materials}
+              materials={visibleMaterials}
               setNotice={setNotice}
               setPage={setPage}
               openUnit={openUnit}
@@ -1258,8 +1263,8 @@ function App() {
           {view === "unit" && selected && (
             <UnitWorkspacePage
               unit={selected}
-              materials={materials}
-              assignments={assignments}
+              materials={visibleMaterials}
+              assignments={visibleAssignments}
               discussions={discussions}
               openReader={openReader}
               openMeeting={openMeeting}
@@ -1288,8 +1293,13 @@ function App() {
               onDelete={deleteMaterial}
             />
           )}
-          {view === "reader" && activeMaterial && (
+          {view === "reader" && activeMaterial && visibleMaterials.some((material) => material.id === activeMaterial.id) && (
             <MaterialReader material={activeMaterial} onClose={closeReader} />
+          )}
+          {view === "reader" && activeMaterial && !visibleMaterials.some((material) => material.id === activeMaterial.id) && (
+            <div className="card card-pad empty">
+              This material is not shared with your saved study level. Update your level in Account settings if it is incorrect. <button className="material-link" onClick={closeReader}>Back to library</button>
+            </div>
           )}
           {view === "reader" && !activeMaterial && (
             <div className="card card-pad empty">
@@ -1362,7 +1372,7 @@ function App() {
               }}
             />
           )}
-          {view === "arena" && <GamesHub materials={materials} userId={userId} displayName={profile.displayName || userEmail?.split("@")[0] || "Player"} learnerLevel={profile.learnerLevel} learningPreference={profile.learningPreference} isAdmin={isAdmin} inviteCode={readDebateInviteCode(window.location.search)} />}
+          {view === "arena" && <GamesHub materials={visibleMaterials} userId={userId} displayName={profile.displayName || userEmail?.split("@")[0] || "Player"} learnerLevel={profile.learnerLevel} learningPreference={profile.learningPreference} isAdmin={isAdmin} inviteCode={readDebateInviteCode(window.location.search)} />}
           {view === "members" && <SectionedMembersPage members={members} />}
           {view === "dictionary" && <LegalDictionaryPage />}
           {view === "legal-process" && (
@@ -1396,7 +1406,7 @@ function App() {
               <ExamReviewPage
                 key={userId ?? "signed-out"}
                 userId={userId}
-                materials={materials}
+                materials={visibleMaterials}
                 units={units}
                 onOpenLibrary={(materialId) => {
                   const linkedMaterial = materials.find((item) => item.id === materialId);
@@ -1480,7 +1490,7 @@ function App() {
           )}
           {view === "assignment-helper" && (
             <Suspense fallback={<div className="subheading">Opening assignment helper…</div>}>
-              <AssignmentHelperPage assignments={assignments} learnerLevel={profile.learnerLevel} />
+              <AssignmentHelperPage assignments={visibleAssignments} learnerLevel={profile.learnerLevel} />
             </Suspense>
           )}
           {view === "research" && (
@@ -3977,8 +3987,8 @@ function LibraryPageReal({
   const [sessionFilter, setSessionFilter] = useState("all");
   const [courseFilter, setCourseFilter] = useState("all");
   const [ingestionFilter, setIngestionFilter] = useState("all");
-  const [yearFilter, setYearFilter] = useState(learnerLevel || "all");
-  useEffect(() => setYearFilter(learnerLevel || "all"), [learnerLevel]);
+  const [yearFilter, setYearFilter] = useState(isAdmin ? "all" : learnerLevel || "all");
+  useEffect(() => setYearFilter(isAdmin ? "all" : learnerLevel || "all"), [learnerLevel, isAdmin]);
   const [sortBy, setSortBy] = useState("date-desc");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [libraryGuideOpen, setLibraryGuideOpen] = useState(false);
@@ -4194,7 +4204,9 @@ function LibraryPageReal({
     .filter((material) => sessionFilter === "all" || material.exam_session === sessionFilter)
     .filter((material) => courseFilter === "all" || material.course_code === courseFilter)
     .filter((material) => ingestionFilter === "all" || (material.ingestion_status || "ready") === ingestionFilter)
-    .filter((material) => yearFilter === "all" || materialVisibleToLevel(material.target_years, yearFilter))
+    .filter((material) => isAdmin
+      ? yearFilter === "all" || materialVisibleToLevel(material.target_years, yearFilter)
+      : materialVisibleToLevel(material.target_years, learnerLevel))
     .sort((a, b) => {
       if (sortBy === "date-asc") return (Date.parse(a.date) || 0) - (Date.parse(b.date) || 0);
       if (sortBy === "title-asc") return a.title.localeCompare(b.title);
@@ -4273,13 +4285,19 @@ function LibraryPageReal({
               <option value="failed">Failed</option>
             </select>
           </label>
-          <label>
+          {isAdmin ? <label>
             <span>Study level</span>
             <select value={yearFilter} onChange={(event) => setYearFilter(event.target.value)}>
               <option value="all">All cohorts</option>
               {learnerLevels.filter((item) => item.id !== "prefer-not-to-say").map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
             </select>
-          </label>
+          </label> : <label>
+            <span>Study level</span>
+            <select value={learnerLevel || "shared"} disabled>
+              <option value={learnerLevel || "shared"}>{learnerLevels.find((item) => item.id === learnerLevel)?.label ?? "Not set · shared resources only"}</option>
+            </select>
+            <span className="field-hint">Cohort-tagged materials stay scoped to your saved level.</span>
+          </label>}
           <label>
             <span>Sort by</span>
             <select value={sortBy} onChange={(event) => setSortBy(event.target.value)}>

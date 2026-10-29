@@ -1,3 +1,5 @@
+import { materialVisibleToLevel as sharedMaterialVisibleToLevel } from "../../supabase/functions/_shared/cohort.js";
+
 export type LearnerLevel = "llb-year-1" | "llb-year-2" | "llb-year-3" | "llb-year-4" | "masters" | "phd" | "prefer-not-to-say" | "";
 export type LearningPreference = "guided" | "balanced" | "challenge" | "";
 export type LearningProfile = { learnerLevel: LearnerLevel; learningPreference: LearningPreference };
@@ -73,5 +75,5 @@ export function shouldShowAdaptationSurvey(signedIn: boolean, profile: LearningP
 }
 
 export function materialVisibleToLevel(targetYears: readonly string[] | null | undefined, level: string): boolean {
-  return !targetYears?.length || targetYears.includes(level);
+  return sharedMaterialVisibleToLevel(targetYears, level);
 }
