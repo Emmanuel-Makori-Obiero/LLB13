@@ -15,12 +15,10 @@ export type CareerFeedResponse = {
   error?: string;
 };
 
-export const CAREER_FEED_CACHE_KEY = "group13:career-feed:v1";
+export const CAREER_FEED_CACHE_KEY = "group13:career-feed:kenya:v1";
 const ALLOWED_LISTING_HOSTS = new Set([
-  "opportunitiesforyouth.org",
-  "www.opportunitiesforyouth.org",
-  "opportunitiesfeed.com",
-  "www.opportunitiesfeed.com",
+  "ngojobsinafrica.com",
+  "www.ngojobsinafrica.com",
 ]);
 
 function validFeedItem(value: unknown): value is CareerFeedItem {
@@ -43,7 +41,7 @@ export function normalizeCareerFeed(value: unknown): CareerFeedResponse | null {
   const feed = value as Record<string, unknown>;
   if (!Array.isArray(feed.items) || !feed.items.every(validFeedItem)) return null;
   return {
-    source: typeof feed.source === "string" ? feed.source : "Public opportunities feed",
+    source: typeof feed.source === "string" ? feed.source : "Kenya-focused opportunities feed",
     ...(typeof feed.source_url === "string" ? { source_url: feed.source_url } : {}),
     updated_at: typeof feed.updated_at === "string" && !Number.isNaN(Date.parse(feed.updated_at)) ? feed.updated_at : new Date(0).toISOString(),
     items: feed.items,

@@ -9,11 +9,11 @@ import {
 } from "../src/lib/careerFeed.ts";
 
 const goodItem = {
-  title: "Law internship",
-  url: "https://opportunitiesforyouth.org/law-internship/",
-  description: "A public listing",
-  published_at: "2026-10-01T12:00:00.000Z",
-  categories: ["law"],
+  title: "Kenya legal internship",
+  url: "https://ngojobsinafrica.com/job/kenya-legal-internship/",
+  description: "A Kenya-location listing",
+  published_at: "2026-10-28T12:00:00.000Z",
+  categories: ["Kenya", "Law"],
 };
 
 function memoryStorage() {
@@ -25,37 +25,37 @@ function memoryStorage() {
   };
 }
 
-test("accepts the current provider and the explicitly approved fallback host", () => {
+test("accepts only listings hosted by the Kenya-filtered provider", () => {
   assert.equal(normalizeCareerFeed({ items: [goodItem] })?.items?.length, 1);
-  const fallback = { ...goodItem, url: "https://opportunitiesfeed.com/2026/10/29/legal-internship/" };
-  assert.equal(normalizeCareerFeed({ items: [fallback] })?.items?.length, 1);
+  assert.equal(normalizeCareerFeed({ items: [{ ...goodItem, url: "https://www.ngojobsinafrica.com/job/kenya-role/" }] })?.items?.length, 1);
+  assert.equal(normalizeCareerFeed({ items: [{ ...goodItem, url: "https://opportunitiesfeed.com/global-role/" }] }), null);
+  assert.equal(normalizeCareerFeed({ items: [{ ...goodItem, url: "https://opportunitiesforyouth.org/global-role/" }] }), null);
 });
 
 test("rejects unsafe and lookalike listing URLs", () => {
   assert.equal(normalizeCareerFeed({ items: [{ ...goodItem, url: "javascript:alert(1)" }] }), null);
   assert.equal(normalizeCareerFeed({ items: [{ ...goodItem, url: "https://example.com/fake" }] }), null);
-  assert.equal(normalizeCareerFeed({ items: [{ ...goodItem, url: "https://opportunitiesfeed.com.evil.example/fake" }] }), null);
+  assert.equal(normalizeCareerFeed({ items: [{ ...goodItem, url: "https://ngojobsinafrica.com.evil.example/fake" }] }), null);
 });
 
-test("stores and restores a validated last-successful feed", () => {
+test("stores and restores a validated Kenya-only feed using its own cache key", () => {
   const storage = memoryStorage();
-  const feed = { source: "Public feed", updated_at: "2026-10-21T10:00:00.000Z", items: [goodItem], notice: "Check the source." };
+  const feed = { source: "Kenya feed", updated_at: "2026-10-28T10:00:00.000Z", items: [goodItem], notice: "Check the source." };
   writeCareerFeedCache(feed, storage);
   assert.ok(storage.values.has(CAREER_FEED_CACHE_KEY));
   assert.deepEqual(readCareerFeedCache(storage), feed);
-  storage.setItem(CAREER_FEED_CACHE_KEY, JSON.stringify({ items: [{ ...goodItem, url: "https://example.com" }] }));
+  storage.setItem(CAREER_FEED_CACHE_KEY, JSON.stringify({ items: [{ ...goodItem, url: "https://opportunitiesfeed.com/global-role/" }] }));
   assert.equal(readCareerFeedCache(storage), null);
 });
 
-test("extracts the server's provider failure details from Supabase's generic non-2xx error", async () => {
+test("extracts the Kenya-feed error from Supabase's generic non-2xx error", async () => {
   const error = new Error("Edge Function returned a non-2xx status code");
-  error.context = new Response(JSON.stringify({ error: "All public opportunities feeds failed (Opportunities Feed: HTTP 503; Opportunities for Youth: HTTP 403). Try refreshing later." }), {
+  const serverMessage = "The Kenya-focused opportunities feed returned HTTP 403. Global listings are not used as a fallback.";
+  error.context = new Response(JSON.stringify({ error: serverMessage }), {
     status: 502,
     headers: { "Content-Type": "application/json" },
   });
-  const message = await careerFeedErrorMessage(error);
-  assert.match(message, /Opportunities Feed: HTTP 503/);
-  assert.match(message, /Opportunities for Youth: HTTP 403/);
+  assert.equal(await careerFeedErrorMessage(error), serverMessage);
 });
 
 test("reports a useful status when the Edge Function returns non-JSON", async () => {
