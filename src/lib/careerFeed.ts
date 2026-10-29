@@ -2,6 +2,7 @@ export type CareerFeedItem = {
   title: string;
   url: string;
   description: string;
+  details?: string;
   published_at: string | null;
   categories: string[];
 };
@@ -15,7 +16,7 @@ export type CareerFeedResponse = {
   error?: string;
 };
 
-export const CAREER_FEED_CACHE_KEY = "group13:career-feed:kenya:v1";
+export const CAREER_FEED_CACHE_KEY = "group13:career-feed:kenya:v2";
 const ALLOWED_LISTING_HOSTS = new Set([
   "ngojobsinafrica.com",
   "www.ngojobsinafrica.com",
@@ -32,6 +33,7 @@ function validFeedItem(value: unknown): value is CareerFeedItem {
     return false;
   }
   return typeof item.description === "string" &&
+    (item.details === undefined || (typeof item.details === "string" && item.details.length <= 12_000)) &&
     (item.published_at === null || typeof item.published_at === "string") &&
     Array.isArray(item.categories) && item.categories.every((category) => typeof category === "string");
 }

@@ -12,6 +12,7 @@ const goodItem = {
   title: "Kenya legal internship",
   url: "https://ngojobsinafrica.com/job/kenya-legal-internship/",
   description: "A Kenya-location listing",
+  details: "Full listing text including qualifications and certificate requirements.",
   published_at: "2026-10-28T12:00:00.000Z",
   categories: ["Kenya", "Law"],
 };
@@ -36,6 +37,7 @@ test("rejects unsafe and lookalike listing URLs", () => {
   assert.equal(normalizeCareerFeed({ items: [{ ...goodItem, url: "javascript:alert(1)" }] }), null);
   assert.equal(normalizeCareerFeed({ items: [{ ...goodItem, url: "https://example.com/fake" }] }), null);
   assert.equal(normalizeCareerFeed({ items: [{ ...goodItem, url: "https://ngojobsinafrica.com.evil.example/fake" }] }), null);
+  assert.equal(normalizeCareerFeed({ items: [{ ...goodItem, details: "x".repeat(12_001) }] }), null);
 });
 
 test("stores and restores a validated Kenya-only feed using its own cache key", () => {

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLink, GraduationCap, RefreshCw, Search } from "lucide-react";
 import { supabase } from "./data/repository";
 import { careerFeedErrorMessage, normalizeCareerFeed, readCareerFeedCache, writeCareerFeedCache, type CareerFeedItem, type CareerFeedResponse } from "./lib/careerFeed";
+import CareerCvMatcher from "./CareerCvMatcher";
+import { opportunityKind } from "./lib/cvOpportunityMatcher";
 import "./career-research.css";
 
 const interests = [
@@ -18,12 +20,35 @@ const interests = [
   ["other", "Other"],
 ] as const;
 
+const opportunityTypeFilters = [
+  ["all", "All opportunity types"],
+  ["Jobs / vacancies", "Jobs & vacancies"],
+  ["Internships / attachments", "Internships & attachments"],
+  ["Apprenticeships", "Apprenticeships"],
+  ["Pupillage / legal attachment", "Pupillage / legal attachment"],
+  ["Scholarships / bursaries", "Scholarships / bursaries"],
+  ["Fellowships", "Fellowships"],
+  ["Grants / funding", "Grants / funding"],
+  ["Consultancies / contracts", "Consultancies / contracts"],
+  ["Training / certification", "Training / certification"],
+  ["Volunteering / service", "Volunteering / service"],
+  ["Research / assistantships", "Research / assistantships"],
+  ["Events / competitions", "Events / competitions"],
+  ["Other opportunities", "Other career opportunities"],
+] as const;
+
 const kenyanOpportunityBoards = [
   {
     label: "Public service",
     title: "PSC internships for graduates",
     url: "https://www.psckjobs.go.ke/ActiveAdvertsInternsInternshipExt.aspx",
     description: "Official Public Service Commission internship adverts. The programme targets graduates; check each advert for its eligibility, dates, and application instructions.",
+  },
+  {
+    label: "Fellowship",
+    title: "PSC Emerging Leaders Fellowship",
+    url: "https://www.psckjobs.go.ke/ELPEXT.aspx",
+    description: "The Public Service Commission lists its Emerging Leaders Fellowship Programme here. Check the portal for the current cycle, eligibility, and deadlines.",
   },
   {
     label: "Law & justice",
@@ -46,7 +71,7 @@ const kenyanOpportunityBoards = [
 ];
 
 function interestTags(item: CareerFeedItem): Set<string> {
-  const text = `${item.title} ${item.description} ${item.categories.join(" ")}`.toLowerCase();
+  const text = `${item.title} ${item.description} ${item.details ?? ""} ${item.categories.join(" ")}`.toLowerCase();
   const tags = new Set<string>();
   if (/\b(tech|technology|software|coding|digital|cyber|data|artificial intelligence|\bai\b|engineering|computer|robotics)\b/.test(text)) tags.add("technology");
   if (/\b(law|legal|justice|court|human rights|advocacy|policy|constitutional)\b/.test(text)) tags.add("law");
@@ -59,17 +84,6 @@ function interestTags(item: CareerFeedItem): Set<string> {
   if (/\b(public service|government|civil service|governance|diplomacy|election)\b/.test(text)) tags.add("public-service");
   if (!tags.size) tags.add("other");
   return tags;
-}
-
-function opportunityKind(item: CareerFeedItem) {
-  const text = `${item.title} ${item.description} ${item.categories.join(" ")}`.toLowerCase();
-  if (/scholarship|bursary|fellowship/.test(text)) return "Scholarship / fellowship";
-  if (/grant|funding|prize/.test(text)) return "Grant / funding";
-  if (/course|training|bootcamp|workshop|class/.test(text)) return "Course / training";
-  if (/internship|attachment|trainee|apprentice/.test(text)) return "Internship / placement";
-  if (/\b(job|career|employment|position|vacancy|hiring)\b/.test(text)) return "Job / career";
-  if (/conference|competition|challenge|event|call for/.test(text)) return "Event / competition";
-  return "Opportunity";
 }
 
 function courseSearchQuery(category: string) {
@@ -91,6 +105,7 @@ export default function CareerResearchPage() {
   const lastSuccess = useRef(initialCache);
   const [items, setItems] = useState<CareerFeedItem[]>(() => initialCache?.items ?? []);
   const [category, setCategory] = useState<string>("all");
+  const [opportunityType, setOpportunityType] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -140,8 +155,9 @@ export default function CareerResearchPage() {
 
   const visibleItems = useMemo(() => items
     .filter((item) => category === "all" || interestTags(item).has(category))
-    .filter((item) => !search.trim() || `${item.title} ${item.description} ${item.categories.join(" ")}`.toLowerCase().includes(search.trim().toLowerCase()))
-    .sort((a, b) => (Date.parse(b.published_at || "") || 0) - (Date.parse(a.published_at || "") || 0)), [items, category, search]);
+    .filter((item) => opportunityType === "all" || opportunityKind(item) === opportunityType)
+    .filter((item) => !search.trim() || `${item.title} ${item.description} ${item.details ?? ""} ${item.categories.join(" ")}`.toLowerCase().includes(search.trim().toLowerCase()))
+    .sort((a, b) => (Date.parse(b.published_at || "") || 0) - (Date.parse(a.published_at || "") || 0)), [items, category, opportunityType, search]);
 
   const edxUrl = `https://www.edx.org/courses?q=${encodeURIComponent(courseSearchQuery(category))}`;
   const speedycCourseUrl = "https://kenya.speedycourse.com/";
@@ -154,7 +170,7 @@ export default function CareerResearchPage() {
       <div>
         <div className="eyebrow">Career research desk</div>
         <h1>Find a next step.</h1>
-        <p className="subheading">Browse Kenya-focused opportunities, including public service, law, and human-rights routes. Check eligibility and closing dates with the original institution or employer.</p>
+        <p className="subheading">Browse Kenya-focused jobs, internships, attachments, fellowships, and other career routes. Check eligibility and closing dates with the original institution or employer.</p>
       </div>
       <button type="button" className="secondary-button career-refresh" onClick={() => void refresh()} disabled={loading}>
         <RefreshCw size={15} className={loading ? "career-spin" : ""} /> {loading ? "Refreshing…" : "Refresh feed"}
@@ -167,11 +183,18 @@ export default function CareerResearchPage() {
           {interests.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>
       </label>
+      <label className="career-filter-label">Opportunity type
+        <select value={opportunityType} onChange={(event) => setOpportunityType(event.target.value)}>
+          {opportunityTypeFilters.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select>
+      </label>
       <label className="career-search-label"><span>Search listings</span>
-        <span className="career-search-input"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Scholarship, course, singing…" /></span>
+        <span className="career-search-input"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Job, internship, attachment, scholarship…" /></span>
       </label>
       <span className="career-result-count">{visibleItems.length} listing{visibleItems.length === 1 ? "" : "s"}</span>
     </section>
+
+    <CareerCvMatcher items={items} loading={loading} />
 
     <section className="card card-pad career-catalogues" aria-label="Learning catalogues">
       <div className="career-section-heading"><div><div className="section-label"><GraduationCap size={15} /> Free learning catalogues</div><p className="field-hint">These catalogues update on their providers’ sites. “Free” can mean audit access; certificates or full access may cost money.</p></div></div>

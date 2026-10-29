@@ -6,7 +6,7 @@ globalThis.Deno = { serve: (serveHandler) => { handler = serveHandler; } };
 await import("../supabase/functions/career-opportunities/index.ts");
 
 const kenyaFeedUrl = "https://ngojobsinafrica.com/job-location/kenya/feed/";
-const kenyaRss = `<?xml version="1.0"?><rss version="2.0"><channel><title>Kenya NGO Jobs</title><item><title><![CDATA[Legal Research Assistant – Nairobi]]></title><link>https://ngojobsinafrica.com/job/kenya-legal-research-assistant/</link><pubDate>Wed, 28 Oct 2026 11:40:47 +0000</pubDate><category><![CDATA[Kenya]]></category><category><![CDATA[Law]]></category><description><![CDATA[Applications are invited for a legal research role based in Nairobi, Kenya.]]></description></item></channel></rss>`;
+const kenyaRss = `<?xml version="1.0"?><rss version="2.0"><channel><title>Kenya NGO Jobs</title><item><title><![CDATA[Legal Research Assistant – Nairobi]]></title><link>https://ngojobsinafrica.com/job/kenya-legal-research-assistant/</link><pubDate>Wed, 28 Oct 2026 11:40:47 +0000</pubDate><category><![CDATA[Kenya]]></category><category><![CDATA[Law]]></category><description><![CDATA[Applications are invited for a legal research role based in Nairobi, Kenya.]]></description><content:encoded><![CDATA[Qualifications: Certificate in Legal Research or a bachelor's degree required.]]></content:encoded></item></channel></rss>`;
 
 function request() {
   return new Request("https://function.test/career-opportunities", { method: "POST" });
@@ -28,6 +28,7 @@ test("returns Kenya-location listings from the dedicated Kenya RSS endpoint", as
     assert.equal(payload.source_url, kenyaFeedUrl);
     assert.equal(payload.items.length, 1);
     assert.match(payload.items[0].title, /Nairobi/);
+    assert.match(payload.items[0].details, /Certificate in Legal Research/);
     assert.deepEqual(payload.items[0].categories, ["Kenya", "Law"]);
     assert.match(payload.notice, /filtered by Kenya location/);
   } finally {
