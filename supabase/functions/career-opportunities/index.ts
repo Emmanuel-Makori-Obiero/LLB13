@@ -53,6 +53,7 @@ function parseKenyaItems(xml: string) {
     const rawUrl = field(item, "link");
     const date = field(item, "pubDate");
     const summary = plainText(field(item, "description") || field(item, "content:encoded")).slice(0, 900);
+    const details = plainText(field(item, "content:encoded") || field(item, "description")).slice(0, 12000);
     const categories = [...item.matchAll(/<category(?:\s[^>]*)?>([\s\S]*?)<\/category>/gi)]
       .map((category) => plainText(decodeXml(category[1])).slice(0, 80))
       .filter(Boolean)
@@ -65,7 +66,7 @@ function parseKenyaItems(xml: string) {
     if (!title || !url || seen.has(url)) return [];
     seen.add(url);
     const publishedAt = date && !Number.isNaN(Date.parse(date)) ? new Date(date).toISOString() : null;
-    return [{ title, url, description: summary, published_at: publishedAt, categories }];
+    return [{ title, url, description: summary, details, published_at: publishedAt, categories }];
   });
 }
 
