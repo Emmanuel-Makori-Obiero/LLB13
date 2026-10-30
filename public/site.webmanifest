@@ -1,7 +1,7 @@
 {
-  "name": "Group 13 Hub",
-  "short_name": "Group 13",
-  "description": "A private academic workspace for Group 13 law students.",
+  "name": "LawHub Kenya",
+  "short_name": "LawHub",
+  "description": "Law study tools, guided revision and case-law learning for Kenyan law students. Workspace sign-up is currently limited to approved Group 13 students.",
   "id": "/",
   "start_url": "/",
   "scope": "/",

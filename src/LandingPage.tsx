@@ -61,11 +61,11 @@ const chapters = [
 
 function Brand() {
   return (
-    <a className="landing-brand" href="/" aria-label="Group 13 Hub home">
-      <span className="landing-brand-mark">13</span>
+    <a className="landing-brand" href="/" aria-label="LawHub Kenya home">
+      <span className="landing-brand-mark">LH</span>
       <span className="landing-brand-copy">
-        <strong>GROUP 13</strong>
-        <small>LAW SCHOOL HUB</small>
+        <strong>LAWHUB</strong>
+        <small>KENYA · LAW STUDENT HUB</small>
       </span>
     </a>
   );
@@ -453,7 +453,7 @@ export default function LandingPage({
               </span>
               <span className="g13-book-cover">
                 <span className="g13-book-front">
-                  <small>GROUP 13 · STUDY EDITION</small>
+                  <small>LAWHUB KENYA · STUDY EDITION</small>
                   <strong>LEGAL<br />METHOD</strong>
                   <span className="g13-book-emblem">13</span>
                   <span className="g13-book-front-foot">READ / REASON / RECALL</span>
@@ -470,7 +470,7 @@ export default function LandingPage({
           </button>
         </section>
 
-        <section className="g13-tools" id="features" aria-label="What is inside Group 13 Hub">
+        <section className="g13-tools" id="features" aria-label="What is inside LawHub Kenya">
           <div className="g13-tools-intro">
             <span className="g13-kicker">ONE HUB. MORE ROOM TO THINK.</span>
             <h2>Built around your<br /><strong>real study day.</strong></h2>
@@ -492,8 +492,8 @@ export default function LandingPage({
         </section>
 
         <section className="g13-install-band">
-          <div><span className="g13-kicker">TAKE YOUR STUDY SPACE WITH YOU</span><h2>One tap away from your next session.</h2><p>Use Group 13 in your browser, or add it to your home screen for an app-like shortcut.</p></div>
-          <InstallButton className="g13-install-button" label="Install Group 13" />
+          <div><span className="g13-kicker">TAKE YOUR STUDY SPACE WITH YOU</span><h2>One tap away from your next session.</h2><p>Use LawHub Kenya in your browser, or add it to your home screen for an app-like shortcut.</p></div>
+          <InstallButton className="g13-install-button" label="Install LawHub" />
         </section>
 
         <section className="g13-final-cta">

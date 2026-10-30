@@ -45,9 +45,9 @@ export default function FeaturesGuidePage() {
   return (
     <main className="features-guide-page" id="top">
       <header className="fg-header">
-        <a className="fg-brand" href="/" aria-label="Group 13 home">
-          <span className="fg-brand-mark">13</span>
-          <span><strong>GROUP 13</strong><small>LAW SCHOOL HUB</small></span>
+        <a className="fg-brand" href="/" aria-label="LawHub Kenya home">
+          <span className="fg-brand-mark">LH</span>
+          <span><strong>LAWHUB</strong><small>KENYA · LAW STUDENT HUB</small></span>
         </a>
         <nav className="fg-nav" aria-label="Public navigation">
           <a href="/">Home</a>
@@ -59,14 +59,14 @@ export default function FeaturesGuidePage() {
       </header>
 
       <section className="fg-hero" aria-labelledby="fg-title">
-        <div className="fg-hero-meta"><span>THE GROUP 13 STUDY SYSTEM</span><span>{featureCatalog.length} FEATURE AREAS</span></div>
+        <div className="fg-hero-meta"><span>PUBLIC STUDY GUIDE FOR KENYAN LAW STUDENTS</span><span>{featureCatalog.length} FEATURE AREAS</span></div>
         <div className="fg-hero-copy">
           <span className="fg-kicker"><BookOpen size={14} /> A CLEAR GUIDE TO WHAT'S INSIDE</span>
           <h1 id="fg-title">Every tool.<br /><strong>Its purpose. Your next step.</strong></h1>
           <p>Browse the full platform before you sign in. See what each feature does, how to use it, who can access it, and where setup or limits still apply.</p>
           <a className="fg-primary" href="#feature-list">Explore the features <ArrowRight size={16} /></a>
         </div>
-        <aside className="fg-hero-note"><ShieldCheck size={18} /><span><strong>No login needed.</strong> Some workspace tools require an approved Group 13 account.</span></aside>
+        <aside className="fg-hero-note"><ShieldCheck size={18} /><span><strong>Public guide for Kenyan law students.</strong> Workspace sign-up is currently limited to approved Group 13 accounts.</span></aside>
       </section>
 
       <section className="fg-directory" id="feature-list" aria-label="Feature directory">
@@ -121,7 +121,7 @@ export default function FeaturesGuidePage() {
       </section>
 
       <aside className="fg-caution"><span className="fg-caution-mark">13</span><p><strong>Kenyan law starts with the Constitution.</strong> Case citations require selected AI-readable source text; use the Kenya Law case finder to open official judgments. Features marked “Setup or limits apply” may depend on account access, provider configuration or a current limitation.</p></aside>
-      <footer className="fg-footer"><a className="fg-brand" href="/"><span className="fg-brand-mark">13</span><span><strong>GROUP 13</strong><small>LAW SCHOOL HUB</small></span></a><span>Read closely · Think boldly · Verify the source</span><a href="#top">Back to top ↑</a></footer>
+      <footer className="fg-footer"><a className="fg-brand" href="/"><span className="fg-brand-mark">LH</span><span><strong>LAWHUB</strong><small>KENYA · LAW STUDENT HUB</small></span></a><span>Read closely · Think boldly · Verify the source</span><a href="#top">Back to top ↑</a></footer>
     </main>
   );
 }
