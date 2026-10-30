@@ -45,9 +45,9 @@ export default function FeaturesGuidePage() {
   return (
     <main className="features-guide-page" id="top">
       <header className="fg-header">
-        <a className="fg-brand" href="/" aria-label="LawHub Kenya home">
-          <span className="fg-brand-mark">LH</span>
-          <span><strong>LAWHUB</strong><small>KENYA · LAW STUDENT HUB</small></span>
+        <a className="fg-brand" href="/" aria-label="Law Student Community Hub home">
+          <span className="fg-brand-mark">LS</span>
+          <span><strong>LAW STUDENT</strong><small>COMMUNITY HUB</small></span>
         </a>
         <nav className="fg-nav" aria-label="Public navigation">
           <a href="/">Home</a>
@@ -121,7 +121,7 @@ export default function FeaturesGuidePage() {
       </section>
 
       <aside className="fg-caution"><span className="fg-caution-mark">13</span><p><strong>Kenyan law starts with the Constitution.</strong> Case citations require selected AI-readable source text; use the Kenya Law case finder to open official judgments. Features marked “Setup or limits apply” may depend on account access, provider configuration or a current limitation.</p></aside>
-      <footer className="fg-footer"><a className="fg-brand" href="/"><span className="fg-brand-mark">LH</span><span><strong>LAWHUB</strong><small>KENYA · LAW STUDENT HUB</small></span></a><span>Read closely · Think boldly · Verify the source</span><a href="#top">Back to top ↑</a></footer>
+      <footer className="fg-footer"><a className="fg-brand" href="/"><span className="fg-brand-mark">LS</span><span><strong>LAW STUDENT</strong><small>COMMUNITY HUB</small></span></a><span>Read closely · Think boldly · Verify the source</span><a href="#top">Back to top ↑</a></footer>
     </main>
   );
 }

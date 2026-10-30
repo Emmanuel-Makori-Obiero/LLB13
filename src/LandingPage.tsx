@@ -61,11 +61,11 @@ const chapters = [
 
 function Brand() {
   return (
-    <a className="landing-brand" href="/" aria-label="LawHub Kenya home">
-      <span className="landing-brand-mark">LH</span>
+    <a className="landing-brand" href="/" aria-label="Law Student Community Hub home">
+      <span className="landing-brand-mark">LS</span>
       <span className="landing-brand-copy">
-        <strong>LAWHUB</strong>
-        <small>KENYA · LAW STUDENT HUB</small>
+        <strong>LAW STUDENT</strong>
+        <small>COMMUNITY HUB</small>
       </span>
     </a>
   );
@@ -307,7 +307,7 @@ export default function LandingPage({
           <div className="g13-hero-image" aria-hidden="true" />
           <div className="g13-hero-vignette" aria-hidden="true" />
           <div className="g13-hero-copy">
-            <div className="g13-hero-eyebrow"><span /> A PRIVATE LEARNING SPACE FOR GROUP 13</div>
+            <div className="g13-hero-eyebrow"><span /> A STUDY COMMUNITY FOR KENYAN LAW STUDENTS</div>
             <h1>Study the law.<br /><strong>Find your argument.</strong></h1>
             <p className="g13-hero-lede">
               Keep casebooks, lecture notes, lessons and exam practice together,
@@ -337,13 +337,13 @@ export default function LandingPage({
               {signedInPreview ? <><span className="g13-opening-dot" /> Opening your workspace…</> : <><LockKeyhole size={13} /> For approved Group 13 accounts.</>}
             </p>
           </div>
-          <div className="g13-hero-index"><span>FIELD NOTES</span><strong>13</strong><small>LEARN · REASON · REPEAT</small></div>
+          <div className="g13-hero-index"><span>FIELD NOTES</span><strong>LS</strong><small>LEARN · REASON · REPEAT</small></div>
           <a className="g13-scroll-cue" href="#the-method"><span>Scroll to explore</span><ArrowDown size={14} /></a>
           <div className="g13-hero-caption">A QUIETER WAY TO THINK CLEARLY</div>
         </section>
 
         <section className="g13-manifesto" id="the-method">
-          <div className="g13-manifesto-stamp">THE GROUP 13 METHOD<br />READ · RECALL · REASON</div>
+          <div className="g13-manifesto-stamp">THE LAW STUDENT METHOD<br />READ · RECALL · REASON</div>
           <p className="g13-manifesto-copy">
             The work is demanding.<br />Your study space should <strong>make it clearer.</strong>
           </p>
@@ -448,14 +448,14 @@ export default function LandingPage({
                   <span className="g13-book-lines" />
                   <span className="g13-book-lines" />
                   <span className="g13-book-lines short" />
-                  <span className="g13-book-page-number">13</span>
+                  <span className="g13-book-page-number">LS</span>
                 </span>
               </span>
               <span className="g13-book-cover">
                 <span className="g13-book-front">
-                  <small>LAWHUB KENYA · STUDY EDITION</small>
+                  <small>LAW STUDENT HUB · STUDY EDITION</small>
                   <strong>LEGAL<br />METHOD</strong>
-                  <span className="g13-book-emblem">13</span>
+                  <span className="g13-book-emblem">LS</span>
                   <span className="g13-book-front-foot">READ / REASON / RECALL</span>
                 </span>
                 <span className="g13-book-inside">
@@ -470,7 +470,7 @@ export default function LandingPage({
           </button>
         </section>
 
-        <section className="g13-tools" id="features" aria-label="What is inside LawHub Kenya">
+        <section className="g13-tools" id="features" aria-label="What is inside the Law Student Community Hub">
           <div className="g13-tools-intro">
             <span className="g13-kicker">ONE HUB. MORE ROOM TO THINK.</span>
             <h2>Built around your<br /><strong>real study day.</strong></h2>
@@ -492,12 +492,12 @@ export default function LandingPage({
         </section>
 
         <section className="g13-install-band">
-          <div><span className="g13-kicker">TAKE YOUR STUDY SPACE WITH YOU</span><h2>One tap away from your next session.</h2><p>Use LawHub Kenya in your browser, or add it to your home screen for an app-like shortcut.</p></div>
-          <InstallButton className="g13-install-button" label="Install LawHub" />
+          <div><span className="g13-kicker">TAKE YOUR STUDY SPACE WITH YOU</span><h2>One tap away from your next session.</h2><p>Use the Law Student Community Hub in your browser, or add it to your home screen for an app-like shortcut.</p></div>
+          <InstallButton className="g13-install-button" label="Install Study Hub" />
         </section>
 
         <section className="g13-final-cta">
-          <div className="g13-final-mark">13</div>
+          <div className="g13-final-mark">LS</div>
           <span className="g13-kicker">{signedInPreview ? "YOUR GROUP 13 WORKSPACE" : "YOUR NEXT GOOD STUDY SESSION STARTS HERE"}</span>
           <h2>{signedInPreview ? <>Welcome back.<br /><strong>Pick up your work.</strong></> : <>Read closely.<br /><strong>Think boldly.</strong></>}</h2>
           <div className="g13-final-actions">
