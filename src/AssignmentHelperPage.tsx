@@ -7,15 +7,18 @@ import { listGuideSources, type SourceChoice } from "./lib/guidedStudy";
 import { downloadPdf, downloadWord } from "./export";
 import { materialVisibleToLevel } from "./lib/learnerAdaptation";
 import type { Assignment } from "./data/types";
+import { supabase } from "./data/repository";
 
-type Tool = { feature: AIFeature; label: string; description: string };
+type Tool = { id: string; feature: AIFeature; label: string; description: string };
 const tools: Tool[] = [
-  { feature: "rw_question", label: "Understand the question", description: "Break down the command words, issues, scope, and what a strong answer must prove." },
-  { feature: "rw_outline", label: "Build an outline", description: "Create a structured, source-grounded plan with arguments, authorities, counterarguments, and word allocation." },
-  { feature: "irac", label: "Make an IRAC plan", description: "Turn a problem question into issues, rules, application points, and conclusions." },
-  { feature: "rw_critique", label: "Review my draft", description: "Find gaps in reasoning, structure, authority, counterarguments, and clarity without rewriting your voice." },
-  { feature: "rw_citations", label: "Check citations", description: "Format the authorities you provide and flag missing details instead of inventing them." },
+  { id: "question", feature: "rw_question", label: "Understand the question", description: "Break down the command words, issues, scope, and what a strong answer must prove." },
+  { id: "outline", feature: "rw_outline", label: "Build an outline", description: "Create a structured, source-grounded plan with arguments, authorities, counterarguments, and word allocation." },
+  { id: "irac", feature: "irac", label: "Make an IRAC plan", description: "Turn a problem question into issues, rules, application points, and conclusions." },
+  { id: "critique", feature: "rw_critique", label: "Review my draft", description: "Find gaps in reasoning, structure, authority, counterarguments, and clarity without rewriting your voice." },
+  { id: "citations", feature: "rw_citations", label: "Check citations", description: "Format the authorities you provide and flag missing details instead of inventing them." },
+  { id: "book-review", feature: "rw_question", label: "Write a book review", description: "Create an official, organized review of one AI-readable Library book with Word and PDF download." },
 ];
+const reviewKey = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, 12000);
 
 export default function AssignmentHelperPage({ assignments, learnerLevel = "" }: { assignments: Assignment[]; learnerLevel?: string }) {
   const [sources, setSources] = useState<SourceChoice[]>([]);
@@ -24,6 +27,7 @@ export default function AssignmentHelperPage({ assignments, learnerLevel = "" }:
   const [title, setTitle] = useState("");
   const [brief, setBrief] = useState("");
   const [draft, setDraft] = useState("");
+  const [reviewer, setReviewer] = useState("");
   const [tool, setTool] = useState<Tool>(tools[0]);
   const [result, setResult] = useState<AIResult | null>(null);
   const [notice, setNotice] = useState("");
@@ -42,6 +46,8 @@ export default function AssignmentHelperPage({ assignments, learnerLevel = "" }:
   }, [selected, sourcesExpanded, visibleSources]);
   const selectedIds = selectedSources.map((source) => source.id);
   const groundingMode = selectedSources.length > 0 && selectedSources.every((source) => source.scope === "library") ? "library" : selectedSources.some((source) => source.scope === "library") ? "auto" : "materials";
+  const isBookReview = tool.id === "book-review";
+  const selectedBook = isBookReview ? selectedSources.find((source) => source.scope === "library") : null;
 
   const importSource = async (source: SourceChoice) => {
     if (source.kind !== "material" || !source.url || importingSource) return;
@@ -49,7 +55,7 @@ export default function AssignmentHelperPage({ assignments, learnerLevel = "" }:
     try {
       const imported = await importLibraryMaterial({ title: source.title, url: source.url, citation: source.citation, target_years: source.target_years ?? [] });
       await loadSources();
-      setSelected((current) => [...current, imported.id]);
+      setSelected((current) => isBookReview ? [imported.id] : [...current, imported.id]);
       setNotice(`${source.title} is now AI-readable and selected.`);
     } catch (error) { setNotice(error instanceof Error ? error.message : "Could not prepare that Library book."); }
     finally { setImportingSource(null); }
@@ -66,26 +72,47 @@ export default function AssignmentHelperPage({ assignments, learnerLevel = "" }:
   useEffect(() => { void loadSources(); }, []);
 
   const run = async () => {
-    if (!brief.trim()) { setNotice("Paste the assignment question or brief first."); return; }
+    const requestedBrief = brief.trim() || (isBookReview ? "Write the complete official book review from the selected Library book." : "");
+    if (!requestedBrief) { setNotice("Paste the assignment question or brief first."); return; }
+    if (isBookReview && !selectedBook) { setNotice("Choose one Library book first. If it is not AI-readable yet, click it once to prepare the book text."); return; }
     setBusy(true); setResult(null); setNotice("The assignment helper is working from your brief and selected sources…");
+    let previousReviews: { review_text: string }[] = [];
+    if (isBookReview && supabase && selectedBook) {
+      const previous = await supabase.from("book_reviews").select("review_text").eq("book_key", selectedBook.id).order("created_at", { ascending: false }).limit(8);
+      previousReviews = (previous.data ?? []) as { review_text: string }[];
+    }
     const context = [
-      `Assignment title: ${title || "Untitled assignment"}`,
-      `Assignment brief/question:\n${brief.trim()}`,
+      `Assignment title: ${title || selectedBook?.title || "Untitled assignment"}`,
+      `Assignment brief/question:\n${requestedBrief}`,
       selectedSources.length ? `Selected AI-readable source documents:\n${selectedSources.map((source) => `- ${source.title}${source.citation ? ` (${source.citation})` : ""}`).join("\n")}` : "",
       draft.trim() ? `Student draft or working notes:\n${draft.trim()}` : "No draft supplied yet.",
+      isBookReview ? `BOOK REVIEW MODE. Write a formal, publication-ready academic book review of the single selected Library book. Use exactly this order and headings: Bibliographic details; Title; Author; Publisher; Year of publication; Price; Reviewer; Review; Summary and scope; Critical evaluation; Relevance to law students; Conclusion. Extract metadata only when supported by the book text or Library record. For missing publisher, year, price or author, write [Not stated — verify] rather than inventing it. The reviewer name is ${reviewer.trim() || "[Reviewer name not supplied]"}. Do not repeat generic praise, paragraphs, or sentences. Make the review specific to this book, balanced, well organized and official in tone. This is a review, not a plot summary and not an assignment answer.` : "",
+      isBookReview && previousReviews.length ? `PREVIOUS REVIEWS OF THIS SAME BOOK (use them only to avoid repeating their wording and angle; do not quote or reproduce them):\n${previousReviews.slice(0, 5).map((item, index) => `Review ${index + 1}: ${item.review_text.slice(0, 3500)}`).join("\n\n")}` : "",
       tool.feature === "rw_outline" ? "Include a practical section-by-section outline, thesis options, counterargument, and approximate word counts." : "",
       tool.feature === "irac" ? "Do not write the final answer. Produce a study-ready IRAC plan tied to the facts." : "",
       tool.feature === "rw_critique" ? "Give specific improvements and preserve the student's own voice; do not fabricate authorities." : "",
       "Use only retrieved AI-readable source text for source-specific legal claims. Never invent authorities or citations.",
     ].filter(Boolean).join("\n\n");
     try {
-      const response = await askAI({ feature: tool.feature, mode: selectedIds.length ? groundingMode : "general", docIds: selectedIds, messages: [{ role: "user", content: context }] });
+      const requestReview = (extra = "") => askAI({ feature: tool.feature, mode: selectedIds.length ? groundingMode : "general", docIds: selectedIds, messages: [{ role: "user", content: `${context}${extra}` }] });
+      let response = await requestReview();
+      if (isBookReview && previousReviews.some((item) => reviewKey(item.review_text) === reviewKey(response.answer))) {
+        response = await requestReview("\n\nYour first draft duplicates an existing review too closely. Rewrite it with a materially different thesis, paragraph order, examples, critical angle and wording. Do not reuse distinctive phrases from the previous reviews.");
+      }
+      if (isBookReview && supabase && selectedBook) {
+        const { data: auth } = await supabase.auth.getUser();
+        if (auth.user) {
+          const saved = await supabase.from("book_reviews").insert({ book_key: selectedBook.id, book_title: selectedBook.title, review_text: response.answer, content_fingerprint: reviewKey(response.answer), created_by: auth.user.id });
+          if (saved.error && saved.error.code !== "23505") throw new Error(`Review generated but could not be recorded for duplicate protection: ${saved.error.message}`);
+        }
+      }
       setResult(response); setNotice(response.grounded ? "Done. Case citations are tied to retrieved source text; use Kenya Law Case Finder for authorities not included there." : selectedSources.length ? "Done. No readable text was returned from the selected documents, so this is a general overview. Re-upload the source or use Kenya Law Case Finder." : "Done. This is a general overview; no source text was selected. Library reference links do not supply text to the helper.");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "The assignment helper could not complete this request.");
     } finally { setBusy(false); }
   };
 
+  const resultTitle = isBookReview ? `Book review — ${selectedBook?.title || title || "Library book"}` : (title || "Assignment helper");
   return <section className="assignment-helper-page">
     <div className="page-heading">
       <div><div className="eyebrow">Plan, understand, improve</div><h1 className="heading">AI Assignment Helper.</h1><p className="subheading">Paste the assignment brief, select AI-readable source documents, and work through the question step by step. It helps you think and improve; it does not submit work for you.</p></div>
@@ -97,12 +124,13 @@ export default function AssignmentHelperPage({ assignments, learnerLevel = "" }:
         <div className="section-label">1. Your assignment</div>
         <label>Link an existing assignment <span className="field-hint">Selecting one loads its title and brief; you can still edit them.</span><select value={assignmentId} onChange={(event) => { const next = assignments.find((assignment) => assignment.id === event.target.value); setAssignmentId(event.target.value); if (next) { setTitle(next.title); setBrief(next.brief); } }}><option value="">Choose an assignment…</option>{assignments.map((assignment) => <option key={assignment.id} value={assignment.id}>{assignment.title} · {assignment.unit}</option>)}</select></label>
         <label>Title or topic<input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="e.g. Negligence and the duty of care" /></label>
-        <label>Assignment question or brief<textarea value={brief} onChange={(event) => setBrief(event.target.value)} rows={8} placeholder="Paste the exact question, instructions, word count, deadline, and marking rubric if you have them." /></label>
+        <label>{isBookReview ? "Review instructions (optional)" : "Assignment question or brief"}<textarea value={brief} onChange={(event) => setBrief(event.target.value)} rows={8} placeholder={isBookReview ? "Optional: ask for a particular length or critical angle. The official review format is applied automatically." : "Paste the exact question, instructions, word count, deadline, and marking rubric if you have them."} /></label>
         <label>Draft or working notes <span className="field-hint">Optional for question analysis; useful for review.</span><textarea value={draft} onChange={(event) => setDraft(event.target.value)} rows={8} placeholder="Paste your introduction, outline, argument, or draft here." /></label>
+        {isBookReview && <label>Reviewer name<input value={reviewer} onChange={(event) => setReviewer(event.target.value)} placeholder="e.g. Jane Wanjiku" /><span className="field-hint">This is placed in the review's bibliographic details. Missing book metadata is marked for verification rather than invented.</span></label>}
         <div className="section-label">2. Choose a tool</div>
-        <div className="assignment-tools">{tools.map((item) => <button type="button" key={item.feature} className={`assignment-tool ${tool.feature === item.feature ? "active" : ""}`} onClick={() => setTool(item)}><Lightbulb size={15} /><span><strong>{item.label}</strong><small>{item.description}</small></span></button>)}</div>
+        <div className="assignment-tools">{tools.map((item) => <button type="button" key={item.id} className={`assignment-tool ${tool.id === item.id ? "active" : ""}`} onClick={() => setTool(item)}><Lightbulb size={15} /><span><strong>{item.label}</strong><small>{item.description}</small></span></button>)}</div>
         <div className="section-label">3. Choose source text</div>
-        <p className="field-hint">Choose AI-readable books and documents to ground the helper. The list is scrollable so a large Library will not make the page longer.</p>
+        <p className="field-hint">{isBookReview ? "Choose one Library book. If it is not AI-readable yet, click it once to prepare the text; the review is recorded to prevent repeated wording for future users." : "Choose AI-readable books and documents to ground the helper. The list is scrollable so a large Library will not make the page longer."}</p>
         <div className="assignment-source-toolbar" role="group" aria-label="Filter assignment sources">
           <span className="field-hint">{selectedSources.length} source{selectedSources.length === 1 ? "" : "s"} selected</span>
           <div className="assignment-source-filters">
@@ -111,11 +139,11 @@ export default function AssignmentHelperPage({ assignments, learnerLevel = "" }:
             <button type="button" className={sourceFilter === "my" ? "active" : ""} onClick={() => setSourceFilter("my")}>My uploads</button>
           </div>
         </div>
-        <div className="assignment-sources">{visibleSources.length ? compactSources.map((source) => <label className={`assignment-source ${source.kind !== "document" ? "reference-only" : ""}`} key={`${source.kind}:${source.id}`}><input type="checkbox" checked={source.kind === "document" && selected.includes(source.id)} disabled={source.kind === "material" && importingSource === source.id} onChange={() => source.kind === "material" ? void importSource(source) : setSelected((current) => current.includes(source.id) ? current.filter((id) => id !== source.id) : [...current, source.id])} /><BookOpen size={14} /><span>{source.title}<small>{source.kind === "material" ? (importingSource === source.id ? "Preparing Library book for AI…" : "Library book · click to add readable text") : source.scope === "library" ? "Library book · text supplied to AI" : "My saved document · text supplied to AI"}{source.citation ? ` · ${source.citation}` : ""}</small></span></label>) : <p className="empty">No sources in this filter. Add source text in Library, then refresh.</p>}</div>
+        <div className="assignment-sources">{visibleSources.length ? compactSources.map((source) => <label className={`assignment-source ${source.kind !== "document" ? "reference-only" : ""}`} key={`${source.kind}:${source.id}`}><input type="checkbox" checked={source.kind === "document" && selected.includes(source.id)} disabled={source.kind === "material" && importingSource === source.id} onChange={() => source.kind === "material" ? void importSource(source) : setSelected((current) => isBookReview ? [source.id] : current.includes(source.id) ? current.filter((id) => id !== source.id) : [...current, source.id])} /><BookOpen size={14} /><span>{source.title}<small>{source.kind === "material" ? (importingSource === source.id ? "Preparing Library book for AI…" : "Library book · click to add readable text") : source.scope === "library" ? "Library book · text supplied to AI" : "My saved document · text supplied to AI"}{source.citation ? ` · ${source.citation}` : ""}</small></span></label>) : <p className="empty">No sources in this filter. Add source text in Library, then refresh.</p>}</div>
         {visibleSources.length > 8 && <button type="button" className="assignment-source-more" onClick={() => setSourcesExpanded((expanded) => !expanded)}>{sourcesExpanded ? "Show fewer sources" : `Show all ${visibleSources.length} sources`}</button>}
-        <div className="assignment-actions"><button className="secondary-button" onClick={() => void loadSources()}><RefreshCw size={13} /> Refresh sources</button><button className="primary-button" onClick={() => void run()} disabled={busy || !brief.trim()}><Sparkles size={14} /> {busy ? "Working…" : tool.label}</button></div>
+        <div className="assignment-actions"><button className="secondary-button" onClick={() => void loadSources()}><RefreshCw size={13} /> Refresh sources</button><button className="primary-button" onClick={() => void run()} disabled={busy || (!brief.trim() && !isBookReview)}><Sparkles size={14} /> {busy ? "Working…" : tool.label}</button></div>
       </div>
-      <div className="card card-pad assignment-helper-result"><div className="assignment-result-head"><div className="section-label">Your tutor's response</div>{result && <div className="export-actions"><button className="secondary-button small-action" onClick={() => downloadWord(title || "Assignment helper", result.answer, "assignment-helper.docx", { eyebrow: "Group 13 · Assignment helper", subtitle: title || "Study notes", sources: selectedSources.map((source) => source.title) })}><Download size={13} /> Word</button><button className="secondary-button small-action" onClick={() => downloadPdf(title || "Assignment helper", result.answer, "assignment-helper.pdf", { eyebrow: "Group 13 · Assignment helper", subtitle: title || "Study notes", sources: selectedSources.map((source) => source.title) })}><Download size={13} /> PDF</button></div>}</div>{result ? <><div className="assignment-result-meta"><CheckCircle2 size={15} /> {result.grounded ? "Grounded in selected sources" : "General legal overview"}{assignmentId ? ` · Linked to ${assignments.find((assignment) => assignment.id === assignmentId)?.title ?? "assignment"}` : ""}</div><Markdown text={result.answer} /><StorytellButton title={title || "Assignment helper explanation"} source={result.answer} />{result.warnings.length > 0 && <div className="assignment-warnings"><strong>Source note</strong>{result.warnings.map((warning) => <p key={warning}>{warning}</p>)}</div>}</> : <div className="assignment-empty"><Sparkles size={28} /><h2>Start with the question</h2><p>Choose an assignment or paste the question, then select AI-readable source text to ground your work.</p></div>}</div>
+      <div className="card card-pad assignment-helper-result"><div className="assignment-result-head"><div className="section-label">{isBookReview ? "Official book review" : "Your tutor's response"}</div>{result && <div className="export-actions"><button className="secondary-button small-action" onClick={() => downloadWord(resultTitle, result.answer, isBookReview ? "book-review.docx" : "assignment-helper.docx", { eyebrow: isBookReview ? "Group 13 · Library book review" : "Group 13 · Assignment helper", subtitle: isBookReview ? (selectedBook?.title || "Official book review") : title || "Study notes", sources: selectedSources.map((source) => source.title) })}><Download size={13} /> Word</button><button className="secondary-button small-action" onClick={() => downloadPdf(resultTitle, result.answer, isBookReview ? "book-review.pdf" : "assignment-helper.pdf", { eyebrow: isBookReview ? "Group 13 · Library book review" : "Group 13 · Assignment helper", subtitle: isBookReview ? (selectedBook?.title || "Official book review") : title || "Study notes", sources: selectedSources.map((source) => source.title) })}><Download size={13} /> PDF</button></div>}</div>{result ? <><div className="assignment-result-meta"><CheckCircle2 size={15} /> {isBookReview ? "Official review grounded in the selected Library book" : result.grounded ? "Grounded in selected sources" : "General legal overview"}{assignmentId ? ` · Linked to ${assignments.find((assignment) => assignment.id === assignmentId)?.title ?? "assignment"}` : ""}</div><Markdown text={result.answer} /><StorytellButton title={resultTitle} source={result.answer} />{result.warnings.length > 0 && <div className="assignment-warnings"><strong>Source note</strong>{result.warnings.map((warning) => <p key={warning}>{warning}</p>)}</div>}</> : <div className="assignment-empty"><Sparkles size={28} /><h2>{isBookReview ? "Choose a Library book" : "Start with the question"}</h2><p>{isBookReview ? "Select one Library book above, then generate an official review with metadata, critical evaluation and download options." : "Choose an assignment or paste the question, then select AI-readable source text to ground your work."}</p></div>}</div>
     </div>
   </section>;
 }

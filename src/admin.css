@@ -325,5 +325,16 @@
 .admin-advisor-panel .admin-analytics-heading strong { display: inline-flex; align-items: center; gap: 6px; }
 .admin-advisor-output { margin-top: 13px; padding: 14px; border: 1px solid var(--line); background: var(--white); color: var(--ink); font-size: 12px; line-height: 1.6; white-space: pre-wrap; }
 .admin-advisor-panel .connection-error { margin-top: 10px; }
+.admin-advisor-chat { display: grid; gap: 8px; max-height: 420px; overflow-y: auto; margin: 13px 0; padding-right: 4px; }
+.admin-advisor-message { max-width: 92%; padding: 9px 11px; border: 1px solid var(--line); background: var(--white); }
+.admin-advisor-message.user { justify-self: end; border-color: #bfd3c4; background: #eef7f0; }
+.admin-advisor-message span { display: block; margin-bottom: 4px; color: var(--muted); font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.admin-advisor-message p { margin: 0; color: var(--ink); font-size: 12px; line-height: 1.55; white-space: pre-wrap; }
+.admin-advisor-form { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
+.admin-advisor-form input { min-width: 180px; flex: 1 1 260px; padding: 9px 10px; border: 1px solid var(--line); background: var(--white); color: var(--ink); font: inherit; font-size: 12px; }
+.admin-advisor-form button { white-space: nowrap; }
 :root[data-theme="dark"] .admin-advisor-panel { border-color: #547661; background: linear-gradient(135deg, #1c3327, var(--soft)); }
 :root[data-theme="dark"] .admin-advisor-output { background: #18251e; border-color: #405c49; color: #e6f2e9; }
+:root[data-theme="dark"] .admin-advisor-message { background: #18251e; border-color: #405c49; }
+:root[data-theme="dark"] .admin-advisor-message.user { background: #203b2d; border-color: #557c61; }
+:root[data-theme="dark"] .admin-advisor-message p { color: #e6f2e9; }

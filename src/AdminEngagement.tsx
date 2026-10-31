@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, BarChart3, LoaderCircle, RefreshCw, Sparkles, Target, Users } from "lucide-react";
+import { Activity, BarChart3, LoaderCircle, MessageCircle, RefreshCw, Send, Sparkles, Target, Users } from "lucide-react";
 import { repository, supabase } from "./data/repository";
 import type { AdminAccount } from "./data/types";
 import { askAI } from "./lib/ai";
 
 type EventRow = { id: number; user_id: string; event_type: string; page: string | null; created_at: string };
+type AdvisorMessage = { role: "user" | "assistant"; text: string };
 const dayMs = 24 * 60 * 60 * 1000;
 const since = (days: number) => new Date(Date.now() - days * dayMs);
 const uniqueUsers = (rows: EventRow[], from: Date) => new Set(rows.filter((row) => new Date(row.created_at) >= from).map((row) => row.user_id)).size;
@@ -18,7 +19,8 @@ export default function AdminEngagement() {
   const [error, setError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const [advisorBusy, setAdvisorBusy] = useState(false);
-  const [advisorText, setAdvisorText] = useState("");
+  const [advisorMessages, setAdvisorMessages] = useState<AdvisorMessage[]>([]);
+  const [advisorInput, setAdvisorInput] = useState("");
   const [advisorError, setAdvisorError] = useState("");
 
   useEffect(() => {
@@ -67,13 +69,8 @@ export default function AdminEngagement() {
     };
   }, [accounts, events]);
 
-  const askAdvisor = async () => {
-    setAdvisorBusy(true); setAdvisorError("");
-    try {
-      const result = await askAI({
-        feature: "chat", mode: "general", messages: [{ role: "user", content: `Act as a practical startup growth advisor, product manager and business strategist for a Kenyan law-student learning platform. Use the metrics below, be candid, and do not invent facts. Give advice that a solo founder can execute.
-
-METRICS:
+  const advisorMetrics = () => `
+PLATFORM METRICS:
 - Registered users: ${accounts.length}
 - DAU: ${metrics.activeDay}; WAU: ${metrics.activeWeek}; MAU: ${metrics.activeMonth}
 - Activation: ${metrics.activationRate} (${metrics.activated} users)
@@ -82,15 +79,15 @@ METRICS:
 - Page views in 30 days: ${metrics.pageViews}; page views per active user: ${metrics.pageViewsPerUser}
 - Meaningful tracked actions: ${metrics.meaningful}
 - Most visited areas: ${metrics.pages.map(([name, count]) => `${name} (${count})`).join(", ") || "none recorded"}
-- Feature actions: ${metrics.features.map(([name, count]) => `${name} (${count})`).join(", ") || "none recorded"}
+- Feature actions: ${metrics.features.map(([name, count]) => `${name} (${count})`).join(", ") || "none recorded"}`;
 
-Return exactly four sections:
-1. DIAGNOSIS — what the numbers suggest and what is missing.
-2. TOP 3 PRIORITIES — each with the problem, recommended product/business change, and metric it should improve.
-3. NEXT 7 DAYS — three concrete experiments with a success threshold.
-4. AVOID — two things the founder should not build or change yet.
-Keep it concise, specific to students and this platform, and distinguish evidence from assumptions.` }] });
-      setAdvisorText(result.answer);
+  const askAdvisor = async (question = "Give me a retention diagnosis and a concrete 7-day plan.") => {
+    setAdvisorBusy(true); setAdvisorError("");
+    try {
+      const behavioralBrief = `You are an evidence-informed retention advisor, product strategist and community-growth operator for a Kenyan law-student learning platform. Use established behavioral science carefully: habit formation and cues, implementation intentions, cognitive load and friction, retrieval practice and spaced learning, self-determination (autonomy, competence, relatedness), social belonging and norms, progress feedback, commitment devices, and ethical motivation design. Use neuroscience only cautiously and do not claim that a tactic is proven by "the brain" without evidence. Never recommend dark patterns, addiction loops, manipulative notifications, shame, fabricated social proof, or exploiting vulnerable students. Label each claim as DATA, EVIDENCE-INFORMED HYPOTHESIS, or EXPERIMENT. Be concrete: give the product change, target user moment, message or flow, measurement window, success threshold, and what result would falsify the idea. Do not invent metrics or research citations; if a literature claim needs verification, say so.\n${advisorMetrics()}\n\nCONVERSATION:\n${advisorMessages.map((message) => `${message.role.toUpperCase()}: ${message.text}`).join("\n\n")}\n\nFOUNDER QUESTION:\n${question}`;
+      const result = await askAI({ feature: "chat", mode: "general", messages: [{ role: "user", content: behavioralBrief }] });
+      setAdvisorMessages((current) => [...current, { role: "user", text: question }, { role: "assistant", text: result.answer }]);
+      setAdvisorInput("");
     } catch (caught) { setAdvisorError(caught instanceof Error ? caught.message : "The AI advisor could not respond."); }
     finally { setAdvisorBusy(false); }
   };
@@ -112,7 +109,7 @@ Keep it concise, specific to students and this platform, and distinguish evidenc
         <div className="admin-analytics-panel"><div className="admin-analytics-heading"><strong>Usage depth</strong><span>Last 30 days</span></div><div className="admin-retention-row"><span>Page views</span><strong>{metrics.pageViews}</strong><small>{metrics.pageViewsPerUser} page views per active user</small></div><div className="admin-retention-row"><span>DAU / MAU</span><strong>{percent(metrics.activeDay, metrics.activeMonth)}</strong><small>Return frequency signal</small></div></div>
       </div>
       <div className="admin-analytics-columns"><div className="admin-analytics-panel"><div className="admin-analytics-heading"><strong>Most visited areas</strong><span>Tracked page views</span></div>{metrics.pages.length ? metrics.pages.map(([name, count]) => <div className="admin-bar-row" key={name}><span>{label(name)}</span><div><i style={{ width: `${Math.max(4, Math.round(count / metrics.pages[0][1] * 100))}%` }} /></div><strong>{count}</strong></div>) : <p className="quiet">No page views recorded yet.</p>}</div><div className="admin-analytics-panel"><div className="admin-analytics-heading"><strong>Feature actions</strong><span>Tracked events</span></div>{metrics.features.length ? metrics.features.map(([name, count]) => <div className="admin-bar-row" key={name}><span>{label(name)}</span><div><i style={{ width: `${Math.max(4, Math.round(count / metrics.features[0][1] * 100))}%` }} /></div><strong>{count}</strong></div>) : <p className="quiet">No feature actions recorded yet.</p>}</div></div>
-      <div className="admin-advisor-panel"><div className="admin-analytics-heading"><strong><Sparkles size={14} /> AI growth advisor</strong><span>Admin-only · aggregate metrics</span></div><p className="field-hint">Ask the advisor to act as your product strategist, business advisor and growth agent. It receives the metrics above—not user prompts, documents, passwords or private conversations.</p><button className="primary-button" type="button" onClick={() => void askAdvisor()} disabled={advisorBusy}><Sparkles size={14} /> {advisorBusy ? "Advisor is reviewing metrics…" : advisorText ? "Refresh advice" : "Get growth advice"}</button>{advisorError && <div className="connection-error" role="alert">{advisorError}</div>}{advisorBusy && <p className="field-hint"><LoaderCircle size={13} className="spin" /> Comparing activation, retention and feature signals…</p>}{advisorText && !advisorBusy && <div className="admin-advisor-output" aria-live="polite">{advisorText}</div>}</div>
+      <div className="admin-advisor-panel"><div className="admin-analytics-heading"><strong><Sparkles size={14} /> AI retention and growth advisor</strong><span>Admin-only · aggregate metrics</span></div><p className="field-hint">Chat with an evidence-informed product, behavioral-science and community-growth advisor. It receives the metrics above—not user prompts, documents, passwords or private conversations.</p>{advisorMessages.length === 0 && <button className="primary-button" type="button" onClick={() => void askAdvisor()} disabled={advisorBusy}><Sparkles size={14} /> {advisorBusy ? "Advisor is reviewing metrics…" : "Get retention advice"}</button>}{advisorMessages.length > 0 && <div className="admin-advisor-chat" aria-live="polite">{advisorMessages.map((message, index) => <div className={`admin-advisor-message ${message.role}`} key={`${message.role}-${index}`}><span>{message.role === "user" ? "You" : "Advisor"}</span><p>{message.text}</p></div>)}</div>}{advisorError && <div className="connection-error" role="alert">{advisorError}</div>}{advisorBusy && <p className="field-hint"><LoaderCircle size={13} className="spin" /> Comparing activation, retention, cognitive load and community signals…</p>}<form className="admin-advisor-form" onSubmit={(event) => { event.preventDefault(); if (advisorInput.trim() && !advisorBusy) void askAdvisor(advisorInput.trim()); }}><input value={advisorInput} onChange={(event) => setAdvisorInput(event.target.value)} placeholder="Ask: how do I improve Day-7 retention?" aria-label="Ask the AI retention advisor" disabled={advisorBusy} /><button className="primary-button" type="submit" disabled={advisorBusy || !advisorInput.trim()}><Send size={14} /> Ask</button><button className="secondary-button" type="button" onClick={() => void askAdvisor("Give me three ethical experiments to increase weekly return visits and explain the psychology behind each.")} disabled={advisorBusy}><MessageCircle size={14} /> Retention experiments</button></form></div>
     </>}
   </section>;
 }
