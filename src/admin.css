@@ -265,8 +265,17 @@
 .admin-activity-day-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 10px 0 5px; color: var(--ink); font-size: 12px; }
 .admin-activity-day-heading span { color: var(--muted); font-size: 10px; }
 .admin-activity-list { max-height: 390px; overflow-y: auto; padding-right: 5px; }
+.admin-collapsible { overflow: hidden; }
+.admin-collapsible-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; list-style: none; }
+.admin-collapsible-summary::-webkit-details-marker { display: none; }
+.admin-collapsible-summary::after { content: "+"; flex: none; color: var(--forest); font-size: 18px; font-weight: 400; }
+.admin-collapsible[open] .admin-collapsible-summary::after { content: "−"; }
+.admin-collapsible-body { margin-top: 14px; }
+.admin-collapsible-body > .row-list { max-height: 430px; overflow-y: auto; padding-right: 5px; }
 @media (max-width: 600px) {
   .admin-activity-days { margin-right: -17px; padding-right: 17px; }
   .admin-activity-days button { min-width: 102px; padding: 9px; }
   .admin-activity-list { max-height: 330px; }
+  .admin-collapsible-summary { align-items: flex-start; }
+  .admin-collapsible-summary .quiet { text-align: right; }
 }

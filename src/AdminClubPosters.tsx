@@ -9,11 +9,20 @@ type Props = { setNotice: (notice: string) => void };
 
 const toBase64 = async (file: File) => {
   try {
-    const bytes = new Uint8Array(await file.arrayBuffer());
+    const buffer = typeof file.arrayBuffer === "function"
+      ? await file.arrayBuffer()
+      : await new Promise<ArrayBuffer>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as ArrayBuffer);
+        reader.onerror = () => reject(new Error("File reader failed"));
+        reader.readAsArrayBuffer(file);
+      });
+    const bytes = new Uint8Array(buffer);
     let binary = "";
     const chunkSize = 0x8000;
     for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-      binary += String.fromCharCode(...bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length)));
+      const chunk = bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length));
+      for (let index = 0; index < chunk.length; index += 1) binary += String.fromCharCode(chunk[index]);
     }
     const encoded = btoa(binary);
     if (!encoded) throw new Error("The selected image is empty.");
@@ -49,9 +58,11 @@ export default function AdminClubPosters({ setNotice }: Props) {
     if (!file) return;
     setBusy("analyze"); setError("");
     try {
-      if (!file.type.startsWith("image/")) throw new Error("Please choose an image file rather than a document.");
+      const extension = file.name.split(".").pop()?.toLowerCase();
+      const imageMimeType = file.type || (extension === "png" ? "image/png" : extension === "webp" ? "image/webp" : extension === "jpg" || extension === "jpeg" ? "image/jpeg" : "");
+      if (!imageMimeType.startsWith("image/")) throw new Error("Please choose a PNG, JPG, or WebP image rather than a document.");
       const result = await analyzeImage({
-        image_base64: await toBase64(file), image_mime_type: file.type,
+        image_base64: await toBase64(file), image_mime_type: imageMimeType,
         prompt: "Read this club or event poster carefully. Return a concise plain-text notice with these headings: What is happening; Date and time; Place or platform; Deadline; Link or contact; Key details. Preserve every visible name, date, time, location, URL, email and submission instruction. If a field is not visible, say Not stated. Do not guess.",
       });
       setAnalysis(result.analysis);

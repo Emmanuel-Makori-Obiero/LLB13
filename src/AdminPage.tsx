@@ -348,13 +348,9 @@ export default function AdminPage({
           onApplied={onTimetableApplied}
           setNotice={setNotice}
         />
-        <div className="card card-pad">
-          <div className="card-header">
-            <span className="section-label">Registered accounts</span>
-            <span className="quiet">
-              {loading ? "Loading…" : `${accounts.length} accounts`}
-            </span>
-          </div>
+        <details className="card card-pad admin-collapsible">
+          <summary className="admin-collapsible-summary"><span className="section-label">Registered accounts</span><span className="quiet">{loading ? "Loading…" : `${accounts.length} accounts`}</span></summary>
+          <div className="admin-collapsible-body">
           {error && (
             <div className="connection-error">
               <strong>Could not load accounts</strong>
@@ -424,13 +420,12 @@ export default function AdminPage({
           {!loading && !accounts.length && !error && (
             <div className="empty">No accounts yet.</div>
           )}
-        </div>
-
-        <div className="card card-pad">
-          <div className="card-header">
-            <span className="section-label">Roster and unit assignments</span>
-            <span className="quiet">{members.length} members</span>
           </div>
+        </details>
+
+        <details className="card card-pad admin-collapsible">
+          <summary className="admin-collapsible-summary"><span className="section-label">Roster and unit assignments</span><span className="quiet">{members.length} members</span></summary>
+          <div className="admin-collapsible-body">
           {members.map((member) => {
             const assigned = splitUnits(member.units);
             return (
@@ -529,14 +524,12 @@ export default function AdminPage({
               roster
             </button>
           </form>
-        </div>
-
-        <div className="card card-pad">
-          <div className="card-header">
-            <span className="section-label">
-              Units and unit representatives
-            </span>
           </div>
+        </details>
+
+        <details className="card card-pad admin-collapsible">
+          <summary className="admin-collapsible-summary"><span className="section-label">Units and unit representatives</span><span className="quiet">{units.length} units</span></summary>
+          <div className="admin-collapsible-body">
           <div className="unit-add">
             <input
               placeholder="Unit name, e.g. Constitutional Law"
@@ -636,7 +629,8 @@ export default function AdminPage({
               </div>
             ))}
           </div>
-        </div>
+          </div>
+        </details>
       </div>
     </>
   );
