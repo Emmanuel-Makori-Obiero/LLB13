@@ -9,7 +9,7 @@ export default function ClubPosterCarousel() {
   const [open, setOpen] = useState(false);
   useEffect(() => { void repository.getActiveClubPosters().then(setPosters).catch(() => setPosters([])); }, []);
   useEffect(() => { if (posters.length < 2) return; const timer = window.setInterval(() => setActive((current) => (current + 1) % posters.length), 4000); return () => window.clearInterval(timer); }, [posters.length]);
-  if (!posters.length) return null;
+  if (!posters.length) return <section className="home-poster-carousel home-poster-empty" aria-label="Club notices"><div><div className="home-poster-kicker"><Sparkles size={13} /> CLUB NOTICES</div><h2>No notices published yet</h2><p>Super-admin club announcements, event posters and submission notices will appear here.</p></div></section>;
   const poster = posters[active % posters.length];
   const move = (direction: number) => { setActive((current) => (current + direction + posters.length) % posters.length); setOpen(false); };
   return <section className="home-poster-carousel" aria-label="Club notices">
