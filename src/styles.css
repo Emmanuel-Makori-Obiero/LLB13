@@ -9,6 +9,7 @@
 }
 .library-filters[hidden] { display: none; }
 .library-filter-toggle { display: inline-flex; align-items: center; gap: 6px; }
+.library-summary-panel { scroll-margin-top: 16px; }
 .library-filters label {
   display: grid;
   gap: 4px;

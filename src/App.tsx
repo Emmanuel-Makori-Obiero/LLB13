@@ -3891,6 +3891,17 @@ function LibraryPageReal({
   const [summaryBusy, setSummaryBusy] = useState(false);
   const [summaryProgress, setSummaryProgress] = useState("");
   const [summaryError, setSummaryError] = useState("");
+  const summaryPanelRef = useRef<HTMLElement | null>(null);
+  const [summaryScrollKey, setSummaryScrollKey] = useState(0);
+  useEffect(() => {
+    if (!summaryMaterial || !summaryScrollKey || typeof window.matchMedia !== "function") return;
+    if (!window.matchMedia("(max-width: 760px)").matches) return;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const frame = window.requestAnimationFrame(() => {
+      summaryPanelRef.current?.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "start" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [summaryMaterial, summaryScrollKey]);
   const readLibraryAttachment = async (material: Material): Promise<File> => {
     let blob: Blob | null = null;
     let storageError = "";
@@ -3929,6 +3940,7 @@ function LibraryPageReal({
   const summarizeLibraryMaterial = async (material: Material) => {
     if (summaryBusy) return;
     setSummaryMaterial(material);
+    setSummaryScrollKey((key) => key + 1);
     setSummaryResult(null);
     setSummaryError("");
     setSummaryProgress("Finding the book's indexed text…");
@@ -4074,7 +4086,7 @@ function LibraryPageReal({
         </button>
       </div>
       {summaryMaterial && (
-        <section className="card card-pad library-summary-panel">
+        <section ref={summaryPanelRef} className="card card-pad library-summary-panel">
           <div className="detail-title">
             <div>
               <div className="eyebrow">ORGANIZED STUDY NOTES</div>

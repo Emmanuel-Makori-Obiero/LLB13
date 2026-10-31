@@ -50,7 +50,7 @@
 .book-reading-pane {
   display: flex;
   flex-direction: column;
-  height: min(58dvh, 640px);
+  height: calc(var(--reader-height, 560px) + 84px);
   min-height: 420px;
 }
 
@@ -307,6 +307,14 @@
     text-align: left;
   }
 
+  .book-reader .reader-heading strong,
+  .book-reader .reader-heading span {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
   .book-reader-grid {
     grid-template-columns: 1fr;
   }
@@ -314,6 +322,41 @@
   .book-reading-pane {
     height: min(56dvh, 600px);
     min-height: 400px;
+  }
+
+  .book-pane-head {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .book-pane-head > div:first-child,
+  .book-reader .reader-zoom-controls {
+    flex: 1 1 100%;
+    min-width: 0;
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .book-reader .reader-zoom-controls {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .book-reader .reader-height-control {
+    flex: 1 1 100%;
+    min-width: 0;
+    width: 100%;
+    white-space: normal;
+  }
+
+  .book-reader .reader-height-control input[type="range"] {
+    min-width: 90px;
+    max-width: 100%;
+  }
+
+  .book-pane-head > svg {
+    display: none;
   }
 
   .book-preview-wrap > object,
@@ -339,6 +382,10 @@
 
   .book-preview-wrap {
     padding: 6px;
+  }
+
+  .book-pane-head {
+    padding: 14px 12px 12px;
   }
 
   .book-preview-wrap > object,

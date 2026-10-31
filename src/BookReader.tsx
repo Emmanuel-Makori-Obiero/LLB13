@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import { BookOpen, Check, Highlighter, Maximize2, Minimize2, Minus, Plus, Send, Sparkles, X } from "lucide-react";
 import { downloadInfo, readerUrl, safeUrl } from "./links";
 import { askAI, docxToHtml, type AIResult } from "./lib/ai";
@@ -102,8 +102,8 @@ export default function BookReader({ material, onClose }: Props) {
       const task = `${customPrompt.trim() && customPrompt.trim() !== passage ? customPrompt.trim() : instruction}\nAnswer directly in plain language first. Do not begin with a question and do not add a quiz or recall question unless I explicitly ask for one.`;
     try {
       const answer = await askAI({
-        feature: "explain",
-        mode: "auto",
+        feature: "book_explain",
+        mode: "general",
         messages: [{ role: "user", content: `${task}\n\nBook: ${material.title}\nPassage to work from:\n“${passage}”` }],
       });
       setResult(answer);
@@ -122,8 +122,8 @@ export default function BookReader({ material, onClose }: Props) {
     setChat(next);
     try {
       const answer = await askAI({
-        feature: "chat",
-        mode: "auto",
+        feature: "book_chat",
+        mode: "general",
         messages: [{ role: "user", content: `Explain first in plain language. Do not quiz me unless I ask. Book: ${material.title}\nPassage:\n“${passage}”\nConversation so far:\n${next.map((line) => `${line.role}: ${line.text}`).join("\n")}\nStudent's latest message: ${message}` }],
       });
       setChat((current) => [...current, { role: "assistant", text: answer.answer }]);
@@ -153,7 +153,7 @@ export default function BookReader({ material, onClose }: Props) {
       </div>
 
       <div className="book-reader-grid">
-          <section className="book-reading-pane" style={{ height: `${readerHeight + 84}px` }}>
+          <section className="book-reading-pane" style={{ "--reader-height": `${readerHeight}px` } as CSSProperties}>
           <div className="book-pane-head"><div><span className="section-label">Preview</span><p className="field-hint">The source opens directly here. Copy any passage you want to study.</p></div><div className="reader-zoom-controls" aria-label="Preview size controls"><button className="secondary-button" onClick={() => setZoom((value) => Math.max(60, value - 10))} title="Zoom out"><Minus size={13} /></button><strong>{zoom}%</strong><button className="secondary-button" onClick={() => setZoom((value) => Math.min(200, value + 10))} title="Zoom in"><Plus size={13} /></button><label className="reader-height-control">Height <input type="range" min="360" max="900" step="20" value={readerHeight} onChange={(event) => setReaderHeight(Number(event.target.value))} /> <strong>{readerHeight}px</strong></label></div><BookOpen size={18} /></div>
           {isDocx ? (
             <div className="book-preview-wrap" style={{ height: `${readerHeight}px` }}>

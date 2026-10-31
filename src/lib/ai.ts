@@ -20,6 +20,8 @@ export type AIFeature =
   | "chat"
   | "exam_analysis"
   | "explain"
+  | "book_explain"
+  | "book_chat"
   | "summarize"
   | "book_summary_synthesis"
   | "book_contents"
