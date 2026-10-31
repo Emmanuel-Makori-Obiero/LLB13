@@ -255,3 +255,18 @@
 .usage-quota span { color: var(--muted); font-size: 11px; }
 .usage-quota strong { color: var(--forest); font-size: 17px; }
 .usage-quota small { color: var(--muted); font-size: 10px; }
+.admin-activity-card { min-width: 0; }
+.admin-activity-days { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 10px; margin: 12px 0 4px; scrollbar-width: thin; }
+.admin-activity-days button { flex: 0 0 auto; display: grid; gap: 4px; min-width: 112px; padding: 10px 11px; border: 1px solid var(--line); background: #fafbf7; color: var(--muted); text-align: left; cursor: pointer; }
+.admin-activity-days button strong { color: var(--ink); font-size: 12px; font-weight: 650; }
+.admin-activity-days button span { font-size: 10px; }
+.admin-activity-days button.active { border-color: var(--forest); background: var(--forest); color: #e8f1e9; }
+.admin-activity-days button.active strong { color: #fff; }
+.admin-activity-day-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 10px 0 5px; color: var(--ink); font-size: 12px; }
+.admin-activity-day-heading span { color: var(--muted); font-size: 10px; }
+.admin-activity-list { max-height: 390px; overflow-y: auto; padding-right: 5px; }
+@media (max-width: 600px) {
+  .admin-activity-days { margin-right: -17px; padding-right: 17px; }
+  .admin-activity-days button { min-width: 102px; padding: 9px; }
+  .admin-activity-list { max-height: 330px; }
+}

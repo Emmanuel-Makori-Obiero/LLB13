@@ -14,6 +14,7 @@ const title = (value: string) => value.replace(/_/g, " ").replace(/\b\w/g, (lett
 
 export default function AdminOversight() {
   const [events, setEvents] = useState<EventRow[]>([]);
+  const [selectedDay, setSelectedDay] = useState("");
   const [usage, setUsage] = useState<ProviderUsageRow[]>([]);
   const [quota, setQuota] = useState<QuotaRow[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRow[]>([]);
@@ -58,6 +59,19 @@ export default function AdminOversight() {
     const used = quota.filter((row) => row.kind === kind).length;
     return { kind, limit, used, remaining: Math.max(0, limit - used) };
   });
+  const activityDays = useMemo(() => {
+    const grouped = new Map<string, EventRow[]>();
+    for (const event of events) {
+      const day = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Nairobi" }).format(new Date(event.created_at));
+      grouped.set(day, [...(grouped.get(day) ?? []), event]);
+    }
+    return [...grouped.entries()].sort(([a], [b]) => b.localeCompare(a));
+  }, [events]);
+  useEffect(() => {
+    if (activityDays.length && !activityDays.some(([day]) => day === selectedDay)) setSelectedDay(activityDays[0][0]);
+  }, [activityDays, selectedDay]);
+  const selectedEvents = activityDays.find(([day]) => day === selectedDay)?.[1] ?? [];
+  const displayDay = (day: string) => new Date(`${day}T12:00:00+03:00`).toLocaleDateString("en-KE", { weekday: "short", day: "numeric", month: "short", timeZone: "Africa/Nairobi" });
   return <section className="admin-stack" aria-label="Admin activity and attendance">
     <div className="card card-pad">
       <div className="card-header"><span className="section-label"><LockKeyhole size={15}/> Private API credit usage</span><button className="icon-button" onClick={() => setRefreshKey((key) => key + 1)} disabled={loading} aria-label="Refresh API usage"><RefreshCw size={14}/></button></div>
@@ -68,10 +82,16 @@ export default function AdminOversight() {
         <p className="field-hint">The ledger shows the latest 2,000 provider events. Exact money/credit balances remain provider-specific and can only be read from each provider's billing or quota console.</p>
       </>}
     </div>
-    <div className="card card-pad">
-      <div className="card-header"><span className="section-label"><Activity size={15}/> Platform activity</span><span className="quiet">Latest 300 events</span></div>
-      <p className="field-hint">Records page visits and podcast-generation outcomes only; it does not capture prompts, document text, or private content.</p>
-      {loading ? <p className="quiet">Loading reports…</p> : error ? <div className="connection-error">{error}</div> : events.length ? <div className="row-list">{events.map((event) => <div className="row" key={event.id}><div className="row-main"><div className="row-title">{nameFor(event.user_id)} · {eventLabel[event.event_type] ?? event.event_type}</div><div className="row-meta">{event.page ? `${event.page} · ` : ""}{when(event.created_at)}</div></div></div>)}</div> : <p className="quiet">No activity events recorded yet.</p>}
+    <div className="card card-pad admin-activity-card">
+      <div className="card-header"><span className="section-label"><Activity size={15}/> Platform activity</span><span className="quiet">{events.length ? `${events.length} recent events · ${activityDays.length} days` : "Day view"}</span></div>
+      <p className="field-hint">Records page visits and podcast-generation outcomes only; it does not capture prompts, document text, or private content. Choose a day to inspect its activity.</p>
+      {loading ? <p className="quiet">Loading reports…</p> : error ? <div className="connection-error">{error}</div> : events.length ? <>
+        <div className="admin-activity-days" role="tablist" aria-label="Activity days">
+          {activityDays.map(([day, dayEvents]) => <button key={day} type="button" role="tab" aria-selected={selectedDay === day} className={selectedDay === day ? "active" : ""} onClick={() => setSelectedDay(day)}><strong>{displayDay(day)}</strong><span>{dayEvents.length} event{dayEvents.length === 1 ? "" : "s"}</span></button>)}
+        </div>
+        <div className="admin-activity-day-heading"><strong>{selectedDay ? displayDay(selectedDay) : "Selected day"}</strong><span>{selectedEvents.length} event{selectedEvents.length === 1 ? "" : "s"}</span></div>
+        <div className="row-list admin-activity-list">{selectedEvents.map((event) => <div className="row" key={event.id}><div className="row-main"><div className="row-title">{nameFor(event.user_id)} · {eventLabel[event.event_type] ?? event.event_type}</div><div className="row-meta">{event.page ? `${event.page} · ` : ""}{when(event.created_at)}</div></div></div>)}</div>
+      </> : <p className="quiet">No activity events recorded yet.</p>}
     </div>
     <div className="card card-pad">
       <div className="card-header"><span className="section-label"><BarChart3 size={15}/> Provider event detail</span><span className="quiet">Latest 2,000</span></div>
