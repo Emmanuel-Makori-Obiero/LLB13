@@ -30,7 +30,7 @@
 .video-room {
   width: min(1080px, 100%);
   background: #101514;
-  color: var(--paper);
+  color: var(--on-dark);
 }
 .video-room .meeting-header {
   border-color: #ffffff1c;
@@ -173,6 +173,7 @@
 }
 :root {
   --ink: #1f2320;
+  --on-dark: #ffffff;
   --muted: #62635a;
   --paper: #f7f5f0;
   --white: #fffefa;
@@ -218,7 +219,7 @@ button {
   flex-direction: column;
   padding: 24px 18px 18px;
   background: var(--forest);
-  color: var(--paper);
+  color: var(--on-dark);
 }
 .brand {
   display: flex;
@@ -561,7 +562,7 @@ h2 {
 }
 .auth-aside {
   background: var(--forest);
-  color: var(--paper);
+  color: var(--on-dark);
   padding: 36px 32px;
   display: flex;
   flex-direction: column;
@@ -886,7 +887,7 @@ h2 {
 .practice-modes button.active {
   background: var(--forest);
   border-color: var(--forest);
-  color: var(--paper);
+  color: var(--on-dark);
 }
 .practice-answer {
   margin-top: 18px;
@@ -1035,6 +1036,7 @@ h2 {
 :root { --wallpaper-overlay: rgba(247,245,240,.76); color-scheme: light; }
 :root[data-theme="dark"] {
   --ink: #edf2ed;
+  --on-dark: #f5fbf6;
   --muted: #a8b4aa;
   --paper: #111815;
   --white: #19221e;
@@ -1069,9 +1071,9 @@ h2 {
 .theme-toggle { display: inline-flex; align-items: center; justify-content: center; }
 
 :root { --user-wallpaper: none; }
-html, body { background-color: var(--paper); background-image: var(--user-wallpaper); background-position: center center; background-repeat: no-repeat; background-size: cover; background-attachment: fixed; }
+html, body { background-color: var(--on-dark); background-image: var(--user-wallpaper); background-position: center center; background-repeat: no-repeat; background-size: cover; background-attachment: fixed; }
 .app-shell { background: transparent; }
-:root[data-theme="dark"] html, :root[data-theme="dark"] body { background-color: var(--paper); }
+:root[data-theme="dark"] html, :root[data-theme="dark"] body { background-color: var(--on-dark); }
 
 html, body { background-size: contain; background-position: center center; background-repeat: no-repeat; }
 
@@ -1097,6 +1099,16 @@ html, body { background-size: contain; background-position: center center; backg
 :root[data-theme="dark"] .auth-submit:hover:not(:disabled) { border-color: #f0a98e; background: #f0a98e; color: #1b1714; }
 :root[data-theme="dark"] .connection-error { border-color: #9e5e52; background: #3a2421; color: #ffd8cc; }
 :root[data-theme="dark"] .secondary-button, :root[data-theme="dark"] .icon-button { color: var(--ink); }
+:root[data-theme="dark"] .groups-status.open, :root[data-theme="dark"] .groups-notice,
+:root[data-theme="dark"] .ta-quality.pass, :root[data-theme="dark"] .studio-doc.on,
+:root[data-theme="dark"] .floating-lawyer-export, :root[data-theme="dark"] .dictionary-disclaimer {
+  background: #203b2d;
+  border-color: #5b8a6d;
+  color: #d7f0dd;
+}
+:root[data-theme="dark"] .groups-status.open strong, :root[data-theme="dark"] .groups-notice strong,
+:root[data-theme="dark"] .ta-quality.pass strong, :root[data-theme="dark"] .studio-doc.on strong,
+:root[data-theme="dark"] .dictionary-disclaimer strong { color: #effff2; }
 .public-playlist-item > div { display:flex; align-items:center; gap:10px; }
 .public-playlist-item iframe { display:block; width:100%; min-height:180px; border:0; background:#111; }
 .public-playlist-item .chip { flex:none; }
@@ -1175,7 +1187,7 @@ html, body { background-size: contain; background-position: center center; backg
 .guide-orbit-search { left: 8px; top: 9px; animation: guideFloatOne 4s ease-in-out infinite; }
 .guide-orbit-filter { right: 8px; top: 9px; animation: guideFloatTwo 4.6s ease-in-out infinite .3s; }
 .guide-orbit-ai { left: 52px; bottom: 7px; animation: guideFloatThree 4.2s ease-in-out infinite .6s; }
-.guide-orbit-core { left: 82px; top: 22px; width: 28px; height: 28px; justify-content: center; padding: 0; border-radius: 50%; background: var(--forest); color: var(--paper); animation: guidePulse 2.8s ease-in-out infinite; }
+.guide-orbit-core { left: 82px; top: 22px; width: 28px; height: 28px; justify-content: center; padding: 0; border-radius: 50%; background: var(--forest); color: var(--on-dark); animation: guidePulse 2.8s ease-in-out infinite; }
 @keyframes guideFloatOne { 0%,100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-5px) rotate(2deg); } }
 @keyframes guideFloatTwo { 0%,100% { transform: translateY(0) rotate(2deg); } 50% { transform: translateY(4px) rotate(-2deg); } }
 @keyframes guideFloatThree { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }

@@ -3,7 +3,7 @@
 .studio-grid { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 18px; margin-top: 18px; }
 .studio-mode { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 14px; }
 .studio-mode button { display: inline-flex; align-items: center; gap: 6px; padding: 9px 11px; border: 1px solid var(--line); background: var(--white); color: var(--muted); font-size: 12px; }
-.studio-mode button.active { background: var(--forest); border-color: var(--forest); color: var(--paper); }
+.studio-mode button.active { background: var(--forest); border-color: var(--forest); color: var(--on-dark); }
 .studio-generate { display: inline-flex; align-items: center; gap: 7px; margin-top: 14px; }
 .studio-spin { animation: studio-spin 1s linear infinite; }
 @keyframes studio-spin { to { transform: rotate(360deg); } }
@@ -16,11 +16,11 @@
 .studio-output-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 .studio-output-actions button { display: inline-flex; align-items: center; gap: 5px; }
 .studio-markdown { margin-top: 14px; max-height: 520px; overflow: auto; }
-.studio-slide { margin-top: 14px; padding: 20px; border: 1px solid var(--forest); background: var(--forest); color: var(--paper); min-height: 170px; }
+.studio-slide { margin-top: 14px; padding: 20px; border: 1px solid var(--forest); background: var(--forest); color: var(--on-dark); min-height: 170px; }
 .studio-slide > span { color: #ffffff9e; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
 .studio-slide p { margin: 22px 0; font-family: Fraunces, serif; font-size: 21px; line-height: 1.45; }
 .studio-slide > div { display: flex; gap: 7px; }
-.studio-slide .secondary-button { background: #ffffff18; border-color: #ffffff38; color: var(--paper); }
+.studio-slide .secondary-button { background: #ffffff18; border-color: #ffffff38; color: var(--on-dark); }
 .studio-panel { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 12px; }
 .studio-panel summary { cursor: pointer; color: var(--forest); font-weight: 700; }
 .studio-panel > div { margin-top: 14px; padding: 12px; background: var(--soft); }

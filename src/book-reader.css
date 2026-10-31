@@ -204,7 +204,7 @@
 .book-prompt.on {
   border-color: var(--forest);
   background: var(--forest);
-  color: var(--paper);
+  color: var(--on-dark);
 }
 
 .book-explain {

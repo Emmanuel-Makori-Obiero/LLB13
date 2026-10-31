@@ -17,7 +17,7 @@ body,
   min-height: 270px;
   padding: 22px;
   background: var(--forest);
-  color: var(--paper);
+  color: var(--on-dark);
 }
 .docket-title {
   max-width: 480px;

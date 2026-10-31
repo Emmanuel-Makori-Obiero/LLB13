@@ -161,7 +161,7 @@
 .sa-task.on {
   background: var(--forest);
   border-color: var(--forest);
-  color: var(--paper);
+  color: var(--on-dark);
 }
 .sa-inputrow {
   display: flex;
@@ -374,7 +374,7 @@
 .md-table th {
   padding: 8px 10px;
   background: var(--forest);
-  color: var(--paper);
+  color: var(--on-dark);
   text-align: left;
   font-size: 11px;
   font-weight: 600;
@@ -464,7 +464,7 @@
 .sa-card.back {
   background: var(--forest);
   border-color: var(--forest);
-  color: var(--paper);
+  color: var(--on-dark);
 }
 .sa-card-side {
   font-size: 10px;
@@ -608,7 +608,7 @@
 .ta-main {
   background: var(--forest);
   border-color: var(--forest);
-  color: var(--paper);
+  color: var(--on-dark);
 }
 .ta-after {
   display: flex;
