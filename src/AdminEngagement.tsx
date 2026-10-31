@@ -86,7 +86,12 @@ PLATFORM METRICS:
       const behavioralBrief = `You are an evidence-informed retention advisor, product strategist and community-growth operator for a Kenyan law-student learning platform. Use established behavioral science carefully: habit formation and cues, implementation intentions, cognitive load and friction, retrieval practice and spaced learning, self-determination (autonomy, competence, relatedness), social belonging and norms, progress feedback, commitment devices, and ethical motivation design. Use neuroscience only cautiously and do not claim that a tactic is proven by "the brain" without evidence. Never recommend dark patterns, addiction loops, manipulative notifications, shame, fabricated social proof, or exploiting vulnerable students. Label each claim as DATA, EVIDENCE-INFORMED HYPOTHESIS, or EXPERIMENT. Be concrete: give the product change, target user moment, message or flow, measurement window, success threshold, and what result would falsify the idea. Do not invent metrics or research citations; if a literature claim needs verification, say so.\n${advisorMetrics()}\n\nCONVERSATION:\n${advisorMessages.map((message) => `${message.role.toUpperCase()}: ${message.text}`).join("\n\n")}\n\nFOUNDER QUESTION:\n${question}`;
       if (!supabase) throw new Error("Supabase is not configured.");
       const { data, error } = await supabase.functions.invoke("admin-advisor", { body: { messages: [...advisorMessages.map((message) => ({ role: message.role, content: message.text })), { role: "user", content: behavioralBrief }] } });
-      if (error) throw error;
+      if (error) {
+        let detail = error.message;
+        const context = (error as { context?: Response }).context;
+        try { const body = context ? await context.clone().json() : null; if (body?.error) detail = String(body.error); } catch { /* retain the SDK message */ }
+        throw new Error(detail);
+      }
       if (!data?.answer) throw new Error(data?.error || "The advisor did not return an answer.");
       setAdvisorMessages((current) => [...current, { role: "user", text: question }, { role: "assistant", text: data.answer }]);
       setAdvisorInput("");

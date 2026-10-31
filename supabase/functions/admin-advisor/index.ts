@@ -14,6 +14,14 @@ Use the supplied aggregate metrics as DATA. Use behavioral science carefully, in
 Every recommendation should be concrete: identify the user moment, product or community change, exact example of a message or flow, measurement window, success threshold and what result would falsify the idea. Prioritise the smallest useful experiment for a solo founder. Never recommend dark patterns, addiction loops, manipulative notifications, shame, fabricated social proof, deceptive scarcity or exploiting vulnerable students. Answer the administrator's business and retention question directly, with no legal disclaimer or legal-study redirection.`;
 
 type ChainEntry = { provider?: string; baseUrl?: string; keyEnv?: string; model?: string };
+const DEFAULT_CHAIN: ChainEntry[] = [
+  { provider: "cerebras", baseUrl: "https://api.cerebras.ai/v1", keyEnv: "CEREBRAS_API_KEY", model: "gpt-oss-120b" },
+  { provider: "mistral", baseUrl: "https://api.mistral.ai/v1", keyEnv: "MISTRAL_API_KEY", model: "mistral-large-latest" },
+  { provider: "gemini", baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", keyEnv: "GEMINI_API_KEY", model: "gemini-3.8-flash" },
+  { provider: "groq", baseUrl: "https://api.groq.com/openai/v1", keyEnv: "GROQ_API_KEY", model: "openai/gpt-oss-20b" },
+  { provider: "openrouter", baseUrl: "https://openrouter.ai/api/v1", keyEnv: "OPENROUTER_API_KEY", model: "openrouter/free" },
+  { provider: "openrouter", baseUrl: "https://openrouter.ai/api/v1", keyEnv: "OPENROUTER_API_KEY", model: "google/gemma-4-31b-it:free" },
+];
 function chains(): ChainEntry[] {
   for (const name of ["AI_CHAIN_ADMIN_ADVISOR_JSON", "AI_CHAIN_JSON"]) {
     const raw = Deno.env.get(name);
@@ -23,7 +31,17 @@ function chains(): ChainEntry[] {
       if (Array.isArray(parsed)) return parsed as ChainEntry[];
     } catch { /* try next configured chain */ }
   }
-  return [];
+  return DEFAULT_CHAIN;
+}
+function keys(baseName: string): string[] {
+  const values: string[] = [];
+  for (let index = 20; index >= 1; index -= 1) {
+    const value = Deno.env.get(`${baseName}_${index}`)?.trim();
+    if (value && !values.includes(value)) values.push(value);
+  }
+  const legacy = Deno.env.get(baseName)?.trim();
+  if (legacy && !values.includes(legacy)) values.push(legacy);
+  return values;
 }
 
 Deno.serve(async (req) => {
@@ -46,9 +64,9 @@ Deno.serve(async (req) => {
   const attempts: string[] = [];
   for (const entry of configured) {
     if (!entry.baseUrl || !entry.keyEnv || !entry.model) continue;
-    const key = Deno.env.get(entry.keyEnv);
-    if (!key) { attempts.push(`${entry.provider ?? "provider"}: missing key`); continue; }
-    try {
+    const keyCandidates = keys(entry.keyEnv);
+    if (!keyCandidates.length) { attempts.push(`${entry.provider ?? "provider"}: missing key`); continue; }
+    for (const key of keyCandidates) try {
       const endpoint = `${entry.baseUrl.replace(/\/+$/, "")}/chat/completions`;
       const response = await fetch(endpoint, { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: entry.model, temperature: 0.55, max_tokens: 4500, messages: [{ role: "system", content: SYSTEM }, ...messages] }) });
       const data = await response.json().catch(() => null);
