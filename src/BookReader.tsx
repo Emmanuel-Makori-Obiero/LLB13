@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { BookOpen, Check, Highlighter, Maximize2, Minimize2, Minus, Plus, Send, Sparkles, X } from "lucide-react";
 import { downloadInfo, readerUrl, safeUrl } from "./links";
 import { askAI, docxToHtml, type AIResult } from "./lib/ai";
@@ -21,6 +21,8 @@ const prompts = [
 ];
 
 const keyFor = (id: string) => `llb13-highlights:${id}`;
+const readerStyleKeyFor = (id: string) => `llb13-reader-style:${id}`;
+const readerPositionKeyFor = (id: string) => `llb13-reader-position:${id}`;
 
 export default function BookReader({ material, onClose }: Props) {
   const [expanded, setExpanded] = useState(false);
@@ -42,6 +44,13 @@ export default function BookReader({ material, onClose }: Props) {
   const [chat, setChat] = useState<ChatLine[]>([]);
   const [docxHtml, setDocxHtml] = useState("");
   const [docxLoading, setDocxLoading] = useState(false);
+  const [readerStyle, setReaderStyle] = useState<"classic" | "notebook">(() => {
+    try { return localStorage.getItem(readerStyleKeyFor(material.id)) === "notebook" ? "notebook" : "classic"; } catch { return "classic"; }
+  });
+  const [savedPosition, setSavedPosition] = useState(() => {
+    try { return Number(localStorage.getItem(readerPositionKeyFor(material.id)) || 0); } catch { return 0; }
+  });
+  const docxReaderRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const updateViewport = () => setViewportHeight(window.innerHeight);
@@ -98,9 +107,26 @@ export default function BookReader({ material, onClose }: Props) {
     return () => { active = false; };
   }, [isDocx, sourceUrl]);
 
+  useEffect(() => {
+    if (!docxHtml || !docxReaderRef.current || savedPosition <= 0) return;
+    requestAnimationFrame(() => { if (docxReaderRef.current) docxReaderRef.current.scrollTop = savedPosition; });
+  }, [docxHtml, savedPosition]);
+
   const persist = (next: Highlight[]) => {
     setHighlights(next);
     localStorage.setItem(keyFor(material.id), JSON.stringify(next));
+  };
+
+  const rememberReadingPosition = (position: number) => {
+    const next = Math.max(0, Math.round(position));
+    if (next < 4) return;
+    setSavedPosition(next);
+    localStorage.setItem(readerPositionKeyFor(material.id), String(next));
+  };
+
+  const changeReaderStyle = (next: "classic" | "notebook") => {
+    setReaderStyle(next);
+    localStorage.setItem(readerStyleKeyFor(material.id), next);
   };
 
   const captureSelection = () => {
@@ -164,7 +190,7 @@ export default function BookReader({ material, onClose }: Props) {
   const downloadResultWord = () => result && downloadWord(`${material.title} — Plain-language explanation`, result.answer, `${resultName}.docx`);
 
   return (
-    <div className={`book-reader ${expanded ? "book-reader-expanded" : ""} ${mobileReading ? "book-reader-mobile-reading" : ""}`}>
+    <div className={`book-reader ${expanded ? "book-reader-expanded" : ""} ${mobileReading ? "book-reader-mobile-reading" : ""} book-reader-style-${readerStyle}`}>
       <div className="reader-toolbar">
         <button className="secondary-button" onClick={onClose}><X size={14} /> Back to library</button>
         <div className="reader-heading"><strong>{material.title}</strong><span>{material.unit} · {material.topic}</span></div>
@@ -175,21 +201,23 @@ export default function BookReader({ material, onClose }: Props) {
           <button className="secondary-button reader-mobile-mode-button" onClick={() => setMobileReading((value) => !value)} aria-pressed={mobileReading}>
             {mobileReading ? <Minimize2 size={14} /> : <BookOpen size={14} />}<span>{mobileReading ? "Study tools" : "Read full screen"}</span>
           </button>
-          {(info?.href || link) && <a className="primary-button reader-source-link" href={info?.href || link} target="_blank" rel="noreferrer">Open source</a>}
+          <button className="secondary-button reader-style-button" onClick={() => changeReaderStyle(readerStyle === "notebook" ? "classic" : "notebook")} aria-pressed={readerStyle === "notebook"} title="Change reading appearance">
+            <BookOpen size={14} /><span>{readerStyle === "notebook" ? "Classic view" : "Notebook view"}</span>
+          </button>
         </div>
       </div>
 
       <div className="book-reader-grid">
           <section className="book-reading-pane" style={{ height: `${effectiveReaderHeight + 84}px` }}>
-          <div className="book-pane-head"><div><span className="section-label">Preview</span><p className="field-hint">The source opens directly here. Copy any passage you want to study.</p></div><div className="reader-zoom-controls" aria-label="Preview size controls"><button className="secondary-button" onClick={() => setZoom((value) => Math.max(60, value - 10))} title="Zoom out"><Minus size={13} /></button><strong>{zoom}%</strong><button className="secondary-button" onClick={() => setZoom((value) => Math.min(200, value + 10))} title="Zoom in"><Plus size={13} /></button><label className="reader-height-control">Height <input type="range" min="360" max="900" step="20" value={readerHeight} onChange={(event) => setReaderHeight(Number(event.target.value))} /> <strong>{readerHeight}px</strong></label></div><BookOpen size={18} /></div>
+          <div className="book-pane-head"><div><span className="section-label">{readerStyle === "notebook" ? "Notebook preview" : "Book preview"}</span><p className="field-hint">{savedPosition > 0 ? "Resuming where you last stopped. " : "Read here without opening another tab. "}Select a passage whenever you want to study it.</p></div><div className="reader-zoom-controls" aria-label="Preview size controls"><button className="secondary-button" onClick={() => setZoom((value) => Math.max(60, value - 10))} title="Zoom out"><Minus size={13} /></button><strong>{zoom}%</strong><button className="secondary-button" onClick={() => setZoom((value) => Math.min(200, value + 10))} title="Zoom in"><Plus size={13} /></button><label className="reader-height-control">Height <input type="range" min="360" max="900" step="20" value={readerHeight} onChange={(event) => setReaderHeight(Number(event.target.value))} /> <strong>{readerHeight}px</strong></label></div><BookOpen size={18} /></div>
           {isDocx ? (
             <div className="book-preview-wrap" style={{ height: `${effectiveReaderHeight}px` }}>
-              {docxLoading ? <div className="empty">Converting the Word document for in-app reading…</div> : docxHtml ? <article className="docx-reader" tabIndex={0} aria-label={`Reading ${material.title}`} onMouseUp={captureSelection} dangerouslySetInnerHTML={{ __html: docxHtml }} /> : <div className="empty">The Word document could not be rendered. Use Open source or Download to try another copy.</div>}
+              {docxLoading ? <div className="empty">Converting the Word document for in-app reading…</div> : docxHtml ? <article ref={docxReaderRef} className="docx-reader" tabIndex={0} aria-label={`Reading ${material.title}`} onScroll={(event) => rememberReadingPosition(event.currentTarget.scrollTop)} onMouseUp={captureSelection} dangerouslySetInnerHTML={{ __html: docxHtml }} /> : <div className="empty">The Word document could not be rendered. Try downloading a copy instead.</div>}
               <p className="reader-hint">Word document converted for in-app reading. Select text to explain or save a highlight.</p>
             </div>
           ) : frame ? (
             <div className="book-preview-wrap" style={{ height: `${effectiveReaderHeight}px` }}>
-              {isPdf ? <PdfNotesReader sourceUrl={sourceUrl} previewUrl={previewFrame} title={material.title} height={effectiveReaderHeight - 44} onMouseUp={captureSelection} /> : <iframe src={previewFrame} title={`Preview ${material.title}`} referrerPolicy="no-referrer" />}
+              {isPdf ? <PdfNotesReader sourceUrl={sourceUrl} previewUrl={previewFrame} title={material.title} height={effectiveReaderHeight - 44} initialScrollTop={savedPosition} onScrollPosition={rememberReadingPosition} onMouseUp={captureSelection} /> : <iframe src={previewFrame} title={`Preview ${material.title}`} referrerPolicy="no-referrer" />}
               <p className="reader-hint">Read the PDF in its normal preview. If it is a scanned document and you need selectable text, use “Scan for selectable text” above; scanning can take time on large books.</p>
             </div>
           ) : <div className="empty">This material has no valid preview link.</div>}

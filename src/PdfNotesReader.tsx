@@ -5,7 +5,7 @@ import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
 type OcrWord = { text: string; left: number; top: number; width: number; height: number };
 type PdfPage = { number: number; imageUrl: string; width: number; height: number; words: OcrWord[]; status: "waiting" | "reading" | "ready" | "failed" };
-type Props = { sourceUrl: string; previewUrl?: string; title: string; height: number; onMouseUp: () => void };
+type Props = { sourceUrl: string; previewUrl?: string; title: string; height: number; onMouseUp: () => void; initialScrollTop?: number; onScrollPosition?: (position: number) => void };
 
 const OCR_TIMEOUT_MS = 90_000;
 
@@ -16,7 +16,7 @@ function withTimeout<T>(promise: Promise<T>, milliseconds: number, message: stri
   ]);
 }
 
-export default function PdfNotesReader({ sourceUrl, previewUrl, title, height, onMouseUp }: Props) {
+export default function PdfNotesReader({ sourceUrl, previewUrl, title, height, onMouseUp, initialScrollTop = 0, onScrollPosition }: Props) {
   const [scanRequested, setScanRequested] = useState(false);
   const [pages, setPages] = useState<PdfPage[]>([]);
   const [status, setStatus] = useState("Preparing document scan…");
@@ -24,6 +24,12 @@ export default function PdfNotesReader({ sourceUrl, previewUrl, title, height, o
   const [ocrProgress, setOcrProgress] = useState(0);
   const workerRef = useRef<Awaited<ReturnType<typeof import("tesseract.js").createWorker>> | null>(null);
   const runRef = useRef(0);
+  const pagesRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!scanRequested || !pages.length || initialScrollTop <= 0 || !pagesRef.current) return;
+    requestAnimationFrame(() => { if (pagesRef.current) pagesRef.current.scrollTop = initialScrollTop; });
+  }, [initialScrollTop, pages.length, scanRequested]);
 
   useEffect(() => {
     if (!scanRequested) return;
@@ -36,7 +42,7 @@ export default function PdfNotesReader({ sourceUrl, previewUrl, title, height, o
 
     void (async () => {
       try {
-        const response = await withTimeout(fetch(sourceUrl), 30_000, "The notes took too long to download. Use Open source to check the file link.");
+        const response = await withTimeout(fetch(sourceUrl), 30_000, "The notes took too long to download. Return to the PDF preview and try again.");
         if (!response.ok) throw new Error(`Could not load the PDF (${response.status}).`);
         const bytes = await response.arrayBuffer();
         if (!active || runRef.current !== runId) return;
@@ -125,9 +131,9 @@ export default function PdfNotesReader({ sourceUrl, previewUrl, title, height, o
         <span>{status}</span>
         <button className="book-clear" type="button" onClick={() => setScanRequested(false)}>Return to PDF preview</button>
       </div>
-      {error && <div className="pdf-notes-error">{error} You can still read any scanned page images and use Open source to check the file.</div>}
+      {error && <div className="pdf-notes-error">{error} Any scanned page images already prepared are still available below.</div>}
       {pages.length === 0 && !error && <div className="pdf-notes-empty"><ScanLine size={18} /> Preparing the page images…</div>}
-      <div className="pdf-notes-pages">
+      <div ref={pagesRef} className="pdf-notes-pages" onScroll={(event) => onScrollPosition?.(event.currentTarget.scrollTop)}>
         {pages.map((page) => (
           <section className="pdf-notes-page" key={page.number} aria-label={`Page ${page.number}`}>
             <div className="pdf-notes-page-label">Page {page.number} · {page.status === "ready" ? "selectable text ready" : page.status === "reading" ? "reading…" : "image"}</div>
