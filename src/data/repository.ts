@@ -136,7 +136,7 @@ export type Group13Repository = {
   adminListGroupLeaders: () => Promise<ApprovedGroupLeader[]>;
   adminSetGroupLeaderEmail: (email: string, enabled: boolean) => Promise<void>;
   getActiveClubPosters: () => Promise<ClubPoster[]>;
-  adminCreateClubPoster: (input: { title: string; file: File; linkUrl: string; aiAnalysis: string }) => Promise<ClubPoster>;
+  adminCreateClubPoster: (input: { title: string; file: File; linkUrl: string; aiAnalysis: string; onProgress?: (stage: "checking" | "uploading" | "saving") => void }) => Promise<ClubPoster>;
   adminDeleteClubPoster: (poster: ClubPoster) => Promise<void>;
 };
 
@@ -1059,8 +1059,9 @@ const supabaseRepository: Group13Repository = {
     if (error) throw new Error(`Could not load club posters: ${error.message}`);
     return (data ?? []) as ClubPoster[];
   },
-  adminCreateClubPoster: async ({ title, file, linkUrl, aiAnalysis }) => {
+  adminCreateClubPoster: async ({ title, file, linkUrl, aiAnalysis, onProgress }) => {
     const client = db();
+    onProgress?.("checking");
     const { data: { user }, error: authError } = await client.auth.getUser();
     if (authError || !user) throw new Error("Sign in as the super admin before uploading a poster.");
     const { data: isAdmin, error: roleError } = await client.rpc("is_super_admin");
@@ -1069,11 +1070,13 @@ const supabaseRepository: Group13Repository = {
     const id = crypto.randomUUID();
     const extension = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
     const storagePath = `posters/${id}.${extension}`;
+    onProgress?.("uploading");
     const uploaded = await client.storage.from("club-posters").upload(storagePath, file, {
       cacheControl: "3600", upsert: false, contentType: file.type || "image/jpeg",
     });
     if (uploaded.error) throw new Error(`Poster upload failed: ${uploaded.error.message}`);
     const imageUrl = client.storage.from("club-posters").getPublicUrl(storagePath).data.publicUrl;
+    onProgress?.("saving");
     const { data, error } = await client.from("club_posters").insert({
       id, title: title.trim(), image_url: imageUrl, storage_path: storagePath,
       link_url: linkUrl.trim() || null, ai_analysis: aiAnalysis.trim(), is_active: true, created_by: user.id,
