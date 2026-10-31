@@ -7,12 +7,21 @@ import "./admin.css";
 
 type Props = { setNotice: (notice: string) => void };
 
-const toBase64 = (file: File) => new Promise<string>((resolve, reject) => {
-  const reader = new FileReader();
-  reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
-  reader.onerror = () => reject(new Error("Could not read that image."));
-  reader.readAsDataURL(file);
-});
+const toBase64 = async (file: File) => {
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let binary = "";
+    const chunkSize = 0x8000;
+    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length)));
+    }
+    const encoded = btoa(binary);
+    if (!encoded) throw new Error("The selected image is empty.");
+    return encoded;
+  } catch {
+    throw new Error("Could not read that image. Please choose a PNG, JPG, or WebP file and try again.");
+  }
+};
 
 export default function AdminClubPosters({ setNotice }: Props) {
   const [posters, setPosters] = useState<ClubPoster[]>([]);
@@ -40,6 +49,7 @@ export default function AdminClubPosters({ setNotice }: Props) {
     if (!file) return;
     setBusy("analyze"); setError("");
     try {
+      if (!file.type.startsWith("image/")) throw new Error("Please choose an image file rather than a document.");
       const result = await analyzeImage({
         image_base64: await toBase64(file), image_mime_type: file.type,
         prompt: "Read this club or event poster carefully. Return a concise plain-text notice with these headings: What is happening; Date and time; Place or platform; Deadline; Link or contact; Key details. Preserve every visible name, date, time, location, URL, email and submission instruction. If a field is not visible, say Not stated. Do not guess.",
