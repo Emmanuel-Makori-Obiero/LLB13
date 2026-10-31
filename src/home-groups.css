@@ -60,7 +60,7 @@
 
 .home-poster-carousel {
   display: grid; grid-template-columns: minmax(180px, .38fr) minmax(0, .62fr); min-height: 210px;
-  overflow: hidden; border: 1px solid var(--line); background: var(--ink); color: #fff;
+  overflow: hidden; border: 1px solid var(--line); background: #163a34; color: #fff;
 }
 .home-poster-image-wrap { position: relative; min-height: 210px; background: #243632; }
 .home-poster-image { width: 100%; height: 100%; min-height: 210px; object-fit: cover; display: block; opacity: .9; }
@@ -92,3 +92,7 @@
 .spin { animation: poster-spin 1s linear infinite; vertical-align: -2px; }
 @keyframes poster-spin { to { transform: rotate(360deg); } }
 @media (max-width: 700px) { .home-poster-carousel { grid-template-columns: 1fr; } .home-poster-image-wrap, .home-poster-image { min-height: 180px; height: 180px; } .home-poster-content { padding: 19px; } }
+:root[data-theme="dark"] .home-poster-carousel { background: #0b1712; border-color: #40574a; color: #f5fbf6; }
+:root[data-theme="dark"] .home-poster-empty { background: #0b1712; }
+:root[data-theme="dark"] .home-poster-content h2 { color: #f5fbf6; }
+:root[data-theme="dark"] .home-poster-image-wrap { background: #142a21; }
