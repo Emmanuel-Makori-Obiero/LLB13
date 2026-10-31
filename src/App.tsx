@@ -3787,7 +3787,7 @@ function ArenaPage({
                   className="primary-button"
                   onClick={() => openReader(selected)}
                 >
-                  Read in library{" "}
+                  Open source{" "}
                   <ChevronRight size={14} style={{ verticalAlign: "middle" }} />
                 </button>
               </div>
