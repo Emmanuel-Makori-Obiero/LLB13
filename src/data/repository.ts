@@ -22,6 +22,7 @@ import type {
   SharedTimetableUpload,
   StudyGroup,
   StudyGroupMember,
+  ClubPoster,
 } from "./types";
 
 export type Group13Repository = {
@@ -134,6 +135,9 @@ export type Group13Repository = {
   getLecturerAttendanceSummary: (from: string, to: string) => Promise<GroupAttendanceSummary[]>;
   adminListGroupLeaders: () => Promise<ApprovedGroupLeader[]>;
   adminSetGroupLeaderEmail: (email: string, enabled: boolean) => Promise<void>;
+  getActiveClubPosters: () => Promise<ClubPoster[]>;
+  adminCreateClubPoster: (input: { title: string; file: File; linkUrl: string; aiAnalysis: string }) => Promise<ClubPoster>;
+  adminDeleteClubPoster: (poster: ClubPoster) => Promise<void>;
 };
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
@@ -1047,6 +1051,39 @@ const supabaseRepository: Group13Repository = {
     const { data, error } = await db().rpc("admin_list_group_leaders");
     if (error) throw new Error(`Could not load approved group leaders: ${error.message}`);
     return (data ?? []) as ApprovedGroupLeader[];
+  },
+  getActiveClubPosters: async () => {
+    const { data, error } = await db().from("club_posters")
+      .select("id,title,image_url,storage_path,link_url,ai_analysis,created_at")
+      .eq("is_active", true).order("created_at", { ascending: false }).limit(12);
+    if (error) throw new Error(`Could not load club posters: ${error.message}`);
+    return (data ?? []) as ClubPoster[];
+  },
+  adminCreateClubPoster: async ({ title, file, linkUrl, aiAnalysis }) => {
+    const client = db();
+    const { data: { user }, error: authError } = await client.auth.getUser();
+    if (authError || !user) throw new Error("Sign in as the super admin before uploading a poster.");
+    const id = crypto.randomUUID();
+    const extension = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+    const storagePath = `posters/${id}.${extension}`;
+    const uploaded = await client.storage.from("club-posters").upload(storagePath, file, {
+      cacheControl: "3600", upsert: false, contentType: file.type || "image/jpeg",
+    });
+    if (uploaded.error) throw new Error(`Could not upload poster: ${uploaded.error.message}`);
+    const imageUrl = client.storage.from("club-posters").getPublicUrl(storagePath).data.publicUrl;
+    const { data, error } = await client.from("club_posters").insert({
+      id, title: title.trim(), image_url: imageUrl, storage_path: storagePath,
+      link_url: linkUrl.trim() || null, ai_analysis: aiAnalysis.trim(), created_by: user.id,
+    }).select("id,title,image_url,storage_path,link_url,ai_analysis,created_at").single();
+    if (error) { await client.storage.from("club-posters").remove([storagePath]); throw new Error(`Could not save poster: ${error.message}`); }
+    return data as ClubPoster;
+  },
+  adminDeleteClubPoster: async (poster) => {
+    const client = db();
+    const { error: storageError } = await client.storage.from("club-posters").remove([poster.storage_path]);
+    if (storageError) throw new Error(`Could not delete poster file: ${storageError.message}`);
+    const { error } = await client.from("club_posters").delete().eq("id", poster.id);
+    if (error) throw new Error(`Could not delete poster: ${error.message}`);
   },
   adminSetGroupLeaderEmail: async (email, enabled) => {
     const { error } = await db().rpc("admin_set_group_leader_email", {

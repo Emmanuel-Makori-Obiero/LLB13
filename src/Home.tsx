@@ -1,6 +1,7 @@
 import { ArrowRight, BookOpen, CalendarDays, CheckSquare, FileText, Gavel, Library, Sparkles, Users } from "lucide-react";
 import type { Assignment, Lesson, Todo } from "./data/types";
 import LearningLoop from "./LearningLoop";
+import ClubPosterCarousel from "./ClubPosterCarousel";
 import "./home-groups.css";
 type Props = { name: string; learnerLevel: string; learningPreference: string; lessons: Lesson[]; todos: Todo[]; assignments: Assignment[]; userId: string | null; setPage: (id: string) => void };
 const today = () => new Date().toISOString().slice(0, 10);
@@ -25,6 +26,7 @@ export default function Home({ name, learnerLevel, learningPreference, lessons, 
   const preferenceLabel = learningPreference === "guided" ? "Step-by-step support" : learningPreference === "challenge" ? "Challenge mode" : "Balanced support";
   return <div className="home-dashboard">
     <section className="home-welcome"><div className="home-welcome-copy"><span className="home-kicker"><Sparkles size={14} /> GROUP 13 · LAW LEARNING HUB</span><h1>{greet}, {name}.</h1><p>{level.next}</p><div className="home-welcome-actions"><button className="home-primary" onClick={() => setPage("library")}><Library size={16} /> Explore your library <ArrowRight size={15} /></button><span className="home-level-badge"><BookOpen size={14} /> {level.label}</span><span className="home-level-badge"><Sparkles size={14} /> {preferenceLabel}</span></div></div><div className="home-welcome-mark" aria-hidden="true"><Gavel size={58} /><span>13</span></div></section>
+    <ClubPosterCarousel />
     <section className="home-groups-intro" aria-labelledby="home-groups-title">
       <div className="home-groups-copy">
         <span className="home-groups-label"><Users size={14} /> STUDY TOGETHER</span>

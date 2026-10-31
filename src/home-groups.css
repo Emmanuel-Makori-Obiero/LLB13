@@ -57,3 +57,35 @@
   .home-groups-intro { grid-template-columns: 1fr; gap: 16px; padding: 17px; }
   .home-groups-next { padding: 14px 0 0; border-top: 1px solid var(--line); border-left: 0; }
 }
+
+.home-poster-carousel {
+  display: grid; grid-template-columns: minmax(180px, .38fr) minmax(0, .62fr); min-height: 210px;
+  overflow: hidden; border: 1px solid var(--line); background: var(--ink); color: #fff;
+}
+.home-poster-image-wrap { position: relative; min-height: 210px; background: #243632; }
+.home-poster-image { width: 100%; height: 100%; min-height: 210px; object-fit: cover; display: block; opacity: .9; }
+.home-poster-badge { position: absolute; top: 13px; left: 13px; display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; background: var(--clay); color: #fff; font-size: 9px; letter-spacing: .1em; font-weight: 700; }
+.home-poster-content { position: relative; display: flex; flex-direction: column; justify-content: center; padding: 24px 28px; }
+.home-poster-kicker { color: #b8c9bd; font-size: 10px; letter-spacing: .09em; text-transform: uppercase; }
+.home-poster-content h2 { margin: 7px 0 12px; font: 500 25px/1.15 Fraunces, Georgia, serif; }
+.home-poster-teaser { display: flex; align-items: center; gap: 6px; margin: 0 0 14px; color: #d0ded5; font-size: 12px; }
+.home-poster-details, .home-poster-link, .home-poster-analysis a { display: inline-flex; align-items: center; gap: 6px; width: fit-content; border: 0; padding: 0; background: none; color: #f5c1a7; font: 700 11px/1.4 inherit; cursor: pointer; text-decoration: none; }
+.home-poster-analysis { max-width: 650px; color: #e1ebe4; font-size: 12px; line-height: 1.55; white-space: pre-wrap; }
+.home-poster-analysis p { margin: 0 0 10px; }
+.home-poster-link { margin-top: 12px; color: #b8c9bd; font-weight: 600; }
+.home-poster-controls { display: flex; gap: 6px; margin-top: 18px; }
+.home-poster-controls button { display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid #60736a; background: transparent; color: #fff; cursor: pointer; }
+.home-welcome { padding: 21px 24px; }
+.home-welcome-copy h1 { margin-top: 7px; margin-bottom: 5px; font-size: clamp(25px, 3vw, 38px); }
+.home-welcome-copy p { max-width: 620px; margin: 0; font-size: 12px; line-height: 1.5; }
+.admin-posters-panel .card-header .section-label { display: inline-flex; align-items: center; gap: 6px; }
+.admin-poster-form { display: grid; gap: 12px; }
+.admin-poster-preview { width: min(100%, 320px); max-height: 260px; object-fit: cover; border: 1px solid var(--line); }
+.admin-poster-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.admin-poster-analysis { padding: 12px; border-left: 2px solid var(--clay); background: var(--wash); color: var(--muted); font-size: 12px; line-height: 1.55; white-space: pre-wrap; }
+.admin-poster-analysis strong { color: var(--ink); }
+.admin-poster-analysis p { margin: 6px 0 0; }
+.admin-poster-thumb { width: 52px; height: 52px; object-fit: cover; }
+.spin { animation: poster-spin 1s linear infinite; vertical-align: -2px; }
+@keyframes poster-spin { to { transform: rotate(360deg); } }
+@media (max-width: 700px) { .home-poster-carousel { grid-template-columns: 1fr; } .home-poster-image-wrap, .home-poster-image { min-height: 180px; height: 180px; } .home-poster-content { padding: 19px; } }

@@ -222,3 +222,13 @@ export const lessonReps = (
   if (lesson.representatives?.length) return lesson.representatives;
   return lesson.representative ? [lesson.representative] : [];
 };
+
+export type ClubPoster = {
+  id: string;
+  title: string;
+  image_url: string;
+  storage_path: string;
+  link_url: string | null;
+  ai_analysis: string;
+  created_at: string;
+};

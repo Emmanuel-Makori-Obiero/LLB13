@@ -7,6 +7,7 @@ import type { Lesson } from "./data/types";
 import AdminTimetablePlanner from "./AdminTimetablePlanner";
 import AdminOversight from "./AdminOversight";
 import GroupLeadersAdmin from "./GroupLeadersAdmin";
+import AdminClubPosters from "./AdminClubPosters";
 import { extractText } from "./lib/ai";
 import "./admin.css";
 
@@ -340,6 +341,7 @@ export default function AdminPage({
         </div>
         <AdminOversight />
         {canManageAdmins && <GroupLeadersAdmin />}
+        {canManageAdmins && <AdminClubPosters setNotice={setNotice} />}
         <AdminTimetablePlanner
           lessons={lessons}
           units={units}
