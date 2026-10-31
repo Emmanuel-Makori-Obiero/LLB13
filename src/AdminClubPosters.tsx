@@ -35,6 +35,16 @@ const toBase64 = async (file: File) => {
   }
 };
 
+const readAnalysisField = (analysis: string, labels: string[]) => {
+  const pattern = new RegExp(`(?:${labels.join("|")})\\s*:\\s*(.+)`, "i");
+  return analysis.split(/\r?\n/).map((line) => line.trim()).map((line) => line.replace(/^[-*•]\s*/, "")).map((line) => line.match(pattern)?.[1]?.trim() ?? "").find(Boolean) ?? "";
+};
+
+const readAnalysisLink = (analysis: string) => {
+  const match = analysis.match(/https?:\/\/[^\s)\]}>,]+/i);
+  return match?.[0]?.replace(/[.,;:]+$/, "") ?? "";
+};
+
 export default function AdminClubPosters({ setNotice }: Props) {
   const [posters, setPosters] = useState<ClubPoster[]>([]);
   const [title, setTitle] = useState("");
@@ -69,9 +79,13 @@ export default function AdminClubPosters({ setNotice }: Props) {
       if (!imageMimeType.startsWith("image/")) throw new Error("Please choose a PNG, JPG, or WebP image rather than a document.");
       const result = await analyzeImage({
         image_base64: await toBase64(file), image_mime_type: imageMimeType,
-        prompt: "Read this club or event poster carefully. Return a concise plain-text notice with these headings: What is happening; Date and time; Place or platform; Deadline; Link or contact; Key details. Preserve every visible name, date, time, location, URL, email and submission instruction. If a field is not visible, say Not stated. Do not guess.",
+        prompt: "Read this club or event poster carefully and act as an event-notice editor. Return a concise plain-text notice with exactly these headings: Suggested title; What is happening; Date and time; Place or platform; Deadline; Link or contact; Key details. Suggested title should be the best clear title for publishing this notice, not a generic phrase. Preserve every visible name, date, time, location, URL, email and submission instruction. Copy visible URLs exactly. If a field is not visible, say Not stated. Do not guess.",
       });
       setAnalysis(result.analysis);
+      const suggestedTitle = readAnalysisField(result.analysis, ["Suggested title", "Best title", "Title"]);
+      const detectedLink = readAnalysisLink(result.analysis);
+      if (suggestedTitle && !title.trim()) setTitle(suggestedTitle.replace(/^['"“”]|['"“”]$/g, "").slice(0, 160));
+      if (detectedLink && !linkUrl.trim()) setLinkUrl(detectedLink);
     } catch (caught) { setError(caught instanceof Error ? caught.message : "AI analysis failed."); }
     finally { setBusy(""); }
   };
