@@ -6,6 +6,7 @@ import { unitReps } from "./data/types";
 import type { Lesson } from "./data/types";
 import AdminTimetablePlanner from "./AdminTimetablePlanner";
 import AdminOversight from "./AdminOversight";
+import AdminEngagement from "./AdminEngagement";
 import GroupLeadersAdmin from "./GroupLeadersAdmin";
 import AdminClubPosters from "./AdminClubPosters";
 import { extractText } from "./lib/ai";
@@ -331,6 +332,7 @@ export default function AdminPage({
       </div>
 
       <div className="admin-stack">
+        <AdminEngagement />
         <div className="card card-pad">
           <div className="card-header"><span className="section-label">Library organization</span><span className="quiet">Admin only</span></div>
           <p className="field-hint">Read each imported past paper itself and correct titles, units, course codes, exam sessions, years, and variants. Completed papers are skipped automatically; reloads and rate limits resume from the saved checkpoint.</p>
