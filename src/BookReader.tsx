@@ -24,6 +24,8 @@ const keyFor = (id: string) => `llb13-highlights:${id}`;
 
 export default function BookReader({ material, onClose }: Props) {
   const [expanded, setExpanded] = useState(false);
+  const [mobileReading, setMobileReading] = useState(false);
+  const [viewportHeight, setViewportHeight] = useState(() => typeof window === "undefined" ? 800 : window.innerHeight);
   const [selectedText, setSelectedText] = useState("");
   const [highlights, setHighlights] = useState<Highlight[]>(() => {
     try { return JSON.parse(localStorage.getItem(keyFor(material.id)) || "[]") as Highlight[]; } catch { return []; }
@@ -40,6 +42,27 @@ export default function BookReader({ material, onClose }: Props) {
   const [chat, setChat] = useState<ChatLine[]>([]);
   const [docxHtml, setDocxHtml] = useState("");
   const [docxLoading, setDocxLoading] = useState(false);
+
+  useEffect(() => {
+    const updateViewport = () => setViewportHeight(window.innerHeight);
+    updateViewport();
+    window.addEventListener("resize", updateViewport);
+    const media = window.matchMedia("(max-width: 720px)");
+    const syncMobileMode = () => setMobileReading(media.matches);
+    syncMobileMode();
+    media.addEventListener?.("change", syncMobileMode);
+    return () => {
+      window.removeEventListener("resize", updateViewport);
+      media.removeEventListener?.("change", syncMobileMode);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!mobileReading && !expanded) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [expanded, mobileReading]);
 
   const link = safeUrl(material.url);
   const frame = readerUrl(material);
@@ -134,35 +157,39 @@ export default function BookReader({ material, onClose }: Props) {
   const hasPassage = Boolean(selectedText || activeHighlight || customPrompt.trim());
   const isPdf = Boolean(info?.file && /\.pdf(\?|$)/i.test(material.storage_path ?? material.url ?? ""));
   const previewFrame = frame ? `${frame.split("#")[0]}#page=1&zoom=${zoom}` : "";
+  const effectiveReaderHeight = mobileReading ? Math.max(300, viewportHeight - 138) : readerHeight;
   const resultName = `${material.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "book-explanation"}-plain-language`;
   const downloadResultMarkdown = () => result && downloadBlob(new Blob([`# ${material.title}\n\n${result.answer}`], { type: "text/markdown" }), `${resultName}.md`);
   const downloadResultPdf = () => result && downloadPdf(`${material.title} — Plain-language explanation`, result.answer, `${resultName}.pdf`);
   const downloadResultWord = () => result && downloadWord(`${material.title} — Plain-language explanation`, result.answer, `${resultName}.docx`);
 
   return (
-    <div className={`book-reader ${expanded ? "book-reader-expanded" : ""}`}>
+    <div className={`book-reader ${expanded ? "book-reader-expanded" : ""} ${mobileReading ? "book-reader-mobile-reading" : ""}`}>
       <div className="reader-toolbar">
         <button className="secondary-button" onClick={onClose}><X size={14} /> Back to library</button>
         <div className="reader-heading"><strong>{material.title}</strong><span>{material.unit} · {material.topic}</span></div>
         <div className="reader-actions">
-          <button className="secondary-button" onClick={() => setExpanded((v) => !v)} title={expanded ? "Minimize reader" : "Maximize reader"}>
+          <button className="secondary-button reader-expand-button" onClick={() => setExpanded((v) => !v)} title={expanded ? "Minimize reader" : "Maximize reader"}>
             {expanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}<span>{expanded ? "Minimize" : "Maximize"}</span>
           </button>
-          {(info?.href || link) && <a className="primary-button" href={info?.href || link} target="_blank" rel="noreferrer">Open source</a>}
+          <button className="secondary-button reader-mobile-mode-button" onClick={() => setMobileReading((value) => !value)} aria-pressed={mobileReading}>
+            {mobileReading ? <Minimize2 size={14} /> : <BookOpen size={14} />}<span>{mobileReading ? "Study tools" : "Read full screen"}</span>
+          </button>
+          {(info?.href || link) && <a className="primary-button reader-source-link" href={info?.href || link} target="_blank" rel="noreferrer">Open source</a>}
         </div>
       </div>
 
       <div className="book-reader-grid">
-          <section className="book-reading-pane" style={{ height: `${readerHeight + 84}px` }}>
+          <section className="book-reading-pane" style={{ height: `${effectiveReaderHeight + 84}px` }}>
           <div className="book-pane-head"><div><span className="section-label">Preview</span><p className="field-hint">The source opens directly here. Copy any passage you want to study.</p></div><div className="reader-zoom-controls" aria-label="Preview size controls"><button className="secondary-button" onClick={() => setZoom((value) => Math.max(60, value - 10))} title="Zoom out"><Minus size={13} /></button><strong>{zoom}%</strong><button className="secondary-button" onClick={() => setZoom((value) => Math.min(200, value + 10))} title="Zoom in"><Plus size={13} /></button><label className="reader-height-control">Height <input type="range" min="360" max="900" step="20" value={readerHeight} onChange={(event) => setReaderHeight(Number(event.target.value))} /> <strong>{readerHeight}px</strong></label></div><BookOpen size={18} /></div>
           {isDocx ? (
-            <div className="book-preview-wrap" style={{ height: `${readerHeight}px` }}>
+            <div className="book-preview-wrap" style={{ height: `${effectiveReaderHeight}px` }}>
               {docxLoading ? <div className="empty">Converting the Word document for in-app reading…</div> : docxHtml ? <article className="docx-reader" tabIndex={0} aria-label={`Reading ${material.title}`} onMouseUp={captureSelection} dangerouslySetInnerHTML={{ __html: docxHtml }} /> : <div className="empty">The Word document could not be rendered. Use Open source or Download to try another copy.</div>}
               <p className="reader-hint">Word document converted for in-app reading. Select text to explain or save a highlight.</p>
             </div>
           ) : frame ? (
-            <div className="book-preview-wrap" style={{ height: `${readerHeight}px` }}>
-              {isPdf ? <PdfNotesReader sourceUrl={sourceUrl} previewUrl={previewFrame} title={material.title} height={readerHeight - 44} onMouseUp={captureSelection} /> : <iframe src={previewFrame} title={`Preview ${material.title}`} referrerPolicy="no-referrer" />}
+            <div className="book-preview-wrap" style={{ height: `${effectiveReaderHeight}px` }}>
+              {isPdf ? <PdfNotesReader sourceUrl={sourceUrl} previewUrl={previewFrame} title={material.title} height={effectiveReaderHeight - 44} onMouseUp={captureSelection} /> : <iframe src={previewFrame} title={`Preview ${material.title}`} referrerPolicy="no-referrer" />}
               <p className="reader-hint">Read the PDF in its normal preview. If it is a scanned document and you need selectable text, use “Scan for selectable text” above; scanning can take time on large books.</p>
             </div>
           ) : <div className="empty">This material has no valid preview link.</div>}

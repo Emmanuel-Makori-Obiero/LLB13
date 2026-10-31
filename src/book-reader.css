@@ -395,6 +395,58 @@
   .reader-zoom-controls { order: 3; width: 100%; justify-content: flex-start; margin-left: 0; }
 }
 
+.reader-mobile-mode-button { display: none; }
+
+@media (max-width: 720px) {
+  .reader-mobile-mode-button { display: inline-flex; align-items: center; gap: 6px; }
+  .reader-source-link { display: none; }
+  .book-reader-mobile-reading {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    width: 100vw;
+    height: 100dvh;
+    min-height: 0;
+    padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+    overflow: hidden;
+    background: #111;
+  }
+  .book-reader-mobile-reading .reader-toolbar {
+    min-height: 48px;
+    padding: 5px 0 8px;
+    border-bottom-color: rgba(255,255,255,.22);
+    color: #fff;
+  }
+  .book-reader-mobile-reading .reader-heading { display: block; text-align: left; }
+  .book-reader-mobile-reading .reader-heading strong { color: #fff; max-width: 42vw; }
+  .book-reader-mobile-reading .reader-heading span { color: rgba(255,255,255,.65); max-width: 42vw; }
+  .book-reader-mobile-reading .reader-actions { width: auto; margin-left: auto; }
+  .book-reader-mobile-reading .reader-actions .reader-expand-button { display: none; }
+  .book-reader-mobile-reading .reader-actions .reader-mobile-mode-button { color: #fff; border-color: rgba(255,255,255,.42); background: rgba(255,255,255,.1); }
+  .book-reader-mobile-reading .reader-actions .reader-mobile-mode-button span { display: inline; }
+  .book-reader-mobile-reading .book-reader-grid { display: block; height: calc(100dvh - 58px); padding-top: 8px; }
+  .book-reader-mobile-reading .book-reading-pane { height: calc(100dvh - 66px)!important; min-height: 0; border-color: rgba(255,255,255,.18); background: #222; }
+  .book-reader-mobile-reading .book-pane-head { align-items: center; padding: 8px 10px; background: #1d1d1d; border-bottom-color: rgba(255,255,255,.18); color: #fff; }
+  .book-reader-mobile-reading .book-pane-head .field-hint,
+  .book-reader-mobile-reading .book-pane-head > svg,
+  .book-reader-mobile-reading .reader-height-control { display: none; }
+  .book-reader-mobile-reading .book-pane-head .section-label { color: #f6cc53; }
+  .book-reader-mobile-reading .reader-zoom-controls { margin-left: auto; width: auto; }
+  .book-reader-mobile-reading .reader-zoom-controls strong { color: #fff; }
+  .book-reader-mobile-reading .reader-zoom-controls .secondary-button { color: #fff; border-color: rgba(255,255,255,.35); background: transparent; }
+  .book-reader-mobile-reading .book-preview-wrap { height: calc(100dvh - 116px)!important; padding: 4px; background: #222; }
+  .book-reader-mobile-reading .reader-hint { display: none; }
+  .book-reader-mobile-reading .book-ai-pane { display: none; }
+  .book-reader-mobile-reading .docx-reader { padding: 25px clamp(18px, 5vw, 48px); font-size: 17px; line-height: 1.78; }
+}
+
+@media (max-width: 720px) and (orientation: landscape) {
+  .book-reader-mobile-reading .book-pane-head { padding-block: 5px; }
+  .book-reader-mobile-reading .book-reader-grid { height: calc(100dvh - 52px); padding-top: 5px; }
+  .book-reader-mobile-reading .book-reading-pane { height: calc(100dvh - 57px)!important; }
+  .book-reader-mobile-reading .book-preview-wrap { height: calc(100dvh - 102px)!important; }
+}
+
 .book-result-actions {
   display: flex;
   flex-wrap: wrap;
