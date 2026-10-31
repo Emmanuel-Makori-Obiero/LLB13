@@ -8,9 +8,12 @@ import {
   readerPreviewUrl,
   resolveMaterialLinks,
 } from "../src/lib/material-reader.ts";
+import { extractReadableParagraphs } from "../src/lib/pdf-reflow.ts";
 
 const reader = readFileSync(new URL("../src/BookReader.tsx", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../src/book-reader.css", import.meta.url), "utf8");
+const notebookReader = readFileSync(new URL("../src/PdfNotebookReader.tsx", import.meta.url), "utf8");
+const ocrReader = readFileSync(new URL("../src/PdfNotesReader.tsx", import.meta.url), "utf8");
 
 test("stored textbook preview uses an inline URL and keeps attachment URL for explicit downloads", () => {
   const material = {
@@ -57,9 +60,52 @@ test("a stored URL already marked for download is normalized back to inline view
   assert.equal(resolveMaterialLinks(material).sourceUrl, "https://storage.example/object/public/materials/book.pdf");
 });
 
-test("Notebook view has a ruled paper reading surface and a distinct warm study workspace", () => {
+test("phone reflow joins PDF text runs and wrapped lines while preserving paragraph gaps", () => {
+  const line = (str, y, height = 12) => ({ str, height, transform: [height, 0, 0, height, 0, y] });
+  assert.deepEqual(extractReadableParagraphs([
+    line("Constitu-", 100),
+    line("tional law", 100),
+    line("follows line wraps.", 84),
+    line("  ", 68),
+    line("New chapter", 55),
+    line("starts here.", 39),
+  ]), [
+    "Constitutional law follows line wraps.",
+    "New chapter starts here.",
+  ]);
+  assert.match(notebookReader, /matchMedia\("\(max-width: 720px\)"\)/);
+  assert.match(notebookReader, /extractReadableParagraphs\(textContent\.items/);
+  assert.match(styles, /\.pdf-notebook-reflow/);
+});
+
+test("Notebook PDFs use a selectable lazy page stack, not a browser PDF iframe", () => {
+  assert.match(reader, /readerStyle === "notebook"[\s\S]*?<PdfNotebookReader/);
+  assert.match(reader, /<PdfNotesReader[\s\S]*?readerStyle !== "notebook"/);
+  assert.match(notebookReader, /pdfjs\.getDocument\(\{ url: sourceUrl, rangeChunkSize: 65_536 \}\)/);
+  assert.match(notebookReader, /new IntersectionObserver/);
+  assert.match(notebookReader, /PAGE_OVERSCAN_PX/);
+  assert.match(notebookReader, /new pdfjs\.TextLayer/);
+  assert.match(notebookReader, /MAX_PAGE_PIXELS/);
+  assert.match(notebookReader, /canvas\.width = 0/);
+  assert.match(notebookReader, /loadingTask\.destroy\(\)/);
+  assert.doesNotMatch(notebookReader, /<iframe/);
+});
+
+test("Notebook view is paper-like and keeps only a touch-scroll surface without zoom or height sliders", () => {
   assert.match(styles, /\.book-reader-style-notebook \.docx-reader \{[\s\S]*?repeating-linear-gradient/);
   assert.match(styles, /\.book-reader-style-notebook \.book-ai-pane/);
-  assert.match(styles, /\.book-reader-style-notebook \.pdf-native-preview > iframe/);
-  assert.match(styles, /\.book-reader-style-notebook \.book-preview-wrap \{[\s\S]*?repeating-linear-gradient/);
+  assert.match(styles, /\.pdf-notebook-sheet::before/);
+  assert.match(styles, /\.pdf-notebook-sheet::after/);
+  assert.match(styles, /\.pdf-notebook-text-layer/);
+  assert.match(styles, /\.pdf-notebook-reader \{[\s\S]*?overflow-y: auto/);
+  assert.match(styles, /\.book-reader-style-notebook \.reader-zoom-controls,[\s\S]*?display: none/);
+  assert.match(styles, /\.book-reader-style-notebook \.pdf-notebook-reader::-webkit-scrollbar/);
+  assert.doesNotMatch(styles, /\.book-reader-style-notebook \.pdf-native-preview > iframe/);
+});
+
+test("scanned PDF position is restored and recorded on the actual OCR scroll container", () => {
+  assert.match(ocrReader, /const readerRef = useRef/);
+  assert.match(ocrReader, /readerRef\.current\.scrollTop = initialScrollTop/);
+  assert.match(ocrReader, /className="pdf-notes-reader"[^\n]*onScroll=\{\(event\) => onScrollPosition/);
+  assert.doesNotMatch(ocrReader, /pagesRef/);
 });

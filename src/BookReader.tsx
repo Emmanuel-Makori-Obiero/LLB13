@@ -8,6 +8,7 @@ import StorytellButton from "./StorytellButton";
 import type { Material } from "./data/types";
 import { downloadBlob, downloadPdf, downloadWord } from "./export";
 import PdfNotesReader from "./PdfNotesReader";
+import PdfNotebookReader from "./PdfNotebookReader";
 import "./book-reader.css";
 import "./book-review.css";
 
@@ -224,8 +225,11 @@ export default function BookReader({ material, onClose }: Props) {
             </div>
           ) : frame ? (
             <div className="book-preview-wrap" style={{ height: `${effectiveReaderHeight}px` }}>
-              {isPdf ? <PdfNotesReader sourceUrl={sourceUrl} previewUrl={previewFrame} title={material.title} height={effectiveReaderHeight - 44} initialScrollTop={savedPosition} onScrollPosition={rememberReadingPosition} onMouseUp={captureSelection} /> : <iframe src={previewFrame} title={`Preview ${material.title}`} referrerPolicy="no-referrer" />}
-              <p className="reader-hint">Read the PDF in its normal preview. If it is a scanned document and you need selectable text, use “Scan for selectable text” above; scanning can take time on large books.</p>
+              {isPdf ? readerStyle === "notebook"
+                ? <PdfNotebookReader sourceUrl={sourceUrl} title={material.title} initialScrollTop={savedPosition} onScrollPosition={rememberReadingPosition} onMouseUp={captureSelection} />
+                : <PdfNotesReader sourceUrl={sourceUrl} previewUrl={previewFrame} title={material.title} height={effectiveReaderHeight - 44} initialScrollTop={savedPosition} onScrollPosition={rememberReadingPosition} onMouseUp={captureSelection} />
+                : <iframe src={previewFrame} title={`Preview ${material.title}`} referrerPolicy="no-referrer" />}
+              {readerStyle !== "notebook" && <p className="reader-hint">Read the PDF in its normal preview. If it is a scanned document and you need selectable text, use “Scan for selectable text” above; scanning can take time on large books.</p>}
             </div>
           ) : <div className="empty">This material has no valid preview link.</div>}
         </section>

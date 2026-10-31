@@ -24,11 +24,11 @@ export default function PdfNotesReader({ sourceUrl, previewUrl, title, height, o
   const [ocrProgress, setOcrProgress] = useState(0);
   const workerRef = useRef<Awaited<ReturnType<typeof import("tesseract.js").createWorker>> | null>(null);
   const runRef = useRef(0);
-  const pagesRef = useRef<HTMLDivElement | null>(null);
+  const readerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!scanRequested || !pages.length || initialScrollTop <= 0 || !pagesRef.current) return;
-    requestAnimationFrame(() => { if (pagesRef.current) pagesRef.current.scrollTop = initialScrollTop; });
+    if (!scanRequested || !pages.length || initialScrollTop <= 0 || !readerRef.current) return;
+    requestAnimationFrame(() => { if (readerRef.current) readerRef.current.scrollTop = initialScrollTop; });
   }, [initialScrollTop, pages.length, scanRequested]);
 
   useEffect(() => {
@@ -125,7 +125,7 @@ export default function PdfNotesReader({ sourceUrl, previewUrl, title, height, o
   }
 
   return (
-    <div className="pdf-notes-reader" style={{ height }} onMouseUp={onMouseUp} aria-label={`Scanned notes: ${title}`}>
+    <div ref={readerRef} className="pdf-notes-reader" style={{ height }} onMouseUp={onMouseUp} onScroll={(event) => onScrollPosition?.(event.currentTarget.scrollTop)} aria-label={`Scanned notes: ${title}`}>
       <div className="pdf-notes-status">
         <span>{ocrProgress > 0 ? `${ocrProgress}%` : <Loader2 size={14} className="pdf-reader-spin" />}</span>
         <span>{status}</span>
@@ -133,7 +133,7 @@ export default function PdfNotesReader({ sourceUrl, previewUrl, title, height, o
       </div>
       {error && <div className="pdf-notes-error">{error} Any scanned page images already prepared are still available below.</div>}
       {pages.length === 0 && !error && <div className="pdf-notes-empty"><ScanLine size={18} /> Preparing the page images…</div>}
-      <div ref={pagesRef} className="pdf-notes-pages" onScroll={(event) => onScrollPosition?.(event.currentTarget.scrollTop)}>
+      <div className="pdf-notes-pages">
         {pages.map((page) => (
           <section className="pdf-notes-page" key={page.number} aria-label={`Page ${page.number}`}>
             <div className="pdf-notes-page-label">Page {page.number} · {page.status === "ready" ? "selectable text ready" : page.status === "reading" ? "reading…" : "image"}</div>

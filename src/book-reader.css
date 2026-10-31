@@ -115,7 +115,7 @@
   height: 0;
   min-height: 0;
   overflow-x: hidden;
-  overflow-y: scroll;
+  overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   padding: clamp(22px, 4vw, 48px);
@@ -539,6 +539,72 @@
 }
 .pdf-native-preview { display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
 .pdf-native-preview > iframe { display: block; flex: 1 1 auto; width: 100%; min-height: 0; border: 1px solid #cbc8c0; background: #fff; }
+.pdf-notebook-reader {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 16px clamp(10px, 3vw, 28px) 24px;
+  background-color: #d2bf99;
+  background-image: repeating-linear-gradient(to bottom, rgba(255, 250, 239, .38) 0 1px, transparent 1px 30px);
+}
+.pdf-notebook-stack { display: grid; gap: 18px; width: 100%; margin: 0 auto; }
+.pdf-notebook-sheet {
+  position: relative;
+  width: min(100%, 900px);
+  margin: 0 auto;
+  padding: 26px 12px 12px 34px;
+  border: 1px solid #cbb78f;
+  background: #fffaf0;
+  box-shadow: 0 8px 22px rgba(66, 47, 24, .2);
+}
+.pdf-notebook-sheet::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 25px;
+  width: 1px;
+  background: #cf8f85;
+  content: "";
+}
+.pdf-notebook-sheet::after {
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: 7px;
+  width: 12px;
+  background: radial-gradient(circle, #b4a27d 0 3px, transparent 3.6px) center 0 / 12px 28px repeat-y;
+  content: "";
+}
+.pdf-notebook-page-number { position: absolute; top: 7px; right: 12px; color: #866c45; font-size: 10px; letter-spacing: .08em; }
+.pdf-notebook-page-surface { position: relative; width: 100%; overflow: hidden; background: #fffdf7; }
+.pdf-notebook-canvas { position: relative; z-index: 0; display: block; max-width: 100%; background: #fffdf7; }
+.pdf-notebook-text-layer { position: absolute; z-index: 1; inset: 0; overflow: clip; line-height: 1; text-size-adjust: none; transform-origin: 0 0; }
+.pdf-notebook-text-layer :is(span, br) { position: absolute; color: transparent; white-space: pre; cursor: text; transform-origin: 0 0; }
+.pdf-notebook-text-layer ::selection { background: rgba(246, 204, 83, .72); }
+.pdf-notebook-reflow {
+  min-height: 240px;
+  padding: 18px 18px 24px 27px;
+  color: #332b20;
+  font: 17px/1.75 Georgia, "Times New Roman", serif;
+  overflow-wrap: anywhere;
+  background-color: #fffaf0;
+  background-image: repeating-linear-gradient(to bottom, transparent 0 30px, rgba(94, 128, 161, .14) 30px 31px);
+}
+.pdf-notebook-reflow p { margin: 0 0 13px; text-indent: 1em; }
+.pdf-notebook-reflow p:last-child { margin-bottom: 0; }
+.pdf-notebook-page-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 8px; color: #765c36; font-size: 11px; background: rgba(255, 250, 240, .92); }
+.pdf-notebook-loading,
+.pdf-notebook-error { display: flex; align-items: center; justify-content: center; gap: 9px; min-height: 180px; color: #60472a; text-align: center; }
+.pdf-notebook-error { flex-direction: column; padding: 24px; }
+.pdf-notebook-error span { max-width: 50ch; font-size: 12px; }
+.pdf-notebook-error a { color: #315544; font-weight: 700; }
+.pdf-notebook-page-error { display: grid; place-items: center; width: 100%; min-height: 220px; color: #765c36; font-size: 12px; }
 .pdf-scan-opt-in { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex: 0 0 auto; padding: 9px 11px; border: 1px solid var(--line); background: rgba(255,253,246,.96); }
 .pdf-scan-opt-in > span { display: grid; gap: 3px; }
 .pdf-scan-opt-in strong { color: var(--ink); font-size: 11px; }
@@ -582,6 +648,13 @@
 :root[data-theme="dark"] .book-highlight.on > button:first-child { color: #fff3d5; }
 
 .book-reader-style-notebook { background: #efe6d5; }
+.book-reader-style-notebook .reader-zoom-controls,
+.book-reader-style-notebook .book-pane-head .field-hint,
+.book-reader-style-notebook .reader-hint { display: none; }
+.book-reader-style-notebook .docx-reader,
+.book-reader-style-notebook .pdf-notebook-reader { scrollbar-width: none; }
+.book-reader-style-notebook .docx-reader::-webkit-scrollbar,
+.book-reader-style-notebook .pdf-notebook-reader::-webkit-scrollbar { display: none; }
 .book-reader-style-notebook .book-reading-pane,
 .book-reader-style-notebook .book-ai-pane {
   border-color: #bba889;
@@ -610,18 +683,6 @@
   border: 1px solid #cbb78f;
   box-shadow: 0 8px 22px rgba(66, 47, 24, .2);
 }
-.book-reader-style-notebook .pdf-native-preview {
-  padding: clamp(12px, 3vw, 26px);
-  background-color: #d2bf99;
-  background-image: repeating-linear-gradient(to bottom, rgba(255, 250, 239, .38) 0 1px, transparent 1px 30px);
-}
-.book-reader-style-notebook .pdf-native-preview > iframe {
-  width: min(100%, 920px);
-  margin: 0 auto;
-  border: 8px solid #fffaf0;
-  border-left-width: 20px;
-  box-shadow: 0 8px 22px rgba(66, 47, 24, .22);
-}
 .book-reader-style-notebook .docx-reader {
   max-width: 840px;
   margin: 0 auto;
@@ -638,16 +699,35 @@
 .book-reader-style-notebook .docx-reader h2,
 .book-reader-style-notebook .docx-reader h3,
 .book-reader-style-notebook .docx-reader h4 { color: #60472a; }
-.book-reader-style-notebook .pdf-scan-opt-in { background: #fff8e9; border-color: #d4c19d; }
-.book-reader-style-notebook .pdf-notes-pages { max-width: 900px; margin: 0 auto; }
 .book-reader-style-notebook .book-prompt { border-color: #c9b591; background: #f1e5cf; color: #624f36; }
 .book-reader-style-notebook .book-prompt.on { border-color: #a77d45; background: #dfc99f; color: #3c3020; }
 .reader-style-button { display: inline-flex; align-items: center; gap: 6px; }
 @media (max-width: 720px) {
   .book-reader-mobile-reading .reader-style-button { display: inline-flex; color: #fff; border-color: rgba(255,255,255,.42); background: rgba(255,255,255,.1); }
   .book-reader-mobile-reading .reader-style-button span { display: none; }
-  .book-reader-mobile-reading.book-reader-style-notebook .book-pane-head { background: #403728; }
-  .book-reader-mobile-reading.book-reader-style-notebook .book-preview-wrap { background: #6a5539; }
-  .book-reader-mobile-reading.book-reader-style-notebook .book-reading-pane { border-color: #8a7455; background: #2b261f; }
+  .book-reader-mobile-reading.book-reader-style-notebook { background: #efe6d5; color: #3a3022; }
+  .book-reader-mobile-reading.book-reader-style-notebook .reader-toolbar { color: #3a3022; border-bottom-color: #c9b591; }
+  .book-reader-mobile-reading.book-reader-style-notebook .reader-toolbar > button { color: #3a3022; border-color: #c9b591; background: #fffaf0; }
+  .book-reader-mobile-reading.book-reader-style-notebook .reader-heading strong { color: #3a3022; }
+  .book-reader-mobile-reading.book-reader-style-notebook .reader-heading span { color: #766348; }
+  .book-reader-mobile-reading.book-reader-style-notebook .reader-actions .reader-mobile-mode-button { color: #3a3022; border-color: #c9b591; background: #fffaf0; }
+  .book-reader-mobile-reading.book-reader-style-notebook .book-pane-head { color: #3a3022; background: #e8dcc5; border-bottom-color: #c9b591; }
+  .book-reader-mobile-reading.book-reader-style-notebook .book-pane-head .section-label { color: #815b32; }
+  .book-reader-mobile-reading.book-reader-style-notebook .book-preview-wrap { background: #d2bf99; }
+  .book-reader-mobile-reading.book-reader-style-notebook .book-reading-pane { border-color: #bba889; background: #faf4e7; }
+  .book-reader-mobile-reading.book-reader-style-notebook .pdf-notebook-reader { padding: 8px 6px calc(18px + env(safe-area-inset-bottom)); }
+  .book-reader-mobile-reading.book-reader-style-notebook .pdf-notebook-sheet { padding: 24px 6px 6px 25px; }
+  .book-reader-mobile-reading.book-reader-style-notebook .pdf-notebook-sheet::before { left: 18px; }
+  .book-reader-mobile-reading.book-reader-style-notebook .pdf-notebook-sheet::after { left: 3px; width: 11px; background-size: 11px 25px; }
+  .book-reader-mobile-reading.book-reader-style-notebook .pdf-notebook-page-number { top: 6px; right: 8px; }
+  .book-reader-mobile-reading.book-reader-style-notebook .pdf-notebook-reflow { min-height: 180px; padding: 10px 8px 18px 12px; font-size: 16px; line-height: 1.72; background-image: repeating-linear-gradient(to bottom, transparent 0 28px, rgba(94, 128, 161, .14) 28px 29px); }
   .book-reader-mobile-reading.book-reader-style-notebook .docx-reader { padding-inline: 40px 22px; box-shadow: 0 2px 10px rgba(0,0,0,.28); }
+}
+
+.book-review-mode .book-review-hud > strong {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
