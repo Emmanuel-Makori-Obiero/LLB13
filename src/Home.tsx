@@ -1,6 +1,7 @@
-import { ArrowRight, BookOpen, CalendarDays, CheckSquare, FileText, Gavel, Library, Sparkles } from "lucide-react";
+import { ArrowRight, BookOpen, CalendarDays, CheckSquare, FileText, Gavel, Library, Sparkles, Users } from "lucide-react";
 import type { Assignment, Lesson, Todo } from "./data/types";
 import LearningLoop from "./LearningLoop";
+import "./home-groups.css";
 type Props = { name: string; learnerLevel: string; learningPreference: string; lessons: Lesson[]; todos: Todo[]; assignments: Assignment[]; userId: string | null; setPage: (id: string) => void };
 const today = () => new Date().toISOString().slice(0, 10);
 const hm = (t?: string | null) => (t ? t.slice(0, 5) : "");
@@ -24,6 +25,22 @@ export default function Home({ name, learnerLevel, learningPreference, lessons, 
   const preferenceLabel = learningPreference === "guided" ? "Step-by-step support" : learningPreference === "challenge" ? "Challenge mode" : "Balanced support";
   return <div className="home-dashboard">
     <section className="home-welcome"><div className="home-welcome-copy"><span className="home-kicker"><Sparkles size={14} /> GROUP 13 · LAW LEARNING HUB</span><h1>{greet}, {name}.</h1><p>{level.next}</p><div className="home-welcome-actions"><button className="home-primary" onClick={() => setPage("library")}><Library size={16} /> Explore your library <ArrowRight size={15} /></button><span className="home-level-badge"><BookOpen size={14} /> {level.label}</span><span className="home-level-badge"><Sparkles size={14} /> {preferenceLabel}</span></div></div><div className="home-welcome-mark" aria-hidden="true"><Gavel size={58} /><span>13</span></div></section>
+    <section className="home-groups-intro" aria-labelledby="home-groups-title">
+      <div className="home-groups-copy">
+        <span className="home-groups-label"><Users size={14} /> STUDY TOGETHER</span>
+        <h2 id="home-groups-title">Want to form or join a study group?</h2>
+        <p>Approved leaders create a group; students join with the leader’s 8-character invite code. Set study sessions, check in, and keep one another on track.</p>
+        <p className="home-groups-note">Attendance is for visibility and accountability only. It does not affect marks or grades.</p>
+      </div>
+      <div className="home-groups-next">
+        <span className="home-groups-label">GET STARTED</span>
+        <ol>
+          <li><strong>To lead:</strong> ask the primary admin for approval, then create a group.</li>
+          <li><strong>To join:</strong> ask a group leader for the invite code.</li>
+        </ol>
+        <button className="home-primary" onClick={() => setPage("groups")}>Start or join a group <ArrowRight size={15} /></button>
+      </div>
+    </section>
     <section className="home-section-head"><div><span className="home-section-eyebrow">YOUR STUDY DESK</span><h2>{level.focus}</h2></div><button className="home-text-button" onClick={() => setPage("account")}>Update study level <ArrowRight size={14} /></button></section>
     <div className="home-grid home-grid-organized">
       <article className="home-panel"><div className="home-panel-head"><span className="home-panel-icon"><CalendarDays size={17} /></span><div><h3>Today & next</h3><small>{todayLessons.length} sessions today</small></div><button aria-label="Open timetable" onClick={() => setPage("timetable")}><ArrowRight size={16} /></button></div>{todayLessons.length ? todayLessons.map((lesson) => <div className="home-detail-row" key={lesson.id}><strong>{hm(lesson.start_time) || "Today"}</strong><div>{lesson.topic}<small>{lesson.unit}</small></div></div>) : <p className="home-empty-line">No classes today. Use the time for a short focused study block.</p>}{next.map((lesson) => <div className="home-detail-row" key={lesson.id}><strong>{new Date(lesson.lesson_date + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}</strong><div>{lesson.topic}<small>{lesson.unit}</small></div></div>)}<button className="home-panel-link" onClick={() => setPage("timetable")}>Open timetable <ArrowRight size={14} /></button></article>
