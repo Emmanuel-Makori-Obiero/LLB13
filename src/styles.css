@@ -1080,6 +1080,23 @@ html, body { background-size: contain; background-position: center center; backg
 .public-playlist-shell h1 { margin:8px 0; font-size:clamp(34px,6vw,64px); }
 .public-playlist-list { display:grid; gap:18px; margin-top:30px; }
 .public-playlist-item { display:grid; gap:12px; padding:18px; border:1px solid var(--line); background:var(--white); }
+:root[data-theme="dark"] .auth-page { background: var(--paper); color: var(--ink); }
+:root[data-theme="dark"] .auth-shell { border-color: var(--line); background: var(--white); box-shadow: 0 18px 50px rgba(0,0,0,.35); }
+:root[data-theme="dark"] .auth-panel { background: var(--white); color: var(--ink); }
+:root[data-theme="dark"] .auth-mobile-logo, :root[data-theme="dark"] .auth-panel h1,
+:root[data-theme="dark"] .auth-field > span, :root[data-theme="dark"] .auth-field > span em { color: var(--ink); }
+:root[data-theme="dark"] .auth-tabs { background: var(--soft); }
+:root[data-theme="dark"] .auth-tabs button { color: var(--muted); }
+:root[data-theme="dark"] .auth-tabs button.active { background: var(--forest); color: #f4fbf5; }
+:root[data-theme="dark"] .auth-field input { border-color: var(--line); background: #17211c; color: var(--ink); }
+:root[data-theme="dark"] .auth-field input::placeholder { color: var(--muted); }
+:root[data-theme="dark"] .auth-eye, :root[data-theme="dark"] .auth-link,
+:root[data-theme="dark"] .auth-home-link { color: #b9e0c8; }
+:root[data-theme="dark"] .auth-notice { border-color: var(--line); background: var(--soft); color: var(--ink); }
+:root[data-theme="dark"] .auth-submit { border-color: var(--clay); background: var(--clay); color: #1b1714; }
+:root[data-theme="dark"] .auth-submit:hover:not(:disabled) { border-color: #f0a98e; background: #f0a98e; color: #1b1714; }
+:root[data-theme="dark"] .connection-error { border-color: #9e5e52; background: #3a2421; color: #ffd8cc; }
+:root[data-theme="dark"] .secondary-button, :root[data-theme="dark"] .icon-button { color: var(--ink); }
 .public-playlist-item > div { display:flex; align-items:center; gap:10px; }
 .public-playlist-item iframe { display:block; width:100%; min-height:180px; border:0; background:#111; }
 .public-playlist-item .chip { flex:none; }

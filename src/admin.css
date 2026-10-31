@@ -279,3 +279,17 @@
   .admin-collapsible-summary { align-items: flex-start; }
   .admin-collapsible-summary .quiet { text-align: right; }
 }
+:root[data-theme="dark"] .small-danger { border-color: #8c5148; background: #3a2421; color: #ffd8cc; }
+:root[data-theme="dark"] .small-admin-action { border-color: #557665; background: #20362c; color: #c7e2d0; }
+:root[data-theme="dark"] .unit-toggle.on { background: #315744; color: #e4f5e8; }
+:root[data-theme="dark"] .admin-timetable-planner { border-color: #557665; background: linear-gradient(135deg, #192a22, #19221e); }
+:root[data-theme="dark"] .upload-drop { border-color: #6b927c; background: #1d3026; color: #c7e2d0; }
+:root[data-theme="dark"] .timetable-status { background: var(--soft); color: var(--muted); }
+:root[data-theme="dark"] .timetable-status.working { border-color: #9b8750; background: #3b3320; color: #f0d995; }
+:root[data-theme="dark"] .timetable-status.success { border-color: #5c9b71; background: #1d3929; color: #c6efd0; }
+:root[data-theme="dark"] .timetable-status.error { border-color: #9e5e52; background: #3a2421; color: #ffd8cc; }
+:root[data-theme="dark"] .proposal-edit-box { border-color: #927b4d; background: #3b3320; color: var(--ink); }
+:root[data-theme="dark"] .usage-quota, :root[data-theme="dark"] .admin-activity-days button { background: var(--soft); color: var(--muted); }
+:root[data-theme="dark"] .admin-activity-days button strong { color: var(--ink); }
+:root[data-theme="dark"] .admin-activity-days button.active { background: var(--forest); color: #e8f5eb; }
+:root[data-theme="dark"] .admin-activity-days button.active strong { color: #fff; }
