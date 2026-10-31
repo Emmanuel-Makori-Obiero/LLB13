@@ -77,11 +77,15 @@ export default function AdminClubPosters({ setNotice }: Props) {
   };
 
   const save = async () => {
-    if (!file || !title.trim() || !analysis.trim()) return;
+    if (!file || !analysis.trim()) {
+      setError("Analyze the selected poster before publishing.");
+      return;
+    }
+    const fallbackTitle = file.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim() || "Club notice";
     setBusy("checking"); setError("");
     try {
       const poster = await repository.adminCreateClubPoster({
-        title, file, linkUrl, aiAnalysis: analysis,
+        title: title.trim() || fallbackTitle, file, linkUrl, aiAnalysis: analysis,
         onProgress: (stage) => setBusy(stage),
       });
       const remaining = queuedFiles.slice(1);
@@ -106,11 +110,11 @@ export default function AdminClubPosters({ setNotice }: Props) {
     {error && <div className="connection-error" role="alert">{error}</div>}
     <div className="admin-poster-form">
       <label className="groups-field">Poster image(s)<input type="file" multiple accept="image/*,.avif,.bmp,.gif,.heic,.heif,.tif,.tiff" onChange={chooseFile} /><span className="field-hint">You can select multiple poster versions. Analyze and publish them one at a time; {queuedFiles.length > 1 ? `${queuedFiles.length} files are queued.` : "PNG, JPG, JPEG, WebP, GIF, BMP, AVIF and TIFF are accepted when your browser can read them."}</span></label>
-      <label className="groups-field">Short title<input value={title} maxLength={160} onChange={(event) => setTitle(event.target.value)} placeholder="e.g. Research paper submissions" /></label>
+      <label className="groups-field">Short title (optional)<input value={title} maxLength={160} onChange={(event) => setTitle(event.target.value)} placeholder="e.g. Research paper submissions" /></label>
       <label className="groups-field">Optional click-through link<input type="url" value={linkUrl} onChange={(event) => setLinkUrl(event.target.value)} placeholder="https://…" /></label>
       {preview && <img className="admin-poster-preview" src={preview} alt="Selected poster preview" />}
-      <div className="admin-poster-actions"><button className="secondary-button" type="button" disabled={!file || busy !== ""} onClick={() => void runAnalysis()}><Sparkles size={14} /> {busy === "analyze" ? "Analyzing…" : "Analyze poster"}</button><button className="primary-button" type="button" disabled={!file || !title.trim() || !analysis.trim() || busy !== ""} onClick={() => void save()}>{busy && busy !== "analyze" && <LoaderCircle size={14} className="spin" />} {busy === "checking" ? "Checking access…" : busy === "uploading" ? "Uploading poster…" : busy === "saving" ? "Saving notice…" : "Publish to home"}</button></div>
-      {!analysis && <p className="field-hint">Analyze the selected poster first, then add a short title before publishing.</p>}
+      <div className="admin-poster-actions"><button className="secondary-button" type="button" disabled={!file || busy !== ""} onClick={() => void runAnalysis()}><Sparkles size={14} /> {busy === "analyze" ? "Analyzing…" : "Analyze poster"}</button><button className="primary-button" type="button" disabled={!file || !analysis.trim() || busy !== ""} onClick={() => void save()}>{busy && busy !== "analyze" && <LoaderCircle size={14} className="spin" />} {busy === "checking" ? "Checking access…" : busy === "uploading" ? "Uploading poster…" : busy === "saving" ? "Saving notice…" : "Publish to home"}</button></div>
+      {!analysis && <p className="field-hint">Analyze the selected poster first. You may add a short title, or the image filename will be used automatically.</p>}
       {analysis && <div className="admin-poster-analysis"><strong>AI analysis</strong><p>{analysis}</p></div>}
     </div>
     {posters.length > 0 && <div className="row-list admin-poster-list">{posters.map((poster) => <div className="row" key={poster.id}><img src={poster.image_url} alt="" className="admin-poster-thumb" /><div className="row-main"><div className="row-title">{poster.title}</div><div className="row-meta">Published {new Date(poster.created_at).toLocaleDateString("en-GB")}</div></div><div className="row-end"><button className="small-danger" type="button" disabled={busy !== ""} onClick={() => void remove(poster)}><Trash2 size={12} /> Remove</button></div></div>)}</div>}
