@@ -1063,19 +1063,22 @@ const supabaseRepository: Group13Repository = {
     const client = db();
     const { data: { user }, error: authError } = await client.auth.getUser();
     if (authError || !user) throw new Error("Sign in as the super admin before uploading a poster.");
+    const { data: isAdmin, error: roleError } = await client.rpc("is_super_admin");
+    if (roleError) throw new Error(`Could not verify super-admin access: ${roleError.message}`);
+    if (isAdmin !== true) throw new Error("Your account is not authorized to publish club posters. Sign in with the primary admin account.");
     const id = crypto.randomUUID();
     const extension = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
     const storagePath = `posters/${id}.${extension}`;
     const uploaded = await client.storage.from("club-posters").upload(storagePath, file, {
       cacheControl: "3600", upsert: false, contentType: file.type || "image/jpeg",
     });
-    if (uploaded.error) throw new Error(`Could not upload poster: ${uploaded.error.message}`);
+    if (uploaded.error) throw new Error(`Poster upload failed: ${uploaded.error.message}`);
     const imageUrl = client.storage.from("club-posters").getPublicUrl(storagePath).data.publicUrl;
     const { data, error } = await client.from("club_posters").insert({
       id, title: title.trim(), image_url: imageUrl, storage_path: storagePath,
-      link_url: linkUrl.trim() || null, ai_analysis: aiAnalysis.trim(), created_by: user.id,
+      link_url: linkUrl.trim() || null, ai_analysis: aiAnalysis.trim(), is_active: true, created_by: user.id,
     }).select("id,title,image_url,storage_path,link_url,ai_analysis,created_at").single();
-    if (error) { await client.storage.from("club-posters").remove([storagePath]); throw new Error(`Could not save poster: ${error.message}`); }
+    if (error) { await client.storage.from("club-posters").remove([storagePath]); throw new Error(`Poster database save failed: ${error.message}`); }
     return data as ClubPoster;
   },
   adminDeleteClubPoster: async (poster) => {
