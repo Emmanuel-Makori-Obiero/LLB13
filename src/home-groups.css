@@ -96,3 +96,15 @@
 :root[data-theme="dark"] .home-poster-empty { background: #0b1712; }
 :root[data-theme="dark"] .home-poster-content h2 { color: #f5fbf6; }
 :root[data-theme="dark"] .home-poster-image-wrap { background: #142a21; }
+.home-poster-details-panel { display: grid; gap: 7px; max-width: 650px; margin: 2px 0 12px; }
+.home-poster-detail { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 8px; padding: 8px 10px; border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.055); animation: poster-detail-in .28s ease both; }
+.home-poster-detail:nth-child(2) { animation-delay: .035s; }
+.home-poster-detail:nth-child(3) { animation-delay: .07s; }
+.home-poster-detail:nth-child(4) { animation-delay: .105s; }
+.home-poster-detail:nth-child(5) { animation-delay: .14s; }
+.home-poster-detail:nth-child(6) { animation-delay: .175s; }
+.home-poster-detail > svg { margin-top: 2px; color: #e5ae96; }
+.home-poster-detail span { display: block; margin-bottom: 2px; color: #b8c9bd; font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.home-poster-detail p { margin: 0; color: #edf5ef; font-size: 11px; line-height: 1.45; }
+@keyframes poster-detail-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .home-poster-detail { animation: none; } }
