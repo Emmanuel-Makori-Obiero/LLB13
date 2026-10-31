@@ -333,8 +333,15 @@
 .admin-advisor-form { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
 .admin-advisor-form input { min-width: 180px; flex: 1 1 260px; padding: 9px 10px; border: 1px solid var(--line); background: var(--white); color: var(--ink); font: inherit; font-size: 12px; }
 .admin-advisor-form button { white-space: nowrap; }
+.admin-advisor-toolbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin: 12px 0; }
+.admin-advisor-history { display: flex; flex-wrap: wrap; gap: 5px; min-width: 0; }
+.admin-advisor-history button { max-width: 190px; overflow: hidden; padding: 6px 8px; border: 1px solid var(--line); background: var(--soft); color: var(--muted); font: inherit; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.admin-advisor-history button.active { border-color: var(--accent); background: color-mix(in srgb,var(--accent) 12%,transparent); color: var(--ink); font-weight: 700; }
+.admin-advisor-chat-actions { display: flex; flex: 0 0 auto; gap: 5px; }
+.admin-advisor-chat-actions .secondary-button { padding: 6px 8px; font-size: 10px; }
 :root[data-theme="dark"] .admin-advisor-panel { border-color: #547661; background: linear-gradient(135deg, #1c3327, var(--soft)); }
 :root[data-theme="dark"] .admin-advisor-output { background: #18251e; border-color: #405c49; color: #e6f2e9; }
 :root[data-theme="dark"] .admin-advisor-message { background: #18251e; border-color: #405c49; }
 :root[data-theme="dark"] .admin-advisor-message.user { background: #203b2d; border-color: #557c61; }
 :root[data-theme="dark"] .admin-advisor-message p { color: #e6f2e9; }
+@media(max-width:600px){.admin-advisor-toolbar{flex-direction:column}.admin-advisor-chat-actions{width:100%}.admin-advisor-chat-actions button{flex:1}}

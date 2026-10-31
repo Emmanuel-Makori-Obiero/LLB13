@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { BookOpen, CheckCircle2, Download, FileText, Lightbulb, RefreshCw, Sparkles } from "lucide-react";
+import { BookOpen, CheckCircle2, Download, FileText, Lightbulb, RefreshCw, Search, Sparkles } from "lucide-react";
 import { Markdown } from "./Markdown";
 import StorytellButton from "./StorytellButton";
 import { askAI, importLibraryMaterial, type AIFeature, type AIResult } from "./lib/ai";
@@ -35,10 +35,11 @@ export default function AssignmentHelperPage({ assignments, learnerLevel = "" }:
   const [importingSource, setImportingSource] = useState<string | null>(null);
   const [sourceFilter, setSourceFilter] = useState<"all" | "library" | "my">("all");
   const [sourcesExpanded, setSourcesExpanded] = useState(false);
+  const [sourceSearch, setSourceSearch] = useState("");
 
   const librarySources = useMemo(() => sources.filter((source) => (source.kind === "document" || source.kind === "material") && (source.scope !== "library" || materialVisibleToLevel(source.target_years, learnerLevel))), [sources, learnerLevel]);
   const selectedSources = librarySources.filter((source) => source.kind === "document" && selected.includes(source.id));
-  const visibleSources = useMemo(() => librarySources.filter((source) => sourceFilter === "all" || (sourceFilter === "library" ? source.scope === "library" : source.scope !== "library")), [librarySources, sourceFilter]);
+  const visibleSources = useMemo(() => { const query = sourceSearch.trim().toLowerCase(); return librarySources.filter((source) => (sourceFilter === "all" || (sourceFilter === "library" ? source.scope === "library" : source.scope !== "library")) && (!query || `${source.title} ${source.citation || ""}`.toLowerCase().includes(query))); }, [librarySources, sourceFilter, sourceSearch]);
   const compactSources = useMemo(() => {
     if (sourcesExpanded || visibleSources.length <= 8) return visibleSources;
     const selectedVisible = visibleSources.filter((source) => source.kind === "document" && selected.includes(source.id));
@@ -139,6 +140,7 @@ export default function AssignmentHelperPage({ assignments, learnerLevel = "" }:
             <button type="button" className={sourceFilter === "my" ? "active" : ""} onClick={() => setSourceFilter("my")}>My uploads</button>
           </div>
         </div>
+        <label className="assignment-source-search"><Search size={14} /><input value={sourceSearch} onChange={(event) => { setSourceSearch(event.target.value); setSourcesExpanded(true); }} placeholder="Search Library books by title or author…" aria-label="Search Library books" /></label>
         <div className="assignment-sources">{visibleSources.length ? compactSources.map((source) => <label className={`assignment-source ${source.kind !== "document" ? "reference-only" : ""}`} key={`${source.kind}:${source.id}`}><input type="checkbox" checked={source.kind === "document" && selected.includes(source.id)} disabled={source.kind === "material" && importingSource === source.id} onChange={() => source.kind === "material" ? void importSource(source) : setSelected((current) => isBookReview ? [source.id] : current.includes(source.id) ? current.filter((id) => id !== source.id) : [...current, source.id])} /><BookOpen size={14} /><span>{source.title}<small>{source.kind === "material" ? (importingSource === source.id ? "Preparing Library book for AI…" : "Library book · click to add readable text") : source.scope === "library" ? "Library book · text supplied to AI" : "My saved document · text supplied to AI"}{source.citation ? ` · ${source.citation}` : ""}</small></span></label>) : <p className="empty">No sources in this filter. Add source text in Library, then refresh.</p>}</div>
         {visibleSources.length > 8 && <button type="button" className="assignment-source-more" onClick={() => setSourcesExpanded((expanded) => !expanded)}>{sourcesExpanded ? "Show fewer sources" : `Show all ${visibleSources.length} sources`}</button>}
         <div className="assignment-actions"><button className="secondary-button" onClick={() => void loadSources()}><RefreshCw size={13} /> Refresh sources</button><button className="primary-button" onClick={() => void run()} disabled={busy || (!brief.trim() && !isBookReview)}><Sparkles size={14} /> {busy ? "Writing…" : isBookReview ? "Write the book review" : tool.label}</button></div>
