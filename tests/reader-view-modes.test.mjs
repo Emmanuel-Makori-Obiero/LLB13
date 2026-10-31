@@ -60,5 +60,6 @@ test("a stored URL already marked for download is normalized back to inline view
 test("Notebook view has a ruled paper reading surface and a distinct warm study workspace", () => {
   assert.match(styles, /\.book-reader-style-notebook \.docx-reader \{[\s\S]*?repeating-linear-gradient/);
   assert.match(styles, /\.book-reader-style-notebook \.book-ai-pane/);
+  assert.match(styles, /\.book-reader-style-notebook \.pdf-native-preview > iframe/);
   assert.match(styles, /\.book-reader-style-notebook \.book-preview-wrap \{[\s\S]*?repeating-linear-gradient/);
 });

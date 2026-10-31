@@ -610,6 +610,18 @@
   border: 1px solid #cbb78f;
   box-shadow: 0 8px 22px rgba(66, 47, 24, .2);
 }
+.book-reader-style-notebook .pdf-native-preview {
+  padding: clamp(12px, 3vw, 26px);
+  background-color: #d2bf99;
+  background-image: repeating-linear-gradient(to bottom, rgba(255, 250, 239, .38) 0 1px, transparent 1px 30px);
+}
+.book-reader-style-notebook .pdf-native-preview > iframe {
+  width: min(100%, 920px);
+  margin: 0 auto;
+  border: 8px solid #fffaf0;
+  border-left-width: 20px;
+  box-shadow: 0 8px 22px rgba(66, 47, 24, .22);
+}
 .book-reader-style-notebook .docx-reader {
   max-width: 840px;
   margin: 0 auto;
