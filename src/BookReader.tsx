@@ -153,8 +153,8 @@ export default function BookReader({ material, onClose }: Props) {
       const task = `${customPrompt.trim() && customPrompt.trim() !== passage ? customPrompt.trim() : instruction}\nAnswer directly in plain language first. Do not begin with a question and do not add a quiz or recall question unless I explicitly ask for one.`;
     try {
       const answer = await askAI({
-        feature: "explain",
-        mode: "auto",
+        feature: "book_explain",
+        mode: "general",
         messages: [{ role: "user", content: `${task}\n\nBook: ${material.title}\nPassage to work from:\n“${passage}”` }],
       });
       setResult(answer);
@@ -173,8 +173,8 @@ export default function BookReader({ material, onClose }: Props) {
     setChat(next);
     try {
       const answer = await askAI({
-        feature: "chat",
-        mode: "auto",
+        feature: "book_chat",
+        mode: "general",
         messages: [{ role: "user", content: `Explain first in plain language. Do not quiz me unless I ask. Book: ${material.title}\nPassage:\n“${passage}”\nConversation so far:\n${next.map((line) => `${line.role}: ${line.text}`).join("\n")}\nStudent's latest message: ${message}` }],
       });
       setChat((current) => [...current, { role: "assistant", text: answer.answer }]);
