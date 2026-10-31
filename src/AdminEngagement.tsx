@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, BarChart3, RefreshCw, Target, Users } from "lucide-react";
+import { Activity, BarChart3, LoaderCircle, RefreshCw, Sparkles, Target, Users } from "lucide-react";
 import { repository, supabase } from "./data/repository";
 import type { AdminAccount } from "./data/types";
+import { askAI } from "./lib/ai";
 
 type EventRow = { id: number; user_id: string; event_type: string; page: string | null; created_at: string };
 const dayMs = 24 * 60 * 60 * 1000;
@@ -16,6 +17,9 @@ export default function AdminEngagement() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
+  const [advisorBusy, setAdvisorBusy] = useState(false);
+  const [advisorText, setAdvisorText] = useState("");
+  const [advisorError, setAdvisorError] = useState("");
 
   useEffect(() => {
     if (!supabase) { setError("Supabase is not configured."); setLoading(false); return; }
@@ -63,6 +67,34 @@ export default function AdminEngagement() {
     };
   }, [accounts, events]);
 
+  const askAdvisor = async () => {
+    setAdvisorBusy(true); setAdvisorError("");
+    try {
+      const result = await askAI({
+        feature: "chat", mode: "general", messages: [{ role: "user", content: `Act as a practical startup growth advisor, product manager and business strategist for a Kenyan law-student learning platform. Use the metrics below, be candid, and do not invent facts. Give advice that a solo founder can execute.
+
+METRICS:
+- Registered users: ${accounts.length}
+- DAU: ${metrics.activeDay}; WAU: ${metrics.activeWeek}; MAU: ${metrics.activeMonth}
+- Activation: ${metrics.activationRate} (${metrics.activated} users)
+- Day-7 retention: ${percent(metrics.day7, metrics.day7Total)} (${metrics.day7}/${metrics.day7Total})
+- Day-30 retention: ${percent(metrics.day30, metrics.day30Total)} (${metrics.day30}/${metrics.day30Total})
+- Page views in 30 days: ${metrics.pageViews}; page views per active user: ${metrics.pageViewsPerUser}
+- Meaningful tracked actions: ${metrics.meaningful}
+- Most visited areas: ${metrics.pages.map(([name, count]) => `${name} (${count})`).join(", ") || "none recorded"}
+- Feature actions: ${metrics.features.map(([name, count]) => `${name} (${count})`).join(", ") || "none recorded"}
+
+Return exactly four sections:
+1. DIAGNOSIS — what the numbers suggest and what is missing.
+2. TOP 3 PRIORITIES — each with the problem, recommended product/business change, and metric it should improve.
+3. NEXT 7 DAYS — three concrete experiments with a success threshold.
+4. AVOID — two things the founder should not build or change yet.
+Keep it concise, specific to students and this platform, and distinguish evidence from assumptions.` }] });
+      setAdvisorText(result.answer);
+    } catch (caught) { setAdvisorError(caught instanceof Error ? caught.message : "The AI advisor could not respond."); }
+    finally { setAdvisorBusy(false); }
+  };
+
   return <section className="card card-pad admin-engagement-card">
     <div className="card-header"><span className="section-label"><BarChart3 size={15} /> Engagement dashboard</span><button className="icon-button" onClick={() => setRefreshKey((key) => key + 1)} disabled={loading} aria-label="Refresh engagement metrics"><RefreshCw size={14} /></button></div>
     <p className="field-hint">A privacy-safe view of registrations, active students, retention and tracked study actions. Activity is based on recorded page views and feature events; it does not expose prompts or private document content.</p>
@@ -80,6 +112,7 @@ export default function AdminEngagement() {
         <div className="admin-analytics-panel"><div className="admin-analytics-heading"><strong>Usage depth</strong><span>Last 30 days</span></div><div className="admin-retention-row"><span>Page views</span><strong>{metrics.pageViews}</strong><small>{metrics.pageViewsPerUser} page views per active user</small></div><div className="admin-retention-row"><span>DAU / MAU</span><strong>{percent(metrics.activeDay, metrics.activeMonth)}</strong><small>Return frequency signal</small></div></div>
       </div>
       <div className="admin-analytics-columns"><div className="admin-analytics-panel"><div className="admin-analytics-heading"><strong>Most visited areas</strong><span>Tracked page views</span></div>{metrics.pages.length ? metrics.pages.map(([name, count]) => <div className="admin-bar-row" key={name}><span>{label(name)}</span><div><i style={{ width: `${Math.max(4, Math.round(count / metrics.pages[0][1] * 100))}%` }} /></div><strong>{count}</strong></div>) : <p className="quiet">No page views recorded yet.</p>}</div><div className="admin-analytics-panel"><div className="admin-analytics-heading"><strong>Feature actions</strong><span>Tracked events</span></div>{metrics.features.length ? metrics.features.map(([name, count]) => <div className="admin-bar-row" key={name}><span>{label(name)}</span><div><i style={{ width: `${Math.max(4, Math.round(count / metrics.features[0][1] * 100))}%` }} /></div><strong>{count}</strong></div>) : <p className="quiet">No feature actions recorded yet.</p>}</div></div>
+      <div className="admin-advisor-panel"><div className="admin-analytics-heading"><strong><Sparkles size={14} /> AI growth advisor</strong><span>Admin-only · aggregate metrics</span></div><p className="field-hint">Ask the advisor to act as your product strategist, business advisor and growth agent. It receives the metrics above—not user prompts, documents, passwords or private conversations.</p><button className="primary-button" type="button" onClick={() => void askAdvisor()} disabled={advisorBusy}><Sparkles size={14} /> {advisorBusy ? "Advisor is reviewing metrics…" : advisorText ? "Refresh advice" : "Get growth advice"}</button>{advisorError && <div className="connection-error" role="alert">{advisorError}</div>}{advisorBusy && <p className="field-hint"><LoaderCircle size={13} className="spin" /> Comparing activation, retention and feature signals…</p>}{advisorText && !advisorBusy && <div className="admin-advisor-output" aria-live="polite">{advisorText}</div>}</div>
     </>}
   </section>;
 }

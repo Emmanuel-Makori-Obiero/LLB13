@@ -320,3 +320,10 @@
 :root[data-theme="dark"] .admin-metric > svg { color: #b8dfc2; }
 :root[data-theme="dark"] .admin-retention-row strong { color: #b8dfc2; }
 :root[data-theme="dark"] .admin-bar-row i { background: #6fa982; }
+.admin-advisor-panel { margin-top: 10px; padding: 14px; border: 1px solid #b9cfc0; background: linear-gradient(135deg, #f4faf5, var(--soft)); }
+.admin-advisor-panel .admin-analytics-heading { align-items: center; }
+.admin-advisor-panel .admin-analytics-heading strong { display: inline-flex; align-items: center; gap: 6px; }
+.admin-advisor-output { margin-top: 13px; padding: 14px; border: 1px solid var(--line); background: var(--white); color: var(--ink); font-size: 12px; line-height: 1.6; white-space: pre-wrap; }
+.admin-advisor-panel .connection-error { margin-top: 10px; }
+:root[data-theme="dark"] .admin-advisor-panel { border-color: #547661; background: linear-gradient(135deg, #1c3327, var(--soft)); }
+:root[data-theme="dark"] .admin-advisor-output { background: #18251e; border-color: #405c49; color: #e6f2e9; }
