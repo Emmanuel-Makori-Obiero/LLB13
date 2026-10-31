@@ -8,15 +8,18 @@ import "./admin.css";
 type Props = { setNotice: (notice: string) => void };
 
 const toBase64 = async (file: File) => {
+  const readBytes = async () => {
+    try { return await file.arrayBuffer(); } catch { /* Try another browser reader. */ }
+    try { return await new Response(file).arrayBuffer(); } catch { /* Try FileReader below. */ }
+    return await new Promise<ArrayBuffer>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as ArrayBuffer);
+      reader.onerror = () => reject(new Error("File reader failed"));
+      reader.readAsArrayBuffer(file);
+    });
+  };
   try {
-    const buffer = typeof file.arrayBuffer === "function"
-      ? await file.arrayBuffer()
-      : await new Promise<ArrayBuffer>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as ArrayBuffer);
-        reader.onerror = () => reject(new Error("File reader failed"));
-        reader.readAsArrayBuffer(file);
-      });
+    const buffer = await readBytes();
     const bytes = new Uint8Array(buffer);
     let binary = "";
     const chunkSize = 0x8000;
@@ -37,6 +40,7 @@ export default function AdminClubPosters({ setNotice }: Props) {
   const [title, setTitle] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [queuedFiles, setQueuedFiles] = useState<File[]>([]);
   const [preview, setPreview] = useState("");
   const [analysis, setAnalysis] = useState("");
   const [busy, setBusy] = useState<"analyze" | "save" | "" | string>("");
@@ -48,8 +52,9 @@ export default function AdminClubPosters({ setNotice }: Props) {
   useEffect(() => { void load(); }, []);
 
   const chooseFile = (event: ChangeEvent<HTMLInputElement>) => {
-    const next = event.target.files?.[0] ?? null;
-    setFile(next); setAnalysis(""); setError("");
+    const selected = Array.from(event.target.files ?? []);
+    const next = selected[0] ?? null;
+    setQueuedFiles(selected); setFile(next); setAnalysis(""); setError("");
     if (preview) URL.revokeObjectURL(preview);
     setPreview(next ? URL.createObjectURL(next) : "");
   };
@@ -59,7 +64,8 @@ export default function AdminClubPosters({ setNotice }: Props) {
     setBusy("analyze"); setError("");
     try {
       const extension = file.name.split(".").pop()?.toLowerCase();
-      const imageMimeType = file.type || (extension === "png" ? "image/png" : extension === "webp" ? "image/webp" : extension === "jpg" || extension === "jpeg" ? "image/jpeg" : "");
+      const mimeByExtension: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", gif: "image/gif", bmp: "image/bmp", avif: "image/avif", tif: "image/tiff", tiff: "image/tiff" };
+      const imageMimeType = file.type || (extension ? mimeByExtension[extension] : "");
       if (!imageMimeType.startsWith("image/")) throw new Error("Please choose a PNG, JPG, or WebP image rather than a document.");
       const result = await analyzeImage({
         image_base64: await toBase64(file), image_mime_type: imageMimeType,
@@ -75,8 +81,9 @@ export default function AdminClubPosters({ setNotice }: Props) {
     setBusy("save"); setError("");
     try {
       const poster = await repository.adminCreateClubPoster({ title, file, linkUrl, aiAnalysis: analysis });
-      setPosters((current) => [poster, ...current]); setTitle(""); setLinkUrl(""); setFile(null); setAnalysis("");
-      if (preview) URL.revokeObjectURL(preview); setPreview("");
+      const remaining = queuedFiles.slice(1);
+      setPosters((current) => [poster, ...current]); setQueuedFiles(remaining); setTitle(""); setLinkUrl(""); setFile(remaining[0] ?? null); setAnalysis("");
+      if (preview) URL.revokeObjectURL(preview); setPreview(remaining[0] ? URL.createObjectURL(remaining[0]) : "");
       setNotice("Poster published to the home-page carousel.");
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Could not publish poster."); }
     finally { setBusy(""); }
@@ -95,7 +102,7 @@ export default function AdminClubPosters({ setNotice }: Props) {
     <p className="field-hint">Upload a club notice, event poster, or research-submission announcement. The server-side vision model extracts the date, time, place, deadline and link before it goes live.</p>
     {error && <div className="connection-error" role="alert">{error}</div>}
     <div className="admin-poster-form">
-      <label className="groups-field">Poster image<input type="file" accept="image/png,image/jpeg,image/webp" onChange={chooseFile} /></label>
+      <label className="groups-field">Poster image(s)<input type="file" multiple accept="image/*,.avif,.bmp,.gif,.heic,.heif,.tif,.tiff" onChange={chooseFile} /><span className="field-hint">You can select multiple poster versions. Analyze and publish them one at a time; {queuedFiles.length > 1 ? `${queuedFiles.length} files are queued.` : "PNG, JPG, JPEG, WebP, GIF, BMP, AVIF and TIFF are accepted when your browser can read them."}</span></label>
       <label className="groups-field">Short title<input value={title} maxLength={160} onChange={(event) => setTitle(event.target.value)} placeholder="e.g. Research paper submissions" /></label>
       <label className="groups-field">Optional click-through link<input type="url" value={linkUrl} onChange={(event) => setLinkUrl(event.target.value)} placeholder="https://…" /></label>
       {preview && <img className="admin-poster-preview" src={preview} alt="Selected poster preview" />}
