@@ -49,7 +49,10 @@ export default function AssignmentHelperPage({ assignments, learnerLevel = "" }:
   const selectedIds = selectedSources.map((source) => source.id);
   const groundingMode = selectedSources.length > 0 && selectedSources.every((source) => source.scope === "library") ? "library" : selectedSources.some((source) => source.scope === "library") ? "auto" : "materials";
   const isBookReview = tool.id === "book-review";
-  const selectedBook = isBookReview ? selectedSources.find((source) => source.scope === "library") : null;
+  // Imported Library books are saved as readable user documents, so scope is
+  // not reliable after preparation. Book-review mode intentionally uses the
+  // one selected readable source instead of rejecting it as "not a Library book".
+  const selectedBook = isBookReview ? selectedSources[0] ?? null : null;
 
   const importSource = async (source: SourceChoice) => {
     if (source.kind !== "material" || !source.url || importingSource) return;
