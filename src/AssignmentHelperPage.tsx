@@ -36,6 +36,7 @@ export default function AssignmentHelperPage({ assignments, learnerLevel = "" }:
   const [sourceFilter, setSourceFilter] = useState<"all" | "library" | "my">("all");
   const [sourcesExpanded, setSourcesExpanded] = useState(false);
   const [sourceSearch, setSourceSearch] = useState("");
+  const [searchingSources, setSearchingSources] = useState(false);
 
   const librarySources = useMemo(() => sources.filter((source) => (source.kind === "document" || source.kind === "material") && (source.scope !== "library" || materialVisibleToLevel(source.target_years, learnerLevel))), [sources, learnerLevel]);
   const selectedSources = librarySources.filter((source) => source.kind === "document" && selected.includes(source.id));
@@ -61,14 +62,15 @@ export default function AssignmentHelperPage({ assignments, learnerLevel = "" }:
     } catch (error) { setNotice(error instanceof Error ? error.message : "Could not prepare that Library book."); }
     finally { setImportingSource(null); }
   };
-  const loadSources = async () => {
+  const loadSources = async (search = "") => {
+    setSearchingSources(Boolean(search.trim()));
     try {
-      const available = await listGuideSources();
+      const available = await listGuideSources(search);
       setSources(available);
-      setNotice(available.length ? "Choose AI-readable documents or click a Library book to prepare its text for the helper." : "Add an AI-readable document in the Library, then refresh sources.");
+      setNotice(available.length ? (search.trim() ? `Found ${available.length} matching source${available.length === 1 ? "" : "s"}.` : "Choose AI-readable documents or click a Library book to prepare its text for the helper.") : "No matching Library source was found. Try the title, author, or clear the search.");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Could not load your saved sources.");
-    }
+    } finally { setSearchingSources(false); }
   };
   useEffect(() => { void loadSources(); }, []);
 
@@ -140,7 +142,7 @@ export default function AssignmentHelperPage({ assignments, learnerLevel = "" }:
             <button type="button" className={sourceFilter === "my" ? "active" : ""} onClick={() => setSourceFilter("my")}>My uploads</button>
           </div>
         </div>
-        <label className="assignment-source-search"><Search size={14} /><input value={sourceSearch} onChange={(event) => { setSourceSearch(event.target.value); setSourcesExpanded(true); }} placeholder="Search Library books by title or author…" aria-label="Search Library books" /></label>
+        <form className="assignment-source-search" onSubmit={(event) => { event.preventDefault(); setSourcesExpanded(true); void loadSources(sourceSearch); }}><Search size={14} /><input value={sourceSearch} onChange={(event) => setSourceSearch(event.target.value)} placeholder="Search the full Library by title or author…" aria-label="Search the full Library" /><button type="submit" className="secondary-button" disabled={searchingSources}>{searchingSources ? "Searching…" : "Search"}</button></form>
         <div className="assignment-sources">{visibleSources.length ? compactSources.map((source) => <label className={`assignment-source ${source.kind !== "document" ? "reference-only" : ""}`} key={`${source.kind}:${source.id}`}><input type="checkbox" checked={source.kind === "document" && selected.includes(source.id)} disabled={source.kind === "material" && importingSource === source.id} onChange={() => source.kind === "material" ? void importSource(source) : setSelected((current) => isBookReview ? [source.id] : current.includes(source.id) ? current.filter((id) => id !== source.id) : [...current, source.id])} /><BookOpen size={14} /><span>{source.title}<small>{source.kind === "material" ? (importingSource === source.id ? "Preparing Library book for AI…" : "Library book · click to add readable text") : source.scope === "library" ? "Library book · text supplied to AI" : "My saved document · text supplied to AI"}{source.citation ? ` · ${source.citation}` : ""}</small></span></label>) : <p className="empty">No sources in this filter. Add source text in Library, then refresh.</p>}</div>
         {visibleSources.length > 8 && <button type="button" className="assignment-source-more" onClick={() => setSourcesExpanded((expanded) => !expanded)}>{sourcesExpanded ? "Show fewer sources" : `Show all ${visibleSources.length} sources`}</button>}
         <div className="assignment-actions"><button className="secondary-button" onClick={() => void loadSources()}><RefreshCw size={13} /> Refresh sources</button><button className="primary-button" onClick={() => void run()} disabled={busy || (!brief.trim() && !isBookReview)}><Sparkles size={14} /> {busy ? "Writing…" : isBookReview ? "Write the book review" : tool.label}</button></div>

@@ -234,12 +234,18 @@ async function buildSourceDigest(sources: SourceChoice[], docIds: string[], onPr
   return digestParts.join("\n\n=== SOURCE DIGEST ===\n\n");
 }
 
-export async function listGuideSources(): Promise<SourceChoice[]> {
-  const [docs, transcripts, materials] = await Promise.all([
-    db().from("ai_documents").select("id,title,author,citation,scope,target_years,material_id").order("created_at", { ascending: false }).limit(200),
-    db().from("transcripts").select("id,title,unit,status,created_at").eq("status", "done").order("created_at", { ascending: false }).limit(200),
-    db().from("materials").select("id,title,author,type,unit,topic,date,source,url,target_years").order("date", { ascending: false }).limit(500),
-  ]);
+export async function listGuideSources(search = ""): Promise<SourceChoice[]> {
+  const term = search.trim().replace(/[%,()]/g, " ").replace(/\s+/g, " ");
+  let docsQuery = db().from("ai_documents").select("id,title,author,citation,scope,target_years,material_id").order("created_at", { ascending: false }).limit(500);
+  let transcriptQuery = db().from("transcripts").select("id,title,unit,status,created_at").eq("status", "done").order("created_at", { ascending: false }).limit(500);
+  let materialsQuery = db().from("materials").select("id,title,author,type,unit,topic,date,source,url,target_years").order("date", { ascending: false }).limit(500);
+  if (term) {
+    const pattern = `%${term}%`;
+    docsQuery = docsQuery.or(`title.ilike.${pattern},author.ilike.${pattern},citation.ilike.${pattern}`);
+    transcriptQuery = transcriptQuery.or(`title.ilike.${pattern},unit.ilike.${pattern}`);
+    materialsQuery = materialsQuery.or(`title.ilike.${pattern},author.ilike.${pattern},type.ilike.${pattern},unit.ilike.${pattern},topic.ilike.${pattern},source.ilike.${pattern}`);
+  }
+  const [docs, transcripts, materials] = await Promise.all([docsQuery, transcriptQuery, materialsQuery]);
   if (docs.error) throw new Error("Could not load saved AI documents.");
   if (transcripts.error) throw new Error("Could not load saved transcripts.");
   if (materials.error) throw new Error("Could not load Library materials.");
