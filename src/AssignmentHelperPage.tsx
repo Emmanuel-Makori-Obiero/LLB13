@@ -16,7 +16,7 @@ const tools: Tool[] = [
   { id: "irac", feature: "irac", label: "Make an IRAC plan", description: "Turn a problem question into issues, rules, application points, and conclusions." },
   { id: "critique", feature: "rw_critique", label: "Review my draft", description: "Find gaps in reasoning, structure, authority, counterarguments, and clarity without rewriting your voice." },
   { id: "citations", feature: "rw_citations", label: "Check citations", description: "Format the authorities you provide and flag missing details instead of inventing them." },
-  { id: "book-review", feature: "rw_question", label: "Write a book review", description: "Create an official, organized review of one AI-readable Library book with Word and PDF download." },
+  { id: "book-review", feature: "rw_draft", label: "Write a book review", description: "Create an official, organized review of one AI-readable Library book with Word and PDF download." },
 ];
 const reviewKey = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, 12000);
 
@@ -78,7 +78,9 @@ export default function AssignmentHelperPage({ assignments, learnerLevel = "" }:
   useEffect(() => { void loadSources(); }, []);
 
   const run = async () => {
-    const requestedBrief = brief.trim() || (isBookReview ? "Write the complete official book review from the selected Library book." : "");
+    const requestedBrief = isBookReview
+      ? (brief.trim() ? `Optional book-review instructions: ${brief.trim()}` : "Write the complete official book review from the selected Library book.")
+      : brief.trim();
     if (!requestedBrief) { setNotice("Paste the assignment question or brief first."); return; }
     if (isBookReview && !selectedBook) { setNotice("Choose one Library book first. If it is not AI-readable yet, click it once to prepare the book text."); return; }
     setBusy(true); setResult(null); setNotice("The assignment helper is working from your brief and selected sources…");
@@ -88,7 +90,7 @@ export default function AssignmentHelperPage({ assignments, learnerLevel = "" }:
       previousReviews = (previous.data ?? []) as { review_text: string }[];
     }
     const context = [
-      `Assignment title: ${title || selectedBook?.title || "Untitled assignment"}`,
+      `Assignment title: ${(isBookReview ? selectedBook?.title : title) || title || "Untitled assignment"}`,
       `Assignment brief/question:\n${requestedBrief}`,
       selectedSources.length ? `Selected AI-readable source documents:\n${selectedSources.map((source) => `- ${source.title}${source.citation ? ` (${source.citation})` : ""}`).join("\n")}` : "",
       draft.trim() ? `Student draft or working notes:\n${draft.trim()}` : "No draft supplied yet.",
