@@ -60,7 +60,7 @@ create table if not exists public.club_posters (
 
 alter table public.club_posters enable row level security;
 revoke all on table public.club_posters from public, anon, authenticated;
-grant select (id, title, image_url, link_url, ai_analysis, created_at) on public.club_posters to anon, authenticated;
+grant select (id, title, image_url, storage_path, link_url, ai_analysis, created_at) on public.club_posters to anon, authenticated;
 grant insert, update, delete on public.club_posters to authenticated;
 
 drop policy if exists "Active club posters are public" on public.club_posters;
