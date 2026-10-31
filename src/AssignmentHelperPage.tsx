@@ -131,7 +131,7 @@ export default function AssignmentHelperPage({ assignments, learnerLevel = "" }:
         <div className="section-label">2. Choose what you want written</div>
         <div className="assignment-tools">{tools.map((item) => <button type="button" key={item.id} className={`assignment-tool ${tool.id === item.id ? "active" : ""}`} onClick={() => setTool(item)}><Lightbulb size={15} /><span><strong>{item.label}</strong><small>{item.description}</small></span></button>)}</div>
         <div className="section-label">3. Choose source text</div>
-        <p className="field-hint">{isBookReview ? "Choose one Library book. If it is not AI-readable yet, click it once to prepare the text; the review is recorded to prevent repeated wording for future users." : "Choose AI-readable books and documents to ground the helper. The list is scrollable so a large Library will not make the page longer."}</p>
+        <p className="field-hint assignment-source-help">{isBookReview ? "Choose one Library book. If it is not AI-readable yet, click it once to prepare the text; the review is recorded to prevent repeated wording for future users." : "Choose AI-readable books and documents to ground the helper. The list is scrollable so a large Library will not make the page longer."}</p>
         <div className="assignment-source-toolbar" role="group" aria-label="Filter assignment sources">
           <span className="field-hint">{selectedSources.length} source{selectedSources.length === 1 ? "" : "s"} selected</span>
           <div className="assignment-source-filters">
