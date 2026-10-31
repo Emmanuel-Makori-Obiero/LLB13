@@ -77,6 +77,14 @@
       "title": "Members"
     },
     {
+      "path": "/groups",
+      "title": "Groups"
+    },
+    {
+      "path": "/group-attendance",
+      "title": "Group attendance"
+    },
+    {
       "path": "/transcribe",
       "title": "Transcribe"
     },

@@ -100,6 +100,65 @@ export type AdminAccount = {
   is_primary_admin: boolean;
 };
 
+export type StudyGroup = {
+  id: string;
+  name: string;
+  leader_id: string;
+  created_at: string;
+};
+
+export type StudyGroupMember = {
+  group_id: string;
+  user_id: string;
+  display_name: string;
+  joined_at: string;
+};
+
+export type GroupSession = {
+  id: string;
+  group_id: string;
+  kind: "daily" | "project";
+  title: string;
+  project_label: string | null;
+  session_date: string;
+  check_in_cutoff: string | null;
+  status: "open" | "closed";
+  created_by: string | null;
+  created_at: string;
+};
+
+export type GroupAttendanceStatus = "present" | "late" | "excused" | "absent";
+
+export type GroupAttendance = {
+  session_id: string;
+  user_id: string;
+  status: GroupAttendanceStatus;
+  note: string | null;
+  marked_by: string | null;
+  marked_at: string;
+};
+
+export type GroupAttendanceSummary = {
+  group_id: string;
+  group_name?: string;
+  user_id: string;
+  display_name: string;
+  sessions_held: number;
+  present: number;
+  late: number;
+  excused: number;
+  absent: number;
+  attendance_percentage: number;
+  last_active_date: string | null;
+};
+
+export type ApprovedGroupLeader = {
+  user_id: string;
+  email: string;
+  display_name: string;
+  created_at: string;
+};
+
 export type SavedExamAnalysis = {
   id: string;
   paper_title: string;

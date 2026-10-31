@@ -136,6 +136,8 @@ const ScannerNotesPage = lazy(() => import("./ScannerNotesPage"));
 const KenyaLawCasesPage = lazy(() => import("./KenyaLawCasesPage"));
 const ScheduledCourtCasesPage = lazy(() => import("./ScheduledCourtCasesPage"));
 const AttendancePage = lazy(() => import("./AttendancePage"));
+const GroupsPage = lazy(() => import("./GroupsPage"));
+const GroupAttendancePage = lazy(() => import("./GroupAttendancePage"));
 
 const CareerResearchPage = lazy(() => import("./CareerResearchPage"));
 
@@ -157,6 +159,8 @@ const nav = [
   { id: "units", label: "Units", icon: BookOpen },
   { id: "discussions", label: "Discussions", icon: MessageSquare },
   { id: "members", label: "Members", icon: Users },
+  { id: "groups", label: "Groups", icon: Users },
+  { id: "group-attendance", label: "Group attendance", icon: ClipboardCheck },
   { id: "transcribe", label: "Transcribe", icon: Mic },
   { id: "assistant", label: "Study assistant", icon: Sparkles },
   { id: "research", label: "Research writer", icon: PenLine },
@@ -933,6 +937,7 @@ function App() {
     );
   }
 
+  const visibleNav = nav.filter((item) => item.id !== "group-attendance" || isAdmin);
   return (
     <div
       className="app-shell"
@@ -954,7 +959,7 @@ function App() {
         <Brand />
         <nav>
           <div className="nav-label">Main</div>
-          {nav.slice(0, 9).map((item) => (
+          {visibleNav.slice(0, 9).map((item) => (
             <NavItem
               key={item.id}
               {...item}
@@ -963,7 +968,7 @@ function App() {
             />
           ))}
           <div className="nav-label">More</div>
-          {nav.slice(9).map((item) => (
+          {visibleNav.slice(9).map((item) => (
             <NavItem
               key={item.id}
               {...item}
@@ -1060,7 +1065,7 @@ function App() {
               </div>
             </button>
             <div className="nav-label">Main</div>
-            {nav.slice(0, 9).map((item) => (
+            {visibleNav.slice(0, 9).map((item) => (
               <NavItem
                 key={item.id}
                 {...item}
@@ -1069,7 +1074,7 @@ function App() {
               />
             ))}
             <div className="nav-label">More</div>
-            {nav.slice(9).map((item) => (
+            {visibleNav.slice(9).map((item) => (
               <NavItem
                 key={item.id}
                 {...item}
@@ -1248,6 +1253,10 @@ function App() {
             />
           )}
           {view === "attendance" && <Suspense fallback={<div className="subheading">Opening attendance…</div>}><AttendancePage lessons={lessons} userId={userId} /></Suspense>}
+          {view === "groups" && <Suspense fallback={<div className="subheading">Opening study groups…</div>}><GroupsPage /></Suspense>}
+          {view === "group-attendance" && (isAdmin
+            ? <Suspense fallback={<div className="subheading">Opening group attendance…</div>}><GroupAttendancePage /></Suspense>
+            : <div className="card card-pad empty">Group attendance is available to accounts with the verified admin role.</div>)}
           {view === "units" && (
             <UnitsPage
               units={units}

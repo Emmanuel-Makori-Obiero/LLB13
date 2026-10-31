@@ -2,8 +2,13 @@ import { Upload as TusUpload } from "tus-js-client";
 import { createClient } from "@supabase/supabase-js";
 import type {
   AdminAccount,
+  ApprovedGroupLeader,
   Assignment,
   AssignmentStatus,
+  GroupAttendance,
+  GroupAttendanceStatus,
+  GroupAttendanceSummary,
+  GroupSession,
   Discussion,
   ExamAnalysisDraft,
   Lesson,
@@ -15,6 +20,8 @@ import type {
   Unit,
   TimetableProposal,
   SharedTimetableUpload,
+  StudyGroup,
+  StudyGroupMember,
 } from "./types";
 
 export type Group13Repository = {
@@ -102,6 +109,31 @@ export type Group13Repository = {
   adminDeleteUnit: (id: string) => Promise<void>;
   getExamAnalyses: () => Promise<SavedExamAnalysis[]>;
   saveExamAnalysis: (draft: ExamAnalysisDraft) => Promise<SavedExamAnalysis>;
+  getGroupMemberLimit: () => Promise<number>;
+  canCreateStudyGroup: () => Promise<boolean>;
+  getMyStudyGroup: () => Promise<{ group: StudyGroup; members: StudyGroupMember[] } | null>;
+  getStudyGroupMembers: (groupId: string) => Promise<StudyGroupMember[]>;
+  createStudyGroup: (name: string) => Promise<StudyGroup>;
+  joinStudyGroup: (inviteCode: string) => Promise<string>;
+  leaveStudyGroup: () => Promise<void>;
+  getGroupInviteCode: (groupId: string) => Promise<string>;
+  resetGroupInviteCode: (groupId: string) => Promise<string>;
+  renameStudyGroup: (groupId: string, name: string) => Promise<void>;
+  removeStudyGroupMember: (groupId: string, userId: string) => Promise<void>;
+  deleteStudyGroup: (groupId: string) => Promise<void>;
+  getGroupSessions: (groupId: string) => Promise<GroupSession[]>;
+  getAllGroupSessions: () => Promise<GroupSession[]>;
+  createGroupSession: (input: Pick<GroupSession, "group_id" | "kind" | "title" | "session_date" | "project_label" | "check_in_cutoff">) => Promise<void>;
+  closeGroupSession: (sessionId: string) => Promise<void>;
+  deleteGroupSession: (sessionId: string) => Promise<void>;
+  markGroupAttendance: (sessionId: string, userId: string, status: GroupAttendanceStatus, note?: string) => Promise<void>;
+  checkInGroupSession: (sessionId: string) => Promise<GroupAttendanceStatus>;
+  getGroupAttendanceForSessions: (sessionIds: string[]) => Promise<GroupAttendance[]>;
+  getGroupAttendanceSummary: (groupId: string, from: string, to: string) => Promise<GroupAttendanceSummary[]>;
+  getAllStudyGroups: () => Promise<StudyGroup[]>;
+  getLecturerAttendanceSummary: (from: string, to: string) => Promise<GroupAttendanceSummary[]>;
+  adminListGroupLeaders: () => Promise<ApprovedGroupLeader[]>;
+  adminSetGroupLeaderEmail: (email: string, enabled: boolean) => Promise<void>;
 };
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
@@ -835,6 +867,192 @@ const supabaseRepository: Group13Repository = {
       .single();
     if (error) throw new Error(`Could not save exam analysis: ${error.message}`);
     return data as SavedExamAnalysis;
+  },
+  getGroupMemberLimit: async () => {
+    const { data, error } = await db().rpc("group_member_limit");
+    if (error) throw new Error(`Could not load the group size limit: ${error.message}`);
+    return Number(data);
+  },
+  canCreateStudyGroup: async () => {
+    const { data, error } = await db().rpc("can_create_study_group");
+    if (error) throw new Error(`Could not check group leader access: ${error.message}`);
+    return data === true;
+  },
+  getMyStudyGroup: async () => {
+    const client = db();
+    const { data: { user }, error: authError } = await client.auth.getUser();
+    if (authError || !user) throw new Error("Sign in to view study groups.");
+    const { data: membership, error: membershipError } = await client
+      .from("study_group_members")
+      .select("group_id,user_id,display_name,joined_at")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (membershipError) throw new Error(`Could not load your group membership: ${membershipError.message}`);
+    if (!membership) return null;
+    const { data: group, error: groupError } = await client
+      .from("study_groups")
+      .select("id,name,leader_id,created_at")
+      .eq("id", membership.group_id)
+      .single();
+    if (groupError) throw new Error(`Could not load your study group: ${groupError.message}`);
+    const { data: members, error: rosterError } = await client
+      .from("study_group_members")
+      .select("group_id,user_id,display_name,joined_at")
+      .eq("group_id", membership.group_id)
+      .order("joined_at");
+    if (rosterError) throw new Error(`Could not load the group roster: ${rosterError.message}`);
+    return { group: group as StudyGroup, members: (members ?? []) as StudyGroupMember[] };
+  },
+  getStudyGroupMembers: async (groupId) => {
+    const { data, error } = await db()
+      .from("study_group_members")
+      .select("group_id,user_id,display_name,joined_at")
+      .eq("group_id", groupId)
+      .order("joined_at");
+    if (error) throw new Error(`Could not load the group roster: ${error.message}`);
+    return (data ?? []) as StudyGroupMember[];
+  },
+  createStudyGroup: async (name) => {
+    const client = db();
+    const { data: id, error: createError } = await client.rpc("create_group", { p_name: name });
+    if (createError) throw new Error(createError.message);
+    const { data, error } = await client.from("study_groups")
+      .select("id,name,leader_id,created_at").eq("id", id).single();
+    if (error) throw new Error(`Group created, but could not reload it: ${error.message}`);
+    return data as StudyGroup;
+  },
+  joinStudyGroup: async (inviteCode) => {
+    const { data, error } = await db().rpc("join_group", { p_invite_code: inviteCode });
+    if (error) throw new Error(error.message);
+    return data as string;
+  },
+  leaveStudyGroup: async () => {
+    const { error } = await db().rpc("leave_group");
+    if (error) throw new Error(error.message);
+  },
+  getGroupInviteCode: async (groupId) => {
+    const { data, error } = await db().rpc("get_invite_code", { p_group_id: groupId });
+    if (error) throw new Error(error.message);
+    return data as string;
+  },
+  resetGroupInviteCode: async (groupId) => {
+    const { data, error } = await db().rpc("reset_invite_code", { p_group_id: groupId });
+    if (error) throw new Error(error.message);
+    return data as string;
+  },
+  renameStudyGroup: async (groupId, name) => {
+    const { error } = await db().rpc("rename_group", { p_group_id: groupId, p_name: name });
+    if (error) throw new Error(error.message);
+  },
+  removeStudyGroupMember: async (groupId, userId) => {
+    const { error } = await db().rpc("remove_group_member", { p_group_id: groupId, p_user_id: userId });
+    if (error) throw new Error(error.message);
+  },
+  deleteStudyGroup: async (groupId) => {
+    const { error } = await db().rpc("delete_group", { p_group_id: groupId });
+    if (error) throw new Error(error.message);
+  },
+  getGroupSessions: async (groupId) => {
+    const { data, error } = await db().from("group_sessions")
+      .select("id,group_id,kind,title,project_label,session_date,check_in_cutoff,status,created_by,created_at")
+      .eq("group_id", groupId).order("session_date", { ascending: false }).order("created_at", { ascending: false });
+    if (error) throw new Error(`Could not load group sessions: ${error.message}`);
+    return (data ?? []) as GroupSession[];
+  },
+  getAllGroupSessions: async () => {
+    const { data, error } = await db().from("group_sessions")
+      .select("id,group_id,kind,title,project_label,session_date,check_in_cutoff,status,created_by,created_at")
+      .order("session_date", { ascending: false }).order("created_at", { ascending: false });
+    if (error) throw new Error(`Could not load group sessions: ${error.message}`);
+    return (data ?? []) as GroupSession[];
+  },
+  createGroupSession: async (input) => {
+    const { error } = await db().rpc("create_session", {
+      p_group_id: input.group_id,
+      p_kind: input.kind,
+      p_title: input.title,
+      p_session_date: input.session_date,
+      p_project_label: input.project_label,
+      p_check_in_cutoff: input.check_in_cutoff,
+    });
+    if (error) throw new Error(error.message);
+  },
+  closeGroupSession: async (sessionId) => {
+    const { error } = await db().rpc("close_session", { p_session_id: sessionId });
+    if (error) throw new Error(error.message);
+  },
+  deleteGroupSession: async (sessionId) => {
+    const { error } = await db().rpc("delete_session", { p_session_id: sessionId });
+    if (error) throw new Error(error.message);
+  },
+  markGroupAttendance: async (sessionId, userId, status, note = "") => {
+    const { error } = await db().rpc("mark_attendance", {
+      p_session_id: sessionId,
+      p_user_id: userId,
+      p_status: status,
+      p_note: note,
+    });
+    if (error) throw new Error(error.message);
+  },
+  checkInGroupSession: async (sessionId) => {
+    const { data, error } = await db().rpc("check_in", { p_session_id: sessionId });
+    if (error) throw new Error(error.message);
+    return data as GroupAttendanceStatus;
+  },
+  getGroupAttendanceForSessions: async (sessionIds) => {
+    if (!sessionIds.length) return [];
+    const { data, error } = await db().from("group_attendance")
+      .select("session_id,user_id,status,note,marked_by,marked_at")
+      .in("session_id", sessionIds);
+    if (error) throw new Error(`Could not load group attendance: ${error.message}`);
+    return (data ?? []) as GroupAttendance[];
+  },
+  getGroupAttendanceSummary: async (groupId, from, to) => {
+    const { data, error } = await db().rpc("group_attendance_summary", {
+      p_group_id: groupId, p_from: from, p_to: to,
+    });
+    if (error) throw new Error(`Could not load attendance summary: ${error.message}`);
+    return (data ?? []).map((row: GroupAttendanceSummary) => ({
+      ...row,
+      sessions_held: Number(row.sessions_held),
+      present: Number(row.present),
+      late: Number(row.late),
+      excused: Number(row.excused),
+      absent: Number(row.absent),
+      attendance_percentage: Number(row.attendance_percentage),
+    })) as GroupAttendanceSummary[];
+  },
+  getAllStudyGroups: async () => {
+    const { data, error } = await db().from("study_groups")
+      .select("id,name,leader_id,created_at").order("name");
+    if (error) throw new Error(`Could not load study groups: ${error.message}`);
+    return (data ?? []) as StudyGroup[];
+  },
+  getLecturerAttendanceSummary: async (from, to) => {
+    const { data, error } = await db().rpc("lecturer_attendance_summary", {
+      p_from: from, p_to: to,
+    });
+    if (error) throw new Error(`Could not load group attendance summary: ${error.message}`);
+    return (data ?? []).map((row: GroupAttendanceSummary) => ({
+      ...row,
+      sessions_held: Number(row.sessions_held),
+      present: Number(row.present),
+      late: Number(row.late),
+      excused: Number(row.excused),
+      absent: Number(row.absent),
+      attendance_percentage: Number(row.attendance_percentage),
+    })) as GroupAttendanceSummary[];
+  },
+  adminListGroupLeaders: async () => {
+    const { data, error } = await db().rpc("admin_list_group_leaders");
+    if (error) throw new Error(`Could not load approved group leaders: ${error.message}`);
+    return (data ?? []) as ApprovedGroupLeader[];
+  },
+  adminSetGroupLeaderEmail: async (email, enabled) => {
+    const { error } = await db().rpc("admin_set_group_leader_email", {
+      p_email: email, p_enabled: enabled,
+    });
+    if (error) throw new Error(error.message);
   },
 };
 

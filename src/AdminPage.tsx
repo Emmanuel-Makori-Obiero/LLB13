@@ -6,6 +6,7 @@ import { unitReps } from "./data/types";
 import type { Lesson } from "./data/types";
 import AdminTimetablePlanner from "./AdminTimetablePlanner";
 import AdminOversight from "./AdminOversight";
+import GroupLeadersAdmin from "./GroupLeadersAdmin";
 import { extractText } from "./lib/ai";
 import "./admin.css";
 
@@ -338,6 +339,7 @@ export default function AdminPage({
           {organizerJob?.status === "paused" && <div className="field-hint" style={{ marginTop: 10 }}>The unavailable model was skipped. Saved progress will continue automatically after the retry delay.</div>}
         </div>
         <AdminOversight />
+        {canManageAdmins && <GroupLeadersAdmin />}
         <AdminTimetablePlanner
           lessons={lessons}
           units={units}
