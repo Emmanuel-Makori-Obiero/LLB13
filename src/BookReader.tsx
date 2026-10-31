@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent } from "react";
 import { ArrowLeft, BookOpen, Check, Copy, Highlighter, List, Maximize2, Minimize2, Minus, Plus, Send, Sparkles, Type, X } from "lucide-react";
-import { downloadInfo, readerUrl, safeUrl } from "./links";
+import { materialSourceUrl, readerUrl } from "./links";
+import { isDocxMaterial, isPdfMaterial } from "./lib/material-reader";
 import { askAI, docxToHtml, type AIResult } from "./lib/ai";
 import { Markdown } from "./Markdown";
 import StorytellButton from "./StorytellButton";
@@ -75,11 +76,9 @@ export default function BookReader({ material, onClose }: Props) {
     return () => { document.body.style.overflow = previousOverflow; };
   }, [expanded, mobileReading]);
 
-  const link = safeUrl(material.url);
+  const sourceUrl = materialSourceUrl(material);
   const frame = readerUrl(material);
-  const info = downloadInfo(material);
-  const sourceUrl = info?.href || link;
-  const isDocx = /\.docx(?:[?#]|$)/i.test(`${material.storage_path ?? ""} ${material.url ?? ""}`);
+  const isDocx = isDocxMaterial(material);
 
   useEffect(() => {
     if (!isDocx || !sourceUrl) return;
@@ -183,7 +182,7 @@ export default function BookReader({ material, onClose }: Props) {
   };
 
   const hasPassage = Boolean(selectedText || activeHighlight || customPrompt.trim());
-  const isPdf = Boolean(info?.file && /\.pdf(\?|$)/i.test(material.storage_path ?? material.url ?? ""));
+  const isPdf = isPdfMaterial(material);
   const previewFrame = frame ? `${frame.split("#")[0]}#page=1&zoom=${zoom}` : "";
   const effectiveReaderHeight = mobileReading ? Math.max(300, viewportHeight - 138) : readerHeight;
   const resultName = `${material.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "book-explanation"}-plain-language`;
@@ -211,7 +210,7 @@ export default function BookReader({ material, onClose }: Props) {
           <button className="secondary-button reader-review-button" onClick={() => setBookReviewOpen(true)} title="Open immersive Book Review mode">
             <Type size={14} /><span>Book Review</span>
           </button>
-          {(info?.href || link) && <a className="primary-button reader-source-link" href={info?.href || link} target="_blank" rel="noreferrer">Open source</a>}
+          {sourceUrl && <a className="primary-button reader-source-link" href={sourceUrl} target="_blank" rel="noreferrer">Open source</a>}
         </div>
       </div>
 
