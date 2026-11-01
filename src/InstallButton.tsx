@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Download, ExternalLink } from "lucide-react";
+import { Download, ExternalLink, Share, X } from "lucide-react";
 
 type InstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -53,6 +53,7 @@ export default function InstallButton({
   const [canInstall, setCanInstall] = useState(false);
   const [installed, setInstalled] = useState(false);
   const [device, setDevice] = useState<DeviceKind>("desktop");
+  const [guideOpen, setGuideOpen] = useState(false);
 
   useEffect(() => {
     setDevice(deviceKind());
@@ -77,21 +78,15 @@ export default function InstallButton({
   const install = async () => {
     if (installed) return;
     if (device === "ios") {
-      window.alert(
-        "On iPhone or iPad: tap Share in Safari, then choose “Add to Home Screen”.",
-      );
+      setGuideOpen(true);
       return;
     }
     if (device === "legacy") {
-      window.alert(
-        "To put a Group 13 icon on this Nokia’s home screen, open the browser menu and choose Add to home screen, Add shortcut, or Add bookmark. If the browser asks for a name, enter Group 13. The browser may use the supplied Group 13 icon, although very old Nokia browsers control the icon themselves.",
-      );
+      setGuideOpen(true);
       return;
     }
     if (!deferredPrompt) {
-      window.alert(
-        "Open your browser menu and choose “Install app”, “Add to home screen”, or “Add shortcut”. The web version remains available if your browser does not support installation.",
-      );
+      setGuideOpen(true);
       return;
     }
     await deferredPrompt.prompt();
@@ -108,25 +103,54 @@ export default function InstallButton({
         ? "Add to Home Screen"
         : label;
   return (
-    <button
-      type="button"
-      className={className}
-      onClick={() => void install()}
-      title={
-        installed
-          ? "Group 13 Hub is installed"
-          : canInstall
-            ? "Install Group 13 Hub"
-            : "Use Group 13 Hub in your browser"
-      }
-      aria-label={installed ? "Group 13 Hub is installed" : fallback}
-    >
-      {device === "legacy" ? (
-        <ExternalLink size={14} />
-      ) : (
-        <Download size={14} />
-      )}{" "}
-      {installed ? "App installed" : fallback}
-    </button>
+    <>
+      <button
+        type="button"
+        className={className}
+        onClick={() => void install()}
+        title={
+          installed
+            ? "Group 13 Hub is installed"
+            : canInstall
+              ? "Install Group 13 Hub"
+              : "Use Group 13 Hub in your browser"
+        }
+        aria-label={installed ? "Group 13 Hub is installed" : fallback}
+      >
+        {device === "legacy" ? <ExternalLink size={14} /> : <Download size={14} />}{" "}
+        {installed ? "App installed" : fallback}
+      </button>
+      {guideOpen && (
+        <div className="pwa-guide-backdrop" role="presentation" onClick={() => setGuideOpen(false)}>
+          <section className="pwa-guide" role="dialog" aria-modal="true" aria-labelledby="pwa-guide-title" onClick={(event) => event.stopPropagation()}>
+            <button type="button" className="pwa-guide-close" aria-label="Close installation guide" onClick={() => setGuideOpen(false)}><X size={18} /></button>
+            <p className="pwa-guide-kicker">Install Group 13 Hub</p>
+            <h2 id="pwa-guide-title">Keep your study workspace one tap away.</h2>
+            {device === "ios" ? (
+              <ol className="pwa-guide-steps">
+                <li>Open this page in <strong>Safari</strong>. Installation is not available from an in-app browser.</li>
+                <li>Tap the <strong>Share</strong> button <Share size={15} aria-label="Share" />.</li>
+                <li>Choose <strong>Add to Home Screen</strong>, then turn on <strong>Open as Web App</strong> if it appears.</li>
+                <li>Tap <strong>Add</strong>. The Group 13 icon will appear on your Home Screen.</li>
+              </ol>
+            ) : device === "legacy" ? (
+              <ol className="pwa-guide-steps">
+                <li>Open the browser menu.</li>
+                <li>Choose <strong>Add to home screen</strong>, <strong>Add shortcut</strong>, or <strong>Add bookmark</strong>.</li>
+                <li>Name it <strong>Group 13 Hub</strong> and save it.</li>
+              </ol>
+            ) : (
+              <ol className="pwa-guide-steps">
+                <li>Open the browser menu.</li>
+                <li>Choose <strong>Install app</strong> or <strong>Add to Home screen</strong>.</li>
+                <li>Confirm <strong>Install</strong>. The icon will be added to your phone’s launcher.</li>
+              </ol>
+            )}
+            <p className="pwa-guide-note">Your installed version uses the same secure website and receives future platform updates automatically when you reopen it.</p>
+            <button type="button" className="pwa-guide-done" onClick={() => setGuideOpen(false)}>Done</button>
+          </section>
+        </div>
+      )}
+    </>
   );
 }
