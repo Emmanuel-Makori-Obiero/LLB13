@@ -142,6 +142,7 @@ const GroupAttendancePage = lazy(() => import("./GroupAttendancePage"));
 
 const CareerResearchPage = lazy(() => import("./CareerResearchPage"));
 const CourseOutlinePage = lazy(() => import("./CourseOutlinePage"));
+const SupportPage = lazy(() => import("./SupportPage"));
 
 const nav = [
   { id: "dashboard", label: "Home", icon: LayoutDashboard },
@@ -150,6 +151,7 @@ const nav = [
   { id: "todos", label: "My to-do", icon: CheckSquare },
   { id: "assignments", label: "Assignments", icon: FileText },
   { id: "course-outline", label: "Course planner", icon: ClipboardList },
+  { id: "support", label: "Support & complaints", icon: MessageSquare },
   { id: "library", label: "Library", icon: Library },
   { id: "dictionary", label: "Law dictionary", icon: BookOpen },
   { id: "legal-process", label: "Legal what-ifs", icon: Workflow },
@@ -1340,6 +1342,11 @@ function App() {
                 const created = await Promise.all(items.map((item) => repository.createTodo(item)));
                 setTodos((current) => [...created, ...current]);
               }} />
+            </Suspense>
+          )}
+          {view === "support" && (
+            <Suspense fallback={<div className="subheading">Opening support…</div>}>
+              <SupportPage isAdmin={isAdmin} />
             </Suspense>
           )}
           {view === "todos" && (

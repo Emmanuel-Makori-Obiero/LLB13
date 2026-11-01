@@ -232,3 +232,15 @@ export type ClubPoster = {
   ai_analysis: string;
   created_at: string;
 };
+
+export type SupportTicket = {
+  id: string;
+  user_id: string;
+  subject: string;
+  category: "complaint" | "technical" | "suggestion" | "account" | "other";
+  message: string;
+  status: "open" | "in_progress" | "resolved" | "closed";
+  admin_note?: string | null;
+  created_at: string;
+  updated_at: string;
+};
