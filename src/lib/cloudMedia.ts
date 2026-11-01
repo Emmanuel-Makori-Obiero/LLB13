@@ -1,3 +1,4 @@
+import { makeId } from "../lib/uuid";
 import { supabase } from "../data/repository";
 
 export type MediaAssetKind =
@@ -97,7 +98,7 @@ export async function uploadMediaAsset(args: {
   const { data: auth } = await db.auth.getUser();
   if (!auth.user) throw new Error("Please sign in before uploading media.");
   const safeName = args.file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
-  const path = `${auth.user.id}/${crypto.randomUUID()}-${safeName}`;
+  const path = `${auth.user.id}/${makeId()}-${safeName}`;
   const upload = await db.storage.from("media").upload(path, args.file, {
     upsert: false,
     contentType: args.file.type || undefined,

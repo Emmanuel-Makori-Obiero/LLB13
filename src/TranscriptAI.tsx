@@ -1,3 +1,4 @@
+import { makeId } from "./lib/uuid";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
@@ -296,7 +297,7 @@ export function TranscriptAI({
       const selectedSource = selectTranscriptRunSource(sourceOverride, getText);
       if (selectedSource.kind === "generated_notes") {
         setStep("Preparing the generated notes as the new source");
-        doc = await saveTextMaterial(`${title} (notes rerun ${crypto.randomUUID()})`, selectedSource.text);
+        doc = await saveTextMaterial(`${title} (notes rerun ${makeId()})`, selectedSource.text);
         temporarySourceId = doc.id;
       } else {
         // Save the transcript once per visit so every button reads the same copy.
@@ -479,7 +480,7 @@ export function TranscriptAI({
   const acceptAssignment = async (row: ExtractedAssignment) => {
     if (!supabase || !userId) return;
     setAssignmentMsg("Adding assignment…");
-    const assignmentId = `ai-${crypto.randomUUID()}`;
+    const assignmentId = `ai-${makeId()}`;
     const { error: assignmentError } = await supabase
       .from("assignments")
       .insert({

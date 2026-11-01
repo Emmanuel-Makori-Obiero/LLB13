@@ -1,3 +1,4 @@
+import { makeId } from "./lib/uuid";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
   AlertTriangle,
@@ -228,7 +229,7 @@ export default function NotesReviewPage({ userId, units, initialText, initialTit
     let documentId: string | null = null;
     try {
       setStage("Indexing the complete note for source-based review");
-      const indexed = await saveTextMaterial(`Private review source ${crypto.randomUUID()}`, original);
+      const indexed = await saveTextMaterial(`Private review source ${makeId()}`, original);
       documentId = indexed.id;
       const totalParts = Math.max(1, Math.ceil(indexed.chunks / REVIEW_SECTIONS_PER_PART));
       if (totalParts > MAX_REVIEW_PARTS) {

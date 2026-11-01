@@ -1,3 +1,4 @@
+import { makeId } from "./lib/uuid";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent } from "react";
 import { ArrowLeft, BookOpen, Check, Copy, Highlighter, List, Maximize2, Minimize2, Minus, Plus, Send, Sparkles, Type, X } from "lucide-react";
 import { materialSourceUrl, readerUrl } from "./links";
@@ -139,7 +140,7 @@ export default function BookReader({ material, onClose }: Props) {
   const saveHighlight = () => {
     const passage = selectedText || customPrompt.trim();
     if (!passage) return;
-    const item = { id: crypto.randomUUID(), text: passage, createdAt: new Date().toISOString() };
+    const item = { id: makeId(), text: passage, createdAt: new Date().toISOString() };
     persist([item, ...highlights]);
     setActiveHighlight(item.id);
     setSelectedText(passage);

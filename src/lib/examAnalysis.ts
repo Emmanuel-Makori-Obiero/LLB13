@@ -1,3 +1,4 @@
+import { makeId } from "../lib/uuid";
 import type { ExamAnalysisDraft } from "../data/types";
 
 export const MAX_EXAM_ANSWER_CHARS = 17_000;
@@ -8,7 +9,7 @@ export function createExamAnalysisDraft(input: {
   sourceDocumentId?: string | null;
   studentAnswers: string;
   analysis: string;
-}, id: string = crypto.randomUUID()): ExamAnalysisDraft {
+}, id: string = makeId()): ExamAnalysisDraft {
   const paperTitle = input.paperTitle.trim();
   const analysis = input.analysis.trim();
   const studentAnswers = input.studentAnswers.trim();

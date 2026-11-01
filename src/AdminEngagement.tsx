@@ -1,3 +1,4 @@
+import { makeId } from "./lib/uuid";
 import { useEffect, useMemo, useState } from "react";
 import { Activity, BarChart3, LoaderCircle, MessageCircle, Plus, RefreshCw, Send, Sparkles, Target, Trash2, Users } from "lucide-react";
 import { repository, supabase } from "./data/repository";
@@ -22,15 +23,15 @@ export default function AdminEngagement() {
   const [advisorBusy, setAdvisorBusy] = useState(false);
   const [advisorMessages, setAdvisorMessages] = useState<AdvisorMessage[]>([]);
   const [advisorHistory, setAdvisorHistory] = useState<AdvisorChat[]>(() => { try { return JSON.parse(localStorage.getItem(advisorStorageKey) || "[]") as AdvisorChat[]; } catch { return []; } });
-  const [activeAdvisorChatId, setActiveAdvisorChatId] = useState(() => advisorHistory[0]?.id || crypto.randomUUID());
+  const [activeAdvisorChatId, setActiveAdvisorChatId] = useState(() => advisorHistory[0]?.id || makeId());
   const [advisorInput, setAdvisorInput] = useState("");
   const [advisorError, setAdvisorError] = useState("");
 
   useEffect(() => { localStorage.setItem(advisorStorageKey, JSON.stringify(advisorHistory.slice(0, 20))); }, [advisorHistory]);
   useEffect(() => { const active = advisorHistory.find((chat) => chat.id === activeAdvisorChatId); if (active) setAdvisorMessages(active.messages); }, []);
   useEffect(() => { if (!advisorMessages.length) return; setAdvisorHistory((current) => { const active = current.find((chat) => chat.id === activeAdvisorChatId); const title = advisorMessages.find((message) => message.role === "user")?.text.slice(0, 48) || "New advisor chat"; if (!active) return [{ id: activeAdvisorChatId, title, createdAt: new Date().toISOString(), messages: advisorMessages }, ...current]; return current.map((chat) => chat.id === activeAdvisorChatId ? { ...chat, title, messages: advisorMessages } : chat); }); }, [advisorMessages, activeAdvisorChatId]);
-  const newAdvisorChat = () => { const id = crypto.randomUUID(); setActiveAdvisorChatId(id); setAdvisorMessages([]); setAdvisorError(""); setAdvisorInput(""); };
-  const deleteAdvisorChat = () => { setAdvisorHistory((current) => current.filter((chat) => chat.id !== activeAdvisorChatId)); const next = advisorHistory.find((chat) => chat.id !== activeAdvisorChatId); setActiveAdvisorChatId(next?.id || crypto.randomUUID()); setAdvisorMessages(next?.messages || []); setAdvisorError(""); };
+  const newAdvisorChat = () => { const id = makeId(); setActiveAdvisorChatId(id); setAdvisorMessages([]); setAdvisorError(""); setAdvisorInput(""); };
+  const deleteAdvisorChat = () => { setAdvisorHistory((current) => current.filter((chat) => chat.id !== activeAdvisorChatId)); const next = advisorHistory.find((chat) => chat.id !== activeAdvisorChatId); setActiveAdvisorChatId(next?.id || makeId()); setAdvisorMessages(next?.messages || []); setAdvisorError(""); };
 
   useEffect(() => {
     if (!supabase) { setError("Supabase is not configured."); setLoading(false); return; }

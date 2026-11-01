@@ -1,3 +1,4 @@
+import { makeId } from "../lib/uuid";
 import { Upload as TusUpload } from "tus-js-client";
 import { createClient } from "@supabase/supabase-js";
 import type {
@@ -561,7 +562,7 @@ const supabaseRepository: Group13Repository = {
   },
   createMaterial: async (material, file) => {
     if (!supabase) throw new Error("Supabase is not configured.");
-    const id = crypto.randomUUID();
+    const id = makeId();
     const fileHash = file ? await sha256File(file) : null;
     if (fileHash) {
       const duplicate = await findLibraryMaterialDuplicate(file!, material.title, fileHash);
@@ -641,7 +642,7 @@ const supabaseRepository: Group13Repository = {
   },
   createAssignment: async (assignment) => {
     if (!supabase) throw new Error("Supabase is not configured.");
-    const record = { id: crypto.randomUUID(), ...assignment };
+    const record = { id: makeId(), ...assignment };
     const { data, error } = await supabase
       .from("assignments")
       .insert(record)
@@ -663,7 +664,7 @@ const supabaseRepository: Group13Repository = {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) throw new Error("Please sign in before creating a to-do.");
-    const record = { id: crypto.randomUUID(), user_id: user.id, ...todo };
+    const record = { id: makeId(), user_id: user.id, ...todo };
     const { data, error } = await supabase
       .from("todos")
       .insert(record)
@@ -693,7 +694,7 @@ const supabaseRepository: Group13Repository = {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) throw new Error("Please sign in before adding media.");
-    const record = { id: crypto.randomUUID(), user_id: user.id, is_public: true, ...media };
+    const record = { id: makeId(), user_id: user.id, is_public: true, ...media };
     if (!/^https?:\/\//i.test(record.url.trim()))
       throw new Error("Links must start with http:// or https://");
     const { data, error } = await supabase
@@ -733,7 +734,7 @@ const supabaseRepository: Group13Repository = {
   createMeeting: async (title, leader) => {
     const now = new Date();
     const record = {
-      id: crypto.randomUUID(),
+      id: makeId(),
       title,
       day: now.toLocaleDateString("en-GB", {
         weekday: "long",
@@ -1067,7 +1068,7 @@ const supabaseRepository: Group13Repository = {
     const { data: isAdmin, error: roleError } = await client.rpc("is_super_admin");
     if (roleError) throw new Error(`Could not verify super-admin access: ${roleError.message}`);
     if (isAdmin !== true) throw new Error("Your account is not authorized to publish club posters. Sign in with the primary admin account.");
-    const id = crypto.randomUUID();
+    const id = makeId();
     const extension = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
     const storagePath = `posters/${id}.${extension}`;
     onProgress?.("uploading");
