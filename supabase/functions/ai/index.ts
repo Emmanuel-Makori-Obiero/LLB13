@@ -1441,7 +1441,11 @@ Deno.serve(async (req) => {
                 : "Even one indexed book section was rejected as too large by all available providers (HTTP 413). The text was not truncated; check whether this section contains an unusually long or malformed page, then retry."
               : feature === "legal_process" || feature === "legal_explain"
                 ? "One or more providers rejected the Legal what-if request as too large (HTTP 413). Your question was not truncated; the request uses bounded, relevant source context and output. If this persists, shorten unnecessary scenario detail and retry."
+                : feature === "course_outline"
+                  ? "The course outline is larger than the currently available provider routes can accept. The planner will preserve complete source passages and must not guess; retry after the provider cooldown, or split the PDF into the class-sequence pages and the reference-material pages."
                 : "One or more providers rejected this request as too large (HTTP 413). The endpoint can retry with fewer old chat turns and, for ordinary retrieval only, fewer whole passages; complete-document review text is preserved and no source passage is truncated. If this persists, ask a narrower question or select a smaller source section."
+          : feature === "course_outline"
+            ? "The course-outline providers are temporarily unavailable or rate-limited. The PDF was not changed and no unsupported checklist items were generated. Retry after the displayed cooldown; if the PDF is large, split it into the class-sequence pages and the reference-material pages."
           : invalidCardResponse
             ? "The providers did not return a usable Legal what-if card structure. Invalid card replies were skipped and the other models were tried; switch to Normal explanation or retry Cards later."
           : "Each failed API-key slot and provider route was skipped and the same request was sent to the next available alternative, but none returned a result. Check provider keys, model IDs, and quota, then retry.",
