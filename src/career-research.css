@@ -35,11 +35,14 @@
 .career-tags { display: flex; gap: 6px; flex-wrap: wrap; margin: auto 0 10px; }
 .career-interest { padding: 3px 7px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 10px; }
 .career-feed-category { margin-bottom: 8px; color: var(--muted); font-size: 10px; }
+.career-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 2px 0; }
+.career-pagination-actions { display: flex; align-items: center; gap: 8px; }
+.career-pagination-actions .secondary-button { display: inline-flex; align-items: center; gap: 5px; }
 .career-source-note { padding: 0 2px; line-height: 1.55; }
 .career-empty { color: var(--muted); }
 :root[data-theme="dark"] .career-link, :root[data-theme="dark"] .career-opportunity h2 a:hover { color: #b9e0c8; }
 @media (max-width: 850px) { .career-catalogue-grid, .career-opportunity-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 600px) { .career-heading { align-items: flex-start; flex-direction: column; } .career-refresh { align-self: flex-start; } .career-catalogue-grid, .career-opportunity-grid { grid-template-columns: 1fr; } .career-filter-label, .career-filter-label select { width: 100%; } .career-feed-heading { align-items: flex-start; flex-direction: column; } }
+@media (max-width: 600px) { .career-heading { align-items: flex-start; flex-direction: column; } .career-refresh { align-self: flex-start; } .career-catalogue-grid, .career-opportunity-grid { grid-template-columns: 1fr; } .career-filter-label, .career-filter-label select { width: 100%; } .career-feed-heading { align-items: flex-start; flex-direction: column; } .career-pagination { align-items: stretch; flex-direction: column; } .career-pagination-actions { justify-content: space-between; } .career-pagination-actions .secondary-button { flex: 1 1 0; justify-content: center; } }
 
 .career-cv-panel { display: grid; gap: 13px; }
 .career-cv-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }

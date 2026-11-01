@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ExternalLink, GraduationCap, RefreshCw, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, GraduationCap, RefreshCw, Search } from "lucide-react";
 import { supabase } from "./data/repository";
 import { careerFeedErrorMessage, normalizeCareerFeed, readCareerFeedCache, writeCareerFeedCache, type CareerFeedItem, type CareerFeedResponse } from "./lib/careerFeed";
 import CareerCvMatcher from "./CareerCvMatcher";
@@ -36,6 +36,8 @@ const opportunityTypeFilters = [
   ["Events / competitions", "Events / competitions"],
   ["Other opportunities", "Other career opportunities"],
 ] as const;
+
+const OPPORTUNITIES_PER_PAGE = 12;
 
 const kenyanOpportunityBoards = [
   {
@@ -107,6 +109,7 @@ export default function CareerResearchPage() {
   const [category, setCategory] = useState<string>("all");
   const [opportunityType, setOpportunityType] = useState<string>("all");
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [refreshWarning, setRefreshWarning] = useState("");
@@ -158,6 +161,16 @@ export default function CareerResearchPage() {
     .filter((item) => opportunityType === "all" || opportunityKind(item) === opportunityType)
     .filter((item) => !search.trim() || `${item.title} ${item.description} ${item.details ?? ""} ${item.categories.join(" ")}`.toLowerCase().includes(search.trim().toLowerCase()))
     .sort((a, b) => (Date.parse(b.published_at || "") || 0) - (Date.parse(a.published_at || "") || 0)), [items, category, opportunityType, search]);
+  const totalPages = Math.max(1, Math.ceil(visibleItems.length / OPPORTUNITIES_PER_PAGE));
+  const visiblePageItems = visibleItems.slice((page - 1) * OPPORTUNITIES_PER_PAGE, page * OPPORTUNITIES_PER_PAGE);
+
+  useEffect(() => {
+    setPage(1);
+  }, [category, opportunityType, search]);
+
+  useEffect(() => {
+    setPage((current) => Math.min(current, totalPages));
+  }, [totalPages]);
 
   const edxUrl = `https://www.edx.org/courses?q=${encodeURIComponent(courseSearchQuery(category))}`;
   const speedycCourseUrl = "https://kenya.speedycourse.com/";
@@ -218,7 +231,7 @@ export default function CareerResearchPage() {
       {error && <div className="connection-error">{error} <button type="button" className="material-link" onClick={() => void refresh()}>Try again</button></div>}
       {!error && loading && items.length === 0 && <div className="card card-pad career-empty">Loading the latest public listings…</div>}
       {!error && !loading && visibleItems.length === 0 && <div className="card card-pad career-empty">No current feed items match this filter. Try another interest or refresh.</div>}
-      <div className="career-opportunity-grid">{visibleItems.map((item) => {
+      <div className="career-opportunity-grid">{visiblePageItems.map((item) => {
         const tags = interestTags(item);
         return <article className="card card-pad career-opportunity" key={item.url}>
           <div className="career-meta"><span className="career-tag">{opportunityKind(item)}</span><span>{displayDate(item.published_at)}</span></div>
@@ -229,6 +242,14 @@ export default function CareerResearchPage() {
           <a className="career-link" href={item.url} target="_blank" rel="noreferrer">Open listing <ExternalLink size={13} /></a>
         </article>;
       })}</div>
+      {visibleItems.length > 0 && <nav className="career-pagination" aria-label="Opportunity pages">
+        <span className="field-hint">Showing {(page - 1) * OPPORTUNITIES_PER_PAGE + 1}–{Math.min(page * OPPORTUNITIES_PER_PAGE, visibleItems.length)} of {visibleItems.length} opportunities</span>
+        <div className="career-pagination-actions">
+          <button type="button" className="secondary-button" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}><ChevronLeft size={14} /> Previous</button>
+          <span className="chip" aria-live="polite">Page {page} of {totalPages}</span>
+          <button type="button" className="secondary-button" disabled={page >= totalPages} onClick={() => setPage((current) => Math.min(totalPages, current + 1))}>Next <ChevronRight size={14} /></button>
+        </div>
+      </nav>}
       {updatedAt && <p className="field-hint career-source-note">Source: {source}. {notice}</p>}
     </section>
   </div>;

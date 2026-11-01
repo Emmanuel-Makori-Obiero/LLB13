@@ -45,7 +45,7 @@ function plainText(value: string) {
 
 function parseKenyaItems(xml: string) {
   const channel = xml.match(/<channel\b[^>]*>([\s\S]*?)<\/channel>/i)?.[1] ?? xml;
-  const blocks = [...channel.matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/gi)].slice(0, 40);
+  const blocks = [...channel.matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/gi)].slice(0, 100);
   const seen = new Set<string>();
   return blocks.flatMap((match) => {
     const item = match[1];
