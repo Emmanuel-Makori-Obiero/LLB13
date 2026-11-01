@@ -28,6 +28,7 @@ export default function PdfNotebookReader({
   onMouseUp,
 }: Props) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const restoredDocumentRef = useRef<PdfDocument | null>(null);
   const [documentProxy, setDocumentProxy] = useState<PdfDocument | null>(null);
   const [pageCount, setPageCount] = useState(0);
   const [loadProgress, setLoadProgress] = useState(0);
@@ -71,10 +72,31 @@ export default function PdfNotebookReader({
 
   useEffect(() => {
     const scroller = scrollerRef.current;
-    if (!documentProxy || !scroller || initialScrollTop <= 0) return;
-    requestAnimationFrame(() => {
-      if (scrollerRef.current) scrollerRef.current.scrollTop = initialScrollTop;
+    if (!documentProxy || !scroller || restoredDocumentRef.current === documentProxy) return;
+
+    // `onScrollPosition` updates the parent while the user is reading. Do not
+    // restore that changing value on every render or it creates a scroll
+    // feedback loop that makes the notebook jump up and down.
+    restoredDocumentRef.current = documentProxy;
+    if (initialScrollTop <= 0) return;
+
+    let firstFrame = 0;
+    let secondFrame = 0;
+    firstFrame = requestAnimationFrame(() => {
+      secondFrame = requestAnimationFrame(() => {
+        const currentScroller = scrollerRef.current;
+        if (!currentScroller) return;
+        currentScroller.scrollTop = Math.min(
+          initialScrollTop,
+          Math.max(0, currentScroller.scrollHeight - currentScroller.clientHeight),
+        );
+      });
     });
+
+    return () => {
+      cancelAnimationFrame(firstFrame);
+      cancelAnimationFrame(secondFrame);
+    };
   }, [documentProxy, initialScrollTop]);
 
   return (

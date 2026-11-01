@@ -103,6 +103,12 @@ test("Notebook view is paper-like and keeps only a touch-scroll surface without 
   assert.doesNotMatch(styles, /\.book-reader-style-notebook \.pdf-native-preview > iframe/);
 });
 
+test("Notebook scroll restoration does not follow every saved scroll update", () => {
+  assert.match(notebookReader, /restoredDocumentRef/);
+  assert.match(notebookReader, /restoredDocumentRef\.current === documentProxy/);
+  assert.match(notebookReader, /feedback loop/);
+});
+
 test("scanned PDF position is restored and recorded on the actual OCR scroll container", () => {
   assert.match(ocrReader, /const readerRef = useRef/);
   assert.match(ocrReader, /readerRef\.current\.scrollTop = initialScrollTop/);
