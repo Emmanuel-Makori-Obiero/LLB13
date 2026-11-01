@@ -1264,7 +1264,7 @@ Deno.serve(async (req) => {
   let priorHistory = history.slice(0, -1);
   let historyContextReduced = false;
   let sourceContextReduced = false;
-  const canReduceRetrievedPassages = !FEATURES[feature]?.docWide &&
+  const canReduceRetrievedPassages = (feature === "course_outline" || !FEATURES[feature]?.docWide) &&
     !["quality_check", "notes", "notes_review", "notes_research", "summarize"].includes(feature);
 
   try {
