@@ -2,7 +2,7 @@ import { makeId } from "./lib/uuid";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent } from "react";
 import { ArrowLeft, BookOpen, Check, Copy, Highlighter, List, Maximize2, Minimize2, Minus, Plus, Send, Sparkles, Type, X } from "lucide-react";
 import { materialSourceUrl, readerUrl } from "./links";
-import { isDocxMaterial, isPdfMaterial } from "./lib/material-reader";
+import { isDocxMaterial, isPdfMaterial, isTextMaterial } from "./lib/material-reader";
 import { askAI, docxToHtml, type AIResult } from "./lib/ai";
 import { Markdown } from "./Markdown";
 import StorytellButton from "./StorytellButton";
@@ -47,6 +47,7 @@ export default function BookReader({ material, onClose }: Props) {
   const [chatInput, setChatInput] = useState("");
   const [chat, setChat] = useState<ChatLine[]>([]);
   const [docxHtml, setDocxHtml] = useState("");
+  const [textContent, setTextContent] = useState("");
   const [docxLoading, setDocxLoading] = useState(false);
   const [readerStyle, setReaderStyle] = useState<"classic" | "notebook">(() => {
     try { return localStorage.getItem(readerStyleKeyFor(material.id)) === "notebook" ? "notebook" : "classic"; } catch { return "classic"; }
@@ -81,6 +82,7 @@ export default function BookReader({ material, onClose }: Props) {
   const sourceUrl = materialSourceUrl(material);
   const frame = readerUrl(material);
   const isDocx = isDocxMaterial(material);
+  const isText = isTextMaterial(material);
 
   useEffect(() => {
     if (!isDocx || !sourceUrl) return;
@@ -109,6 +111,20 @@ export default function BookReader({ material, onClose }: Props) {
     })();
     return () => { active = false; };
   }, [isDocx, sourceUrl]);
+
+  useEffect(() => {
+    if (!isText || !sourceUrl) return;
+    let active = true;
+    setTextContent("");
+    void fetch(sourceUrl).then(async (response) => {
+      if (!response.ok) throw new Error(`Could not load the text book (${response.status}).`);
+      const value = await response.text();
+      if (active) setTextContent(value);
+    }).catch((loadError) => {
+      if (active) setError(loadError instanceof Error ? loadError.message : "Could not render this text book.");
+    });
+    return () => { active = false; };
+  }, [isText, sourceUrl]);
 
   useEffect(() => {
     if (!docxHtml || !docxReaderRef.current || savedPosition <= 0) return;
@@ -192,7 +208,7 @@ export default function BookReader({ material, onClose }: Props) {
   const downloadResultPdf = () => result && downloadPdf(`${material.title} — Plain-language explanation`, result.answer, `${resultName}.pdf`);
   const downloadResultWord = () => result && downloadWord(`${material.title} — Plain-language explanation`, result.answer, `${resultName}.docx`);
 
-  if (bookReviewOpen) return <BookReviewMode title={material.title} html={docxHtml} sourceUrl={sourceUrl} isPdf={isPdf} onBack={() => setBookReviewOpen(false)} onSelection={setSelectedText} />;
+  if (bookReviewOpen) return <BookReviewMode title={material.title} html={docxHtml} textContent={textContent} sourceUrl={sourceUrl} isPdf={isPdf} onBack={() => setBookReviewOpen(false)} onSelection={setSelectedText} />;
 
   return (
     <div className={`book-reader ${expanded ? "book-reader-expanded" : ""} ${mobileReading ? "book-reader-mobile-reading" : ""} book-reader-style-${readerStyle}`}>
@@ -223,6 +239,10 @@ export default function BookReader({ material, onClose }: Props) {
             <div className="book-preview-wrap" style={{ height: `${effectiveReaderHeight}px` }}>
               {docxLoading ? <div className="empty">Converting the Word document for in-app reading…</div> : docxHtml ? <article ref={docxReaderRef} className="docx-reader" tabIndex={0} aria-label={`Reading ${material.title}`} onScroll={(event) => rememberReadingPosition(event.currentTarget.scrollTop)} onMouseUp={captureSelection} dangerouslySetInnerHTML={{ __html: docxHtml }} /> : <div className="empty">The Word document could not be rendered. Try downloading a copy instead.</div>}
               <p className="reader-hint">Word document converted for in-app reading. Select text to explain or save a highlight.</p>
+            </div>
+          ) : isText ? (
+            <div className="book-preview-wrap" style={{ height: `${effectiveReaderHeight}px` }}>
+              {textContent ? <pre className="plain-text-reader" onMouseUp={captureSelection}>{textContent}</pre> : <div className="empty">{error || "Loading the text book…"}</div>}
             </div>
           ) : frame ? (
             <div className="book-preview-wrap" style={{ height: `${effectiveReaderHeight}px` }}>
@@ -261,13 +281,14 @@ export default function BookReader({ material, onClose }: Props) {
 type BookReviewProps = {
   title: string;
   html: string;
+  textContent: string;
   sourceUrl: string;
   isPdf: boolean;
   onBack: () => void;
   onSelection: (text: string) => void;
 };
 
-function BookReviewMode({ title, html, sourceUrl, isPdf, onBack, onSelection }: BookReviewProps) {
+function BookReviewMode({ title, html, textContent, sourceUrl, isPdf, onBack, onSelection }: BookReviewProps) {
   const [theme, setTheme] = useState<"light" | "sepia" | "dark">("light");
   const [font, setFont] = useState<"serif" | "sans">("serif");
   const [fontSize, setFontSize] = useState(18);
@@ -325,7 +346,7 @@ function BookReviewMode({ title, html, sourceUrl, isPdf, onBack, onSelection }: 
     {tocOpen && <aside className="book-review-toc" onClick={(event) => event.stopPropagation()}><div className="book-review-toc-head"><div><span>CONTENTS</span><strong>{title}</strong></div><button onClick={() => setTocOpen(false)} aria-label="Close table of contents"><X size={15} /></button></div>{chapters.length ? chapters.map((chapter) => <button key={chapter.index} onClick={() => jumpToChapter(chapter.index)}>{chapter.title}</button>) : <p>No headings were found in this source.</p>}</aside>}
     {!hud && <div className="book-review-hint">Tap the middle for controls</div>}
     <main className="book-review-stage">
-      {html ? <article ref={articleRef} className="book-review-content" style={{ fontSize }} onScroll={updateProgress} onMouseUp={captureReviewSelection} dangerouslySetInnerHTML={{ __html: html }} /> : isPdf && sourceUrl ? <iframe className="book-review-pdf" src={sourceUrl} title={`Book Review ${title}`} /> : <div className="book-review-empty"><BookOpen size={26} /><h2>Book Review mode</h2><p>This immersive view is ready for text-readable sources. Use Classic or Notebook view for the standard PDF preview.</p></div>}
+      {html ? <article ref={articleRef} className="book-review-content" style={{ fontSize }} onScroll={updateProgress} onMouseUp={captureReviewSelection} dangerouslySetInnerHTML={{ __html: html }} /> : textContent ? <pre className="book-review-content plain-text-reader" style={{ fontSize }} onScroll={updateProgress} onMouseUp={captureReviewSelection}>{textContent}</pre> : isPdf && sourceUrl ? <PdfNotebookReader sourceUrl={sourceUrl} title={title} onMouseUp={captureReviewSelection} /> : <div className="book-review-empty"><BookOpen size={26} /><h2>Book Review mode</h2><p>This immersive view is ready for text-readable sources. Use Classic or Notebook view for the standard PDF preview.</p>{sourceUrl && <a className="primary-button" href={sourceUrl} target="_blank" rel="noreferrer">Open source in browser</a>}</div>}
     </main>
     {selected && <div className="book-review-selection" onClick={(event) => event.stopPropagation()}><button onClick={() => onSelection(selected)}><Highlighter size={14} /> Highlight</button><button onClick={() => setNoteOpen((value) => !value)}><Type size={14} /> Add note</button><button onClick={() => void copySelection()}><Copy size={14} /> Copy</button>{noteOpen && <div className="book-review-note"><textarea value={noteDraft} onChange={(event) => setNoteDraft(event.target.value)} placeholder="Write a note about this passage…" /><button onClick={() => setNoteOpen(false)}>Save note</button></div>}</div>}
     {hud && <footer className="book-review-progress" onClick={(event) => event.stopPropagation()}><span>{progress}% read</span><input aria-label="Reading progress" type="range" min="0" max="100" value={progress} onChange={(event) => { const next = Number(event.target.value); setProgress(next); if (articleRef.current) articleRef.current.scrollTop = (articleRef.current.scrollHeight - articleRef.current.clientHeight) * next / 100; }} /><span>{chapters.length ? `${chapters.length} sections` : "Book Review"}</span><button onClick={() => setHud(false)} aria-label="Hide controls"><X size={14} /></button></footer>}

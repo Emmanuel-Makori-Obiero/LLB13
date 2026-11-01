@@ -36,6 +36,10 @@ export function isDocxMaterial(material: ReaderMaterial) {
   return mimeType(material) === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || hasExtension(material, /\.docx$/i);
 }
 
+export function isTextMaterial(material: ReaderMaterial) {
+  return mimeType(material).startsWith("text/") || hasExtension(material, /\.(?:txt|md|markdown|rtf)$/i);
+}
+
 export function isOfficeMaterial(material: ReaderMaterial) {
   return isDocxMaterial(material)
     || /(?:application\/msword|wordprocessingml|presentationml|spreadsheetml|vnd\.ms-(?:word|powerpoint|excel))/i.test(mimeType(material))
