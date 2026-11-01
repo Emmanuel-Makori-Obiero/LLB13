@@ -20,6 +20,7 @@ import {
   Download,
   FileText,
   ClipboardCheck,
+  ClipboardList,
   Filter,
   Film,
   FolderOpen,
@@ -140,6 +141,7 @@ const GroupsPage = lazy(() => import("./GroupsPage"));
 const GroupAttendancePage = lazy(() => import("./GroupAttendancePage"));
 
 const CareerResearchPage = lazy(() => import("./CareerResearchPage"));
+const CourseOutlinePage = lazy(() => import("./CourseOutlinePage"));
 
 const nav = [
   { id: "dashboard", label: "Home", icon: LayoutDashboard },
@@ -147,6 +149,7 @@ const nav = [
   { id: "attendance", label: "Attendance", icon: Check },
   { id: "todos", label: "My to-do", icon: CheckSquare },
   { id: "assignments", label: "Assignments", icon: FileText },
+  { id: "course-outline", label: "Course planner", icon: ClipboardList },
   { id: "library", label: "Library", icon: Library },
   { id: "dictionary", label: "Law dictionary", icon: BookOpen },
   { id: "legal-process", label: "Legal what-ifs", icon: Workflow },
@@ -1330,6 +1333,14 @@ function App() {
               openCreate={() => setAssignmentFormOpen(true)}
               learnerLevel={profile.learnerLevel}
             />
+          )}
+          {view === "course-outline" && (
+            <Suspense fallback={<div className="subheading">Opening course planner…</div>}>
+              <CourseOutlinePage onCreateTodos={async (items) => {
+                const created = await Promise.all(items.map((item) => repository.createTodo(item)));
+                setTodos((current) => [...created, ...current]);
+              }} />
+            </Suspense>
           )}
           {view === "todos" && (
             <TodoPage

@@ -328,6 +328,11 @@ const FEATURES: Record<
     docWide: true,
     task: "Return the complete corrected notes and a structured source-bounded audit. Never claim a source was checked unless its official text is present in the request.",
   },
+  course_outline: {
+    json: true,
+    docWide: true,
+    task: 'Turn the uploaded course outline or syllabus into a complete, practical student checklist. Return ONLY valid JSON in exactly this shape: {"courseTitle":"","courseCode":"","summary":"","items":[{"title":"","category":"topic|reading|assignment|assessment|revision|administration","description":"","week":"","priority":"high|medium|low"}]}. Preserve every distinct topic, reading, assignment, assessment, deadline, learning outcome and important administrative requirement supported by the outline. Do not invent dates, readings, marks, lecturers or requirements. If a field is not stated, use an empty string. Make each checklist item actionable and concise; combine only exact duplicates. Order items by week or source order. This is a planning checklist, not a legal answer and not a summary that omits tasks.',
+  },
   arena_case: {
     task: "Create a balanced fictional Kenyan-law moot case from the stated legal issue and verified authority list. Follow the server's strict legal-scope and exact case-packet structure.",
   },

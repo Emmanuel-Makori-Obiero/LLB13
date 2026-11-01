@@ -38,6 +38,7 @@ export type AIFeature =
   | "timetable_proposal"
   | "personal_timetable_proposal"
   | "personal_timetable_replan"
+  | "course_outline"
   | "moot"
   | "moot_judge"
   | "moot_guide"
