@@ -9,6 +9,11 @@ type Props = { sourceUrl: string; previewUrl?: string; title: string; height: nu
 
 const OCR_TIMEOUT_MS = 90_000;
 
+function isAppleMobileBrowser() {
+  if (typeof navigator === "undefined") return false;
+  return /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+
 function withTimeout<T>(promise: Promise<T>, milliseconds: number, message: string) {
   return Promise.race([
     promise,
@@ -115,11 +120,22 @@ export default function PdfNotesReader({ sourceUrl, previewUrl, title, height, o
   if (!scanRequested) {
     return (
       <div className="pdf-notes-reader pdf-native-preview" style={{ height }} aria-label={`PDF preview: ${title}`}>
-        <div className="pdf-scan-opt-in">
-          <span><strong>Standard PDF preview</strong><small>Scanning is optional. Use it only if you need selectable text from a scanned page.</small></span>
-          <button className="secondary-button" type="button" onClick={() => setScanRequested(true)}><ScanLine size={14} /> Scan for selectable text</button>
-        </div>
-        <iframe src={previewUrl || sourceUrl} title={`Preview ${title}`} referrerPolicy="no-referrer" />
+        {isAppleMobileBrowser() ? (
+          <div className="pdf-mobile-open">
+            <strong>Open this book in your browser</strong>
+            <p>iPhone and iPad can block embedded PDF previews. Open the secure PDF directly, then use the browser’s back button to return to the Library.</p>
+            <a className="primary-button" href={sourceUrl} target="_blank" rel="noreferrer">Open PDF in Safari/Chrome</a>
+            <button className="secondary-button" type="button" onClick={() => setScanRequested(true)}><ScanLine size={14} /> Scan here for selectable text</button>
+          </div>
+        ) : (
+          <>
+            <div className="pdf-scan-opt-in">
+              <span><strong>Standard PDF preview</strong><small>Scanning is optional. Use it only if you need selectable text from a scanned page.</small></span>
+              <button className="secondary-button" type="button" onClick={() => setScanRequested(true)}><ScanLine size={14} /> Scan for selectable text</button>
+            </div>
+            <iframe src={previewUrl || sourceUrl} title={`Preview ${title}`} referrerPolicy="no-referrer" />
+          </>
+        )}
       </div>
     );
   }
