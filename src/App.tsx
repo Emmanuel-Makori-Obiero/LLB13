@@ -114,6 +114,7 @@ const GuidedStudyPage = lazy(() => import("./GuidedStudyPage"));
 const AssignmentHelperPage = lazy(() => import("./AssignmentHelperPage"));
 import { addYouTubeItem, loadPublicYouTubePlaylist, loadYouTubePlaylist, removeYouTubeItem, updateYouTubePlaylist, youtubePlaylistExportJson, youtubePlaylistExportText, type YouTubePlaylist } from "./lib/youtubePlaylist";
 import { useTheme, type Theme } from "./theme";
+import { normalizeThemeId, resolveWallpaper, THEME_PRESETS, type ThemeId } from "./lib/appearance";
 import { extractPastPaperArchive } from "./lib/pastPaperArchive";
 import GamesHub from "./GamesHub";
 import { readDebateInviteCode } from "./lib/debate-links";
@@ -242,6 +243,7 @@ type UserProfile = {
   role: string;
   avatarUrl: string;
   wallpaperUrl: string;
+  appearanceTheme: ThemeId;
 };
 
 type PlayerTrack = { id: string; title: string; url: string; source: string; kind: "audio" | "youtube"; youtubeId?: string };
@@ -260,7 +262,7 @@ declare global {
 }
 
 function App() {
-  const { theme, toggleTheme } = useTheme();
+  const { theme, themeId, setTheme } = useTheme();
   const [authLoading, setAuthLoading] = useState(true);
   const [showLandingPreview, setShowLandingPreview] = useState(false);
   const [authCallbackNotice, setAuthCallbackNotice] = useState("");
@@ -283,6 +285,7 @@ function App() {
     role: "LLB · Year 1",
     avatarUrl: "",
     wallpaperUrl: "",
+    appearanceTheme: themeId,
   });
   const [view, setView] = useState(viewFromPath);
   const [units, setUnits] = useState<Unit[]>([]);
@@ -314,13 +317,13 @@ function App() {
   const visibleMaterials = useMemo(() => materials.filter((material) => isAdmin || materialVisibleToLevel(material.target_years, profile.learnerLevel)), [materials, isAdmin, profile.learnerLevel]);
   const visibleAssignments = useMemo(() => assignments.filter((assignment) => isAdmin || materialVisibleToLevel(assignment.target_years, profile.learnerLevel)), [assignments, isAdmin, profile.learnerLevel]);
   useEffect(() => {
-    const wallpaper = profile.wallpaperUrl || window.localStorage.getItem("group13-wallpaper") || "";
-    if (wallpaper) window.localStorage.setItem("group13-wallpaper", wallpaper);
+    window.localStorage.removeItem("group13-wallpaper");
+    const wallpaper = resolveWallpaper(themeId, profile.wallpaperUrl, profile.avatarUrl);
     document.documentElement.style.setProperty(
       "--user-wallpaper",
       wallpaper ? `url(${JSON.stringify(wallpaper)})` : "none",
     );
-  }, [profile.wallpaperUrl]);
+  }, [themeId, profile.wallpaperUrl, profile.avatarUrl]);
 
   const playMusicQueue = (tracks: PlayerTrack[], index = 0) => {
     if (!tracks.length) return;
@@ -364,8 +367,10 @@ function App() {
       setUserId(session?.user?.id ?? null);
       const level = typeof metadata.learner_level === "string" && learnerLevels.some((item) => item.id === metadata.learner_level) ? metadata.learner_level as LearnerLevel : "";
       const preference = typeof metadata.learning_preference === "string" && learningPreferences.some((item) => item.id === metadata.learning_preference) ? metadata.learning_preference as LearningPreference : "";
+      const appearanceTheme = normalizeThemeId(metadata.appearance_theme ?? themeId);
       const learnerProfile: import("./lib/learnerAdaptation").LearningProfile = { learnerLevel: level as import("./lib/learnerAdaptation").LearnerLevel, learningPreference: preference as import("./lib/learnerAdaptation").LearningPreference };
       setLearnerAdaptation(learnerProfile);
+      setTheme(appearanceTheme);
       setSurveyLevel(level);
       setSurveyPreference(defaultLearningPreference(preference));
       setSurveyOpen(Boolean(session?.user && (!level || !preference)));
@@ -384,6 +389,7 @@ function App() {
           typeof metadata.wallpaper_url === "string"
             ? metadata.wallpaper_url
             : "",
+        appearanceTheme,
       });
     };
     const finishAuthCallback = async () => {
@@ -815,6 +821,7 @@ function App() {
       role: changes.role ?? profile.role,
       avatar_url: changes.avatarUrl ?? profile.avatarUrl,
       wallpaper_url: changes.wallpaperUrl ?? profile.wallpaperUrl,
+      appearance_theme: normalizeThemeId(changes.appearanceTheme ?? profile.appearanceTheme),
       learner_level: selectedLevel,
       learning_preference: selectedLevel ? defaultLearningPreference(selectedPreference) : selectedPreference,
     };
@@ -827,11 +834,19 @@ function App() {
       role: metadata.role,
       avatarUrl: metadata.avatar_url,
       wallpaperUrl: metadata.wallpaper_url,
+      appearanceTheme: metadata.appearance_theme,
     });
+    setTheme(metadata.appearance_theme);
     setLearnerAdaptation({ learnerLevel: metadata.learner_level as LearnerLevel | "", learningPreference: metadata.learning_preference as LearningPreference | "" });
     setSurveyLevel(metadata.learner_level as LearnerLevel | "");
     setSurveyPreference(defaultLearningPreference(metadata.learning_preference as LearningPreference | ""));
     setSurveyOpen(Boolean(userId && (!metadata.learner_level || !metadata.learning_preference)));
+  };
+  const toggleSavedTheme = () => {
+    const next: ThemeId = theme === "dark" ? "light" : "dark";
+    void saveProfile({ appearanceTheme: next }).catch((error) => {
+      setNotice(error instanceof Error ? error.message : "Could not save appearance.");
+    });
   };
   const saveAdaptationSurvey = async () => {
     if (!surveyLevel || !surveyPreference) return;
@@ -944,20 +959,7 @@ function App() {
 
   const visibleNav = nav.filter((item) => item.id !== "group-attendance" || isAdmin);
   return (
-    <div
-      className="app-shell"
-      style={
-        profile.wallpaperUrl
-          ? {
-              backgroundImage: `linear-gradient(var(--wallpaper-overlay), var(--wallpaper-overlay)), url(${profile.wallpaperUrl})`,
-              backgroundSize: "cover",
-              backgroundRepeat: "no-repeat",
-              backgroundPosition: "center center",
-              backgroundAttachment: "fixed",
-            }
-          : undefined
-      }
-    >
+    <div className="app-shell">
       <HelpButton floating onNavigate={setPage} />
       <FloatingLawyerAgent historyKey={userEmail ?? "workspace"} currentPage={currentPageLabel} onOpenDictionary={() => setPage("dictionary")} />
       <aside className="sidebar">
@@ -1171,7 +1173,7 @@ function App() {
           image={profile.avatarUrl}
           userId={userId}
           theme={theme}
-          onToggleTheme={toggleTheme}
+          onToggleTheme={toggleSavedTheme}
           onOpenNotifications={() => setPage("discussions")}
           onSignOut={async () => {
             await supabase?.auth.signOut();
@@ -5094,6 +5096,28 @@ function ProfileSettings({
       setBusy("");
     }
   };
+  const chooseTheme = async (themeId: ThemeId) => {
+    setBusy("theme");
+    try {
+      await onSave({ appearanceTheme: themeId });
+      setNotice(`Theme set to ${THEME_PRESETS.find((item) => item.id === themeId)?.label ?? "your choice"}.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not save the theme.");
+    } finally {
+      setBusy("");
+    }
+  };
+  const clearWallpaper = async () => {
+    setBusy("wallpaper");
+    try {
+      await onSave({ wallpaperUrl: "" });
+      setNotice("Custom wallpaper removed. Your selected theme background is now in use.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not remove the custom wallpaper.");
+    } finally {
+      setBusy("");
+    }
+  };
   return (
     <div className="card card-pad profile-settings">
       <div className="card-header">
@@ -5181,7 +5205,59 @@ function ProfileSettings({
                 : "Choose image"}
           </span>
         </label>
+        {profile.wallpaperUrl && (
+          <button
+            className="secondary-button wallpaper-clear"
+            type="button"
+            disabled={busy === "wallpaper"}
+            onClick={() => void clearWallpaper()}
+          >
+            Use theme background
+          </button>
+        )}
       </div>
+      <p className="field-hint profile-wallpaper-note">
+        Your profile picture is only used as your avatar. It is never used as a wallpaper; choose a separate image above or pick a built-in theme below.
+      </p>
+      <section className="appearance-settings" aria-labelledby="appearance-settings-title">
+        <div className="appearance-settings-heading">
+          <div>
+            <span className="section-label">Workspace appearance</span>
+            <h3 id="appearance-settings-title">Choose your study atmosphere</h3>
+            <p className="field-hint">Each theme changes the app palette and, where shown, its wallpaper. Your choice is saved to your profile.</p>
+          </div>
+          {busy === "theme" && <span className="quiet">Saving theme…</span>}
+        </div>
+        <div className="theme-gallery" role="group" aria-label="Workspace themes">
+          {THEME_PRESETS.map((preset) => (
+            <button
+              className={`theme-card${profile.appearanceTheme === preset.id ? " selected" : ""}`}
+              type="button"
+              key={preset.id}
+              aria-pressed={profile.appearanceTheme === preset.id}
+              disabled={busy === "theme"}
+              onClick={() => void chooseTheme(preset.id)}
+            >
+              <span
+                className="theme-card-preview"
+                aria-hidden="true"
+                style={{ backgroundImage: preset.wallpaper ? `linear-gradient(180deg, rgba(0,0,0,.08), rgba(0,0,0,.28)), url("${preset.wallpaper}")` : "linear-gradient(135deg, #f5f1e8, #dce7d9)" }}
+              >
+                {profile.appearanceTheme === preset.id && <span className="theme-card-selected"><Check size={13} /> Selected</span>}
+              </span>
+              <span className="theme-card-copy">
+                <strong>{preset.label}</strong>
+                <span>{preset.description}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+        {profile.wallpaperUrl && (
+          <p className="field-hint appearance-wallpaper-hint">
+            A custom wallpaper is currently active and overrides the theme photo. Choose “Use theme background” above to return to the selected preset wallpaper.
+          </p>
+        )}
+      </section>
     </div>
   );
 }
