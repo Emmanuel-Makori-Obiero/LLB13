@@ -1049,7 +1049,7 @@ h2 {
   --wallpaper-overlay: rgba(10,18,14,.48);
   color-scheme: dark;
 }
-:root[data-theme="dark"] body { background: var(--paper); color: var(--ink); }
+:root[data-theme="dark"] body { background-color: var(--paper); color: var(--ink); }
 :root[data-theme="dark"] .app-shell { background: transparent; }
 :root[data-theme="dark"] .main, :root[data-theme="dark"] .content { background: transparent; }
 :root[data-theme="dark"] .topbar { background: rgba(17,24,21,.92); }
@@ -1073,7 +1073,7 @@ h2 {
 :root { --user-wallpaper: none; }
 html, body { background-color: var(--on-dark); background-image: linear-gradient(var(--wallpaper-overlay), var(--wallpaper-overlay)), var(--user-wallpaper); background-position: center center; background-repeat: no-repeat; background-size: cover; background-attachment: fixed; }
 .app-shell { background: transparent; }
-:root[data-theme="dark"] html, :root[data-theme="dark"] body { background-color: var(--on-dark); }
+:root[data-theme="dark"] html, :root[data-theme="dark"] body { background-color: var(--paper); }
 
 :root[data-skin="halloween"] { --forest: #81472e; --oxblood: #a94a38; --clay: #f0a44b; --moss: #392631; --line: #503846; --soft: #2a202b; --wallpaper-overlay: rgba(16,9,17,.45); }
 :root[data-skin="forest"] { --forest: #285744; --oxblood: #a86a4f; --clay: #a5c982; --moss: #294334; --line: #3a5647; --soft: #202f27; --wallpaper-overlay: rgba(8,19,14,.42); }
@@ -1386,3 +1386,11 @@ html, body { background-color: var(--on-dark); background-image: linear-gradient
 .course-outline-section { display: grid; gap: 9px; }.course-outline-section-heading { margin-top: 9px; padding: 13px 15px; border-left: 4px solid #477e69; border-radius: 8px; background: color-mix(in srgb, var(--line, #d7cec0) 55%, transparent); }.course-outline-section-heading span { color: #477e69; font-size: 11px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }.course-outline-section-heading h3 { margin: 4px 0 0; font: 500 20px/1.2 Georgia, serif; }.course-outline-item h4 { margin: 0 0 5px; font-size: 15px; line-height: 1.35; }.course-outline-evidence { display: grid; gap: 4px; margin-top: 10px; padding: 9px 11px; border-radius: 8px; background: color-mix(in srgb, #477e69 9%, var(--surface, #fffdf8)); color: var(--muted, #53645d); font-size: 12px; line-height: 1.45; }.course-outline-evidence strong { color: #477e69; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; }.course-outline-evidence span { font-style: italic; }.course-outline-item.is-complete .course-outline-evidence { opacity: .7; }
 .saved-course-plans { display: grid; gap: 14px; }.saved-course-plans-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }.saved-course-plans-head h2 { margin: 4px 0 0; font: 500 24px/1.15 Georgia, serif; }.saved-course-plans-head > span { display: grid; place-items: center; min-width: 30px; min-height: 30px; border-radius: 999px; background: var(--line, #d7cec0); font-weight: 800; }.saved-course-plans-list { display: grid; gap: 8px; }.saved-course-plans-list article { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px; border: 1px solid var(--line, #d7cec0); border-radius: 10px; }.saved-course-plans-list article > div:first-child { display: grid; gap: 3px; min-width: 0; }.saved-course-plans-list strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.saved-course-plans-list small, .saved-course-plans-list span { color: var(--muted, #53645d); font-size: 11px; }.saved-course-plans-list article > div:last-child, .course-outline-result-buttons { display: flex; align-items: center; gap: 8px; }.course-outline-result-buttons { flex-wrap: wrap; }
 @media (max-width: 640px) { .saved-course-plans-list article { align-items: stretch; flex-direction: column; }.saved-course-plans-list article > div:last-child, .course-outline-result-buttons { width: 100%; }.saved-course-plans-list article button, .course-outline-result-buttons button { flex: 1; justify-content: center; }.course-outline-result-buttons { flex-direction: column; align-items: stretch; } }
+
+
+.platform-appearance-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
+.platform-theme-gallery .theme-card { position: relative; min-width: 0; }
+.platform-theme-no-default { background-color: var(--soft); background-image: linear-gradient(135deg, var(--soft), var(--moss)); }
+@media (max-width: 700px) {
+  .platform-theme-gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
