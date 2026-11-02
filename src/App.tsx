@@ -114,7 +114,7 @@ const GuidedStudyPage = lazy(() => import("./GuidedStudyPage"));
 const AssignmentHelperPage = lazy(() => import("./AssignmentHelperPage"));
 import { addYouTubeItem, loadPublicYouTubePlaylist, loadYouTubePlaylist, removeYouTubeItem, updateYouTubePlaylist, youtubePlaylistExportJson, youtubePlaylistExportText, type YouTubePlaylist } from "./lib/youtubePlaylist";
 import { useTheme, type Theme } from "./theme";
-import { normalizeThemeId, resolveWallpaper, THEME_PRESETS, type ThemeId } from "./lib/appearance";
+import { hasCustomWallpaper, hasPersonalThemeSelection, normalizeThemeId, resolveProfileTheme, resolveWallpaper, THEME_PRESETS, type ThemeId } from "./lib/appearance";
 import { extractPastPaperArchive } from "./lib/pastPaperArchive";
 import GamesHub from "./GamesHub";
 import { readDebateInviteCode } from "./lib/debate-links";
@@ -244,6 +244,7 @@ type UserProfile = {
   avatarUrl: string;
   wallpaperUrl: string;
   appearanceTheme: ThemeId;
+  appearanceThemeUserSelected: boolean;
 };
 
 type PlayerTrack = { id: string; title: string; url: string; source: string; kind: "audio" | "youtube"; youtubeId?: string };
@@ -268,6 +269,8 @@ function App() {
   const [authCallbackNotice, setAuthCallbackNotice] = useState("");
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [platformDefaultTheme, setPlatformDefaultTheme] = useState<ThemeId | null>(null);
+  const [platformDefaultLoaded, setPlatformDefaultLoaded] = useState(false);
   const [adminState, setAdminState] = useState<"unknown" | "yes" | "no">(
     "unknown",
   );
@@ -286,6 +289,7 @@ function App() {
     avatarUrl: "",
     wallpaperUrl: "",
     appearanceTheme: themeId,
+    appearanceThemeUserSelected: false,
   });
   const [view, setView] = useState(viewFromPath);
   const [units, setUnits] = useState<Unit[]>([]);
@@ -316,6 +320,42 @@ function App() {
   const isAdmin = adminState === "yes";
   const visibleMaterials = useMemo(() => materials.filter((material) => isAdmin || materialVisibleToLevel(material.target_years, profile.learnerLevel)), [materials, isAdmin, profile.learnerLevel]);
   const visibleAssignments = useMemo(() => assignments.filter((assignment) => isAdmin || materialVisibleToLevel(assignment.target_years, profile.learnerLevel)), [assignments, isAdmin, profile.learnerLevel]);
+  useEffect(() => {
+    let active = true;
+    void repository.getDefaultWallpaperTheme().then((themeId) => {
+      if (!active) return;
+      setPlatformDefaultTheme(themeId);
+      setPlatformDefaultLoaded(true);
+    }).catch((error) => {
+      if (!active) return;
+      console.warn("Could not load the platform wallpaper default:", error);
+      setPlatformDefaultTheme(null);
+      setPlatformDefaultLoaded(true);
+    });
+    return () => { active = false; };
+  }, []);
+  useEffect(() => {
+    const onPlatformDefaultChange = (event: Event) => {
+      const themeId = (event as CustomEvent<ThemeId | null>).detail;
+      setPlatformDefaultTheme(themeId);
+      setPlatformDefaultLoaded(true);
+    };
+    window.addEventListener("platform-wallpaper-default-change", onPlatformDefaultChange);
+    return () => window.removeEventListener("platform-wallpaper-default-change", onPlatformDefaultChange);
+  }, []);
+  useEffect(() => {
+    if (!userId || !platformDefaultLoaded || hasCustomWallpaper(profile.wallpaperUrl, profile.avatarUrl)) return;
+    const effectiveTheme = resolveProfileTheme(
+      profile.appearanceTheme,
+      profile.appearanceThemeUserSelected,
+      platformDefaultTheme,
+    );
+    if (profile.appearanceTheme === effectiveTheme) return;
+    setProfile((current) => current.appearanceThemeUserSelected
+      ? current
+      : { ...current, appearanceTheme: effectiveTheme });
+    setTheme(effectiveTheme);
+  }, [userId, platformDefaultLoaded, platformDefaultTheme, profile.appearanceTheme, profile.appearanceThemeUserSelected, profile.wallpaperUrl, profile.avatarUrl]);
   useEffect(() => {
     window.localStorage.removeItem("group13-wallpaper");
     const wallpaper = resolveWallpaper(themeId, profile.wallpaperUrl, profile.avatarUrl);
@@ -367,7 +407,13 @@ function App() {
       setUserId(session?.user?.id ?? null);
       const level = typeof metadata.learner_level === "string" && learnerLevels.some((item) => item.id === metadata.learner_level) ? metadata.learner_level as LearnerLevel : "";
       const preference = typeof metadata.learning_preference === "string" && learningPreferences.some((item) => item.id === metadata.learning_preference) ? metadata.learning_preference as LearningPreference : "";
-      const appearanceTheme = normalizeThemeId(metadata.appearance_theme ?? themeId);
+      const appearanceThemeUserSelected = hasPersonalThemeSelection(
+        metadata.appearance_theme,
+        metadata.appearance_theme_selected,
+      );
+      const appearanceTheme = appearanceThemeUserSelected
+        ? normalizeThemeId(metadata.appearance_theme)
+        : normalizeThemeId(themeId);
       const learnerProfile: import("./lib/learnerAdaptation").LearningProfile = { learnerLevel: level as import("./lib/learnerAdaptation").LearnerLevel, learningPreference: preference as import("./lib/learnerAdaptation").LearningPreference };
       setLearnerAdaptation(learnerProfile);
       setTheme(appearanceTheme);
@@ -390,6 +436,7 @@ function App() {
             ? metadata.wallpaper_url
             : "",
         appearanceTheme,
+        appearanceThemeUserSelected,
       });
     };
     const finishAuthCallback = async () => {
@@ -822,6 +869,9 @@ function App() {
       avatar_url: changes.avatarUrl ?? profile.avatarUrl,
       wallpaper_url: changes.wallpaperUrl ?? profile.wallpaperUrl,
       appearance_theme: normalizeThemeId(changes.appearanceTheme ?? profile.appearanceTheme),
+      appearance_theme_selected: changes.appearanceTheme !== undefined
+        ? true
+        : profile.appearanceThemeUserSelected,
       learner_level: selectedLevel,
       learning_preference: selectedLevel ? defaultLearningPreference(selectedPreference) : selectedPreference,
     };
@@ -835,6 +885,7 @@ function App() {
       avatarUrl: metadata.avatar_url,
       wallpaperUrl: metadata.wallpaper_url,
       appearanceTheme: metadata.appearance_theme,
+      appearanceThemeUserSelected: metadata.appearance_theme_selected,
     });
     setTheme(metadata.appearance_theme);
     setLearnerAdaptation({ learnerLevel: metadata.learner_level as LearnerLevel | "", learningPreference: metadata.learning_preference as LearningPreference | "" });
