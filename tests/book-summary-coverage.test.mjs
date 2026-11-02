@@ -142,4 +142,8 @@ test("production routes batch all book sections and expose both document downloa
   assert.match(assignmentHelper, /indexed sections \$\{part\.startSection\}/);
   assert.match(assignmentHelper, /cleanBookReviewText/);
   assert.match(assignmentHelper, /assignment-book-review-plain/);
+  assert.match(assignmentHelper, /const reviewAngles =/);
+  assert.match(assignmentHelper, /ORIGINALITY AND MEANINGFULNESS/);
+  assert.match(assignmentHelper, /specific book detail in each body paragraph/);
+  assert.match(assignmentHelper, /Do not copy phrases, sentence shapes, paragraph order/);
 });

@@ -20,6 +20,16 @@ const tools: Tool[] = [
   { id: "book-review", feature: "rw_draft", label: "Write a book review", description: "Create an official, organized review of one AI-readable Library book with Word and PDF download." },
 ];
 const reviewKey = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, 12000);
+const reviewAngles = [
+  "the development of the main characters and relationships",
+  "the central ethical, political, or social tension",
+  "the author's structure, language, imagery, and other writing techniques",
+  "the setting and the institutions or community relationships it exposes",
+  "the book's strongest argument or central idea and how convincingly it is developed",
+  "the balance between the book's achievements and its specific limitations",
+  "the book's significance for students, citizens, or law students where the text supports it",
+  "the turning points, ending, and what they reveal about the book's deeper meaning",
+];
 const cleanBookReviewText = (text: string) => text
   .replace(/\[(?:S\d+|source\s*\d+)\]/gi, "")
   .replace(/\bS\d+\b/g, "")
@@ -97,12 +107,15 @@ export default function AssignmentHelperPage({ assignments, learnerLevel = "" }:
       const previous = await supabase.from("book_reviews").select("review_text").eq("book_key", selectedBook.id).order("created_at", { ascending: false }).limit(8);
       previousReviews = (previous.data ?? []) as { review_text: string }[];
     }
+    const reviewAngle = reviewAngles[(previousReviews.length + Math.floor(Math.random() * reviewAngles.length)) % reviewAngles.length];
     const context = [
       `Assignment title: ${(isBookReview ? selectedBook?.title : title) || title || "Untitled assignment"}`,
       `Assignment brief/question:\n${requestedBrief}`,
       selectedSources.length ? `Selected AI-readable source documents:\n${selectedSources.map((source) => `- ${source.title}${source.citation ? ` (${source.citation})` : ""}`).join("\n")}` : "",
       draft.trim() ? `Student draft or working notes:\n${draft.trim()}` : "No draft supplied yet.",
-      isBookReview ? `WRITE THE COMPLETE BOOK REVIEW NOW USING THIS EXACT PLAIN-TEXT STRUCTURE. Do not use Markdown, bullets, numbered headings, tables, emojis, decorative separators, citations in brackets, or any introductory or closing note outside this structure. Start with this exact title on its own line: BOOK REVIEW. Then write these metadata lines in this exact order, one per line: Title: [book title]; Author: [author]; Publisher: [publisher]; Year of Publication: [year]; Price: [price]; Pages: [number]; Availability: [availability]; Reviewer: ${reviewer.trim() || "[Reviewer name not supplied]"}. Then write the review as ordinary paragraphs only, with no section headings. Cover the setting and subject, main events or argument, important themes and writing techniques, strengths and weaknesses, relevance to law students where genuinely relevant, and a concluding assessment. Extract metadata only when supported by the book text or Library record. For missing metadata write [Not stated — verify] rather than inventing it. Do not repeat generic praise, paragraphs, or sentences. Make the review specific, balanced, official in tone, and source-grounded. This is a book review, not a plot-only summary and not an assignment answer.` : "",
+      isBookReview ? `WRITE THE COMPLETE BOOK REVIEW NOW USING THIS EXACT PLAIN-TEXT STRUCTURE. Do not use Markdown, bullets, numbered headings, tables, emojis, decorative separators, citations in brackets, or any introductory or closing note outside this structure. Start with this exact title on its own line: BOOK REVIEW. Then write these metadata lines in this exact order, one per line: Title: [book title]; Author: [author]; Publisher: [publisher]; Year of Publication: [year]; Price: [price]; Pages: [number]; Availability: [availability]; Reviewer: ${reviewer.trim() || "[Reviewer name not supplied]"}. Then write the review as ordinary paragraphs only, with no section headings. Cover the setting and subject, main events or argument, important themes and writing techniques, strengths and weaknesses, relevance to law students where genuinely relevant, and a concluding assessment. Extract metadata only when supported by the book text or Library record. For missing metadata write [Not stated — verify] rather than inventing it. Do not repeat generic praise, paragraphs, or sentences. Make the review specific, balanced, official in tone, and source-grounded. This is a book review, not a plot-only summary and not an assignment answer.
+
+ORIGINALITY AND MEANINGFULNESS: Build this review around the primary critical angle of ${reviewAngle}, but use that angle only where the book evidence supports it; never force it or invent details. Make every body paragraph do useful work: identify a specific event, character, image, argument, technique, or passage-level pattern from the processed book, explain its significance, and connect it to the overall judgment. Include fair, concrete criticism rather than generic praise. Avoid stock openings, empty adjectives, repeated metaphors, predictable paragraph templates, and wording that resembles previous reviews. A different angle is valuable only when it produces a defensible, book-specific interpretation.` : "",
       isBookReview && previousReviews.length ? `PREVIOUS REVIEWS OF THIS SAME BOOK (use them only to avoid repeating their wording and angle; do not quote or reproduce them):\n${previousReviews.slice(0, 5).map((item, index) => `Review ${index + 1}: ${item.review_text.slice(0, 3500)}`).join("\n\n")}` : "",
       tool.feature === "rw_outline" ? "Include a practical section-by-section outline, thesis options, counterargument, and approximate word counts." : "",
       tool.feature === "irac" ? "Do not write the final answer. Produce a study-ready IRAC plan tied to the facts." : "",
@@ -130,7 +143,7 @@ export default function AssignmentHelperPage({ assignments, learnerLevel = "" }:
           const notes = partResult.answer.replace(/^>[^\n]*\n?/m, "").trim().slice(0, 1400);
           return `[Indexed sections ${part.startSection}–${part.endSection}] ${extractBookPartRecap(partResult.answer)}\nDetailed evidence: ${notes}`;
         }).join("\n\n");
-        const synthesisPrompt = `${context}\n\nFULL-BOOK COVERAGE REQUIREMENT: The ordered evidence below was created by processing every readable indexed section of the selected book. Use all of it. Do not omit important events, arguments, themes, character changes, qualifications, weaknesses or conclusions merely because they appear late in the book.\n\nORDERED FULL-BOOK EVIDENCE:\n${orderedEvidence}\n\nNow write the final review in the exact plain-text structure requested above. Do not include source markers such as [S1] or [S2].`;
+        const synthesisPrompt = `${context}\n\nFULL-BOOK COVERAGE REQUIREMENT: The ordered evidence below was created by processing every readable indexed section of the selected book. Use all of it. Do not omit important events, arguments, themes, character changes, qualifications, weaknesses or conclusions merely because they appear late in the book.\n\nMEANINGFUL ORIGINALITY REQUIREMENT: Build this review around the critical angle of ${reviewAngle}. Use a specific book detail in each body paragraph, explain why it matters, and give a balanced judgment with concrete strengths and limitations. Do not copy phrases, sentence shapes, paragraph order, or distinctive interpretations from previous reviews. Do not add detail unless it appears in the ordered evidence.\n\nORDERED FULL-BOOK EVIDENCE:\n${orderedEvidence}\n\nNow write the final review in the exact plain-text structure requested above. Do not include source markers such as [S1] or [S2].`;
         response = await askAI({ feature: "summarize", mode: "general", messages: [{ role: "user", content: synthesisPrompt }] });
         response = { ...response, answer: cleanBookReviewText(response.answer), grounded: true, warnings: [...response.warnings, `All ${totalSections} readable indexed sections were processed in ${completed.length} ordered batches before synthesis.`] };
         if (previousReviews.some((item) => reviewKey(item.review_text) === reviewKey(response.answer))) {
