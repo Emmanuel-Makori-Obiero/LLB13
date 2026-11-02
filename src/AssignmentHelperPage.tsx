@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { BookOpen, CheckCircle2, Download, FileText, Lightbulb, RefreshCw, Search, Sparkles } from "lucide-react";
 import { Markdown } from "./Markdown";
 import StorytellButton from "./StorytellButton";
-import { askAI, importLibraryMaterial, type AIFeature, type AIResult } from "./lib/ai";
+import { askAI, countMaterialChunks, importLibraryMaterial, type AIFeature, type AIResult } from "./lib/ai";
 import { listGuideSources, type SourceChoice } from "./lib/guidedStudy";
+import { extractBookPartRecap, planBookSummary, requestBookSummaryPart } from "./lib/bookSummary";
 import { downloadPdf, downloadWord } from "./export";
 import { materialVisibleToLevel } from "./lib/learnerAdaptation";
 import type { Assignment } from "./data/types";
@@ -19,6 +20,13 @@ const tools: Tool[] = [
   { id: "book-review", feature: "rw_draft", label: "Write a book review", description: "Create an official, organized review of one AI-readable Library book with Word and PDF download." },
 ];
 const reviewKey = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, 12000);
+const cleanBookReviewText = (text: string) => text
+  .replace(/\[(?:S\d+|source\s*\d+)\]/gi, "")
+  .replace(/\bS\d+\b/g, "")
+  .replace(/^#{1,6}\s+/gm, "")
+  .replace(/\*\*/g, "")
+  .replace(/\n{3,}/g, "\n\n")
+  .trim();
 
 export default function AssignmentHelperPage({ assignments, learnerLevel = "" }: { assignments: Assignment[]; learnerLevel?: string }) {
   const [sources, setSources] = useState<SourceChoice[]>([]);
@@ -94,7 +102,7 @@ export default function AssignmentHelperPage({ assignments, learnerLevel = "" }:
       `Assignment brief/question:\n${requestedBrief}`,
       selectedSources.length ? `Selected AI-readable source documents:\n${selectedSources.map((source) => `- ${source.title}${source.citation ? ` (${source.citation})` : ""}`).join("\n")}` : "",
       draft.trim() ? `Student draft or working notes:\n${draft.trim()}` : "No draft supplied yet.",
-      isBookReview ? `WRITE THE COMPLETE BOOK REVIEW NOW. Produce a formal, publication-ready academic book review of the single selected Library book. Use exactly this order and headings: Bibliographic details; Title; Author; Publisher; Year of publication; Price; Reviewer; Review; Summary and scope; Critical evaluation; Relevance to law students; Conclusion. Extract metadata only when supported by the book text or Library record. For missing publisher, year, price or author, write [Not stated — verify] rather than inventing it. The reviewer name is ${reviewer.trim() || "[Reviewer name not supplied]"}. Do not repeat generic praise, paragraphs, or sentences. Make the review specific to this book, balanced, well organized and official in tone. This is a review, not a plot summary and not an assignment answer.` : "",
+      isBookReview ? `WRITE THE COMPLETE BOOK REVIEW NOW USING THIS EXACT PLAIN-TEXT STRUCTURE. Do not use Markdown, bullets, numbered headings, tables, emojis, decorative separators, citations in brackets, or any introductory or closing note outside this structure. Start with this exact title on its own line: BOOK REVIEW. Then write these metadata lines in this exact order, one per line: Title: [book title]; Author: [author]; Publisher: [publisher]; Year of Publication: [year]; Price: [price]; Pages: [number]; Availability: [availability]; Reviewer: ${reviewer.trim() || "[Reviewer name not supplied]"}. Then write the review as ordinary paragraphs only, with no section headings. Cover the setting and subject, main events or argument, important themes and writing techniques, strengths and weaknesses, relevance to law students where genuinely relevant, and a concluding assessment. Extract metadata only when supported by the book text or Library record. For missing metadata write [Not stated — verify] rather than inventing it. Do not repeat generic praise, paragraphs, or sentences. Make the review specific, balanced, official in tone, and source-grounded. This is a book review, not a plot-only summary and not an assignment answer.` : "",
       isBookReview && previousReviews.length ? `PREVIOUS REVIEWS OF THIS SAME BOOK (use them only to avoid repeating their wording and angle; do not quote or reproduce them):\n${previousReviews.slice(0, 5).map((item, index) => `Review ${index + 1}: ${item.review_text.slice(0, 3500)}`).join("\n\n")}` : "",
       tool.feature === "rw_outline" ? "Include a practical section-by-section outline, thesis options, counterargument, and approximate word counts." : "",
       tool.feature === "irac" ? "Do not write the final answer. Produce a study-ready IRAC plan tied to the facts." : "",
@@ -102,11 +110,37 @@ export default function AssignmentHelperPage({ assignments, learnerLevel = "" }:
       "Use only retrieved AI-readable source text for source-specific legal claims. Never invent authorities or citations.",
     ].filter(Boolean).join("\n\n");
     try {
-      const requestReview = (extra = "") => askAI({ feature: tool.feature, mode: selectedIds.length ? groundingMode : "general", docIds: selectedIds, messages: [{ role: "user", content: `${context}${extra}` }] });
-      let response = await requestReview();
-      if (isBookReview && previousReviews.some((item) => reviewKey(item.review_text) === reviewKey(response.answer))) {
-        response = await requestReview("\n\nYour first draft duplicates an existing review too closely. Rewrite it with a materially different thesis, paragraph order, examples, critical angle and wording. Do not reuse distinctive phrases from the previous reviews.");
+      let response: AIResult;
+      if (isBookReview && selectedBook) {
+        const totalSections = await countMaterialChunks(selectedBook.id);
+        const plan = planBookSummary(totalSections);
+        const completed: { plan: (typeof plan)[number]; result: AIResult }[] = [];
+        for (const part of plan) {
+          setNotice(`Reading the complete book: indexed sections ${part.startSection}–${part.endSection} of ${totalSections}…`);
+          const parts = await requestBookSummaryPart(
+            `Prepare concise but information-dense evidence for an eventual book review. Preserve important events, characters, arguments, themes, writing techniques, strengths, weaknesses, turning points, qualifications and conclusions from this range. Do not use outside knowledge. The final review must not claim details that are absent from these ordered notes.`,
+            part,
+            selectedBook.id,
+            groundingMode,
+            askAI,
+          );
+          completed.push(...parts);
+        }
+        const orderedEvidence = completed.map(({ plan: part, result: partResult }) => {
+          const notes = partResult.answer.replace(/^>[^\n]*\n?/m, "").trim().slice(0, 1400);
+          return `[Indexed sections ${part.startSection}–${part.endSection}] ${extractBookPartRecap(partResult.answer)}\nDetailed evidence: ${notes}`;
+        }).join("\n\n");
+        const synthesisPrompt = `${context}\n\nFULL-BOOK COVERAGE REQUIREMENT: The ordered evidence below was created by processing every readable indexed section of the selected book. Use all of it. Do not omit important events, arguments, themes, character changes, qualifications, weaknesses or conclusions merely because they appear late in the book.\n\nORDERED FULL-BOOK EVIDENCE:\n${orderedEvidence}\n\nNow write the final review in the exact plain-text structure requested above. Do not include source markers such as [S1] or [S2].`;
+        response = await askAI({ feature: "summarize", mode: "general", messages: [{ role: "user", content: synthesisPrompt }] });
+        response = { ...response, answer: cleanBookReviewText(response.answer), grounded: true, warnings: [...response.warnings, `All ${totalSections} readable indexed sections were processed in ${completed.length} ordered batches before synthesis.`] };
+        if (previousReviews.some((item) => reviewKey(item.review_text) === reviewKey(response.answer))) {
+          response = { ...response, answer: cleanBookReviewText((await askAI({ feature: "summarize", mode: "general", messages: [{ role: "user", content: `${synthesisPrompt}\n\nThis draft is too similar to an earlier review. Rewrite it with a materially different structure, critical angle, examples and wording while retaining all supported book details. Do not reuse distinctive phrases.` }] })).answer) };
+        }
+      } else {
+        const requestReview = (extra = "") => askAI({ feature: tool.feature, mode: selectedIds.length ? groundingMode : "general", docIds: selectedIds, messages: [{ role: "user", content: `${context}${extra}` }] });
+        response = await requestReview();
       }
+      if (isBookReview) response = { ...response, answer: cleanBookReviewText(response.answer) };
       if (isBookReview && supabase && selectedBook) {
         const { data: auth } = await supabase.auth.getUser();
         if (auth.user) {
@@ -121,6 +155,7 @@ export default function AssignmentHelperPage({ assignments, learnerLevel = "" }:
   };
 
   const resultTitle = isBookReview ? `Book review — ${selectedBook?.title || title || "Library book"}` : (title || "Assignment helper");
+  const exportOptions = { plainBookReview: isBookReview, eyebrow: isBookReview ? "Group 13 · Library book review" : "Group 13 · Assignment helper", subtitle: isBookReview ? (selectedBook?.title || "Official book review") : title || "Study notes", sources: selectedSources.map((source) => source.title) };
   return <section className="assignment-helper-page">
     <div className="page-heading">
       <div><div className="eyebrow">Plan, understand, improve</div><h1 className="heading">AI Assignment Helper.</h1><p className="subheading">Paste the assignment brief, select AI-readable source documents, and work through the question step by step. It helps you think and improve; it does not submit work for you.</p></div>
@@ -152,7 +187,7 @@ export default function AssignmentHelperPage({ assignments, learnerLevel = "" }:
         {visibleSources.length > 8 && <button type="button" className="assignment-source-more" onClick={() => setSourcesExpanded((expanded) => !expanded)}>{sourcesExpanded ? "Show fewer sources" : `Show all ${visibleSources.length} sources`}</button>}
         <div className="assignment-actions"><button className="secondary-button" onClick={() => void loadSources()}><RefreshCw size={13} /> Refresh sources</button><button className="primary-button" onClick={() => void run()} disabled={busy || (!brief.trim() && !isBookReview)}><Sparkles size={14} /> {busy ? "Writing…" : isBookReview ? "Write the book review" : tool.label}</button></div>
       </div>
-      <div className="card card-pad assignment-helper-result"><div className="assignment-result-head"><div className="section-label">{isBookReview ? "Official book review" : "Your tutor's response"}</div>{result && <div className="export-actions"><button className="secondary-button small-action" onClick={() => downloadWord(resultTitle, result.answer, isBookReview ? "book-review.docx" : "assignment-helper.docx", { eyebrow: isBookReview ? "Group 13 · Library book review" : "Group 13 · Assignment helper", subtitle: isBookReview ? (selectedBook?.title || "Official book review") : title || "Study notes", sources: selectedSources.map((source) => source.title) })}><Download size={13} /> Word</button><button className="secondary-button small-action" onClick={() => downloadPdf(resultTitle, result.answer, isBookReview ? "book-review.pdf" : "assignment-helper.pdf", { eyebrow: isBookReview ? "Group 13 · Library book review" : "Group 13 · Assignment helper", subtitle: isBookReview ? (selectedBook?.title || "Official book review") : title || "Study notes", sources: selectedSources.map((source) => source.title) })}><Download size={13} /> PDF</button></div>}</div>{result ? <><div className="assignment-result-meta"><CheckCircle2 size={15} /> {isBookReview ? "Official review grounded in the selected Library book" : result.grounded ? "Grounded in selected sources" : "General legal overview"}{assignmentId ? ` · Linked to ${assignments.find((assignment) => assignment.id === assignmentId)?.title ?? "assignment"}` : ""}</div><Markdown text={result.answer} /><StorytellButton title={resultTitle} source={result.answer} />{result.warnings.length > 0 && <div className="assignment-warnings"><strong>Source note</strong>{result.warnings.map((warning) => <p key={warning}>{warning}</p>)}</div>}</> : <div className="assignment-empty"><Sparkles size={28} /><h2>{isBookReview ? "Choose a Library book" : "Start with the question"}</h2><p>{isBookReview ? "Select one Library book above, then generate an official review with metadata, critical evaluation and download options." : "Choose an assignment or paste the question, then select AI-readable source text to ground your work."}</p></div>}</div>
+      <div className="card card-pad assignment-helper-result"><div className="assignment-result-head"><div className="section-label">{isBookReview ? "Official book review" : "Your tutor's response"}</div>{result && <div className="export-actions"><button className="secondary-button small-action" onClick={() => downloadWord(resultTitle, result.answer, isBookReview ? "book-review.docx" : "assignment-helper.docx", exportOptions)}><Download size={13} /> Word</button><button className="secondary-button small-action" onClick={() => downloadPdf(resultTitle, result.answer, isBookReview ? "book-review.pdf" : "assignment-helper.pdf", exportOptions)}><Download size={13} /> PDF</button></div>}</div>{result ? <><div className="assignment-result-meta"><CheckCircle2 size={15} /> {isBookReview ? "Official review grounded in the selected Library book" : result.grounded ? "Grounded in selected sources" : "General legal overview"}{assignmentId ? ` · Linked to ${assignments.find((assignment) => assignment.id === assignmentId)?.title ?? "assignment"}` : ""}</div>{isBookReview ? <pre className="assignment-book-review-plain">{result.answer}</pre> : <Markdown text={result.answer} />}<StorytellButton title={resultTitle} source={result.answer} />{result.warnings.length > 0 && <div className="assignment-warnings"><strong>Source note</strong>{result.warnings.map((warning) => <p key={warning}>{warning}</p>)}</div>}</> : <div className="assignment-empty"><Sparkles size={28} /><h2>{isBookReview ? "Choose a Library book" : "Start with the question"}</h2><p>{isBookReview ? "Select one Library book above, then generate an official review with metadata, critical evaluation and download options." : "Choose an assignment or paste the question, then select the AI-readable source text to ground your work."}</p></div>}</div>
     </div>
   </section>;
 }

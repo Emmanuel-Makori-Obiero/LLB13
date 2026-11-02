@@ -114,6 +114,7 @@ test("recaps and the whole-book overview use ordered source-grounded text", () =
 
 test("production routes batch all book sections and expose both document downloads", () => {
   const page = fs.readFileSync(new URL("../src/StudyAssistant.tsx", import.meta.url), "utf8");
+  const assignmentHelper = fs.readFileSync(new URL("../src/AssignmentHelperPage.tsx", import.meta.url), "utf8");
   const library = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
   const api = fs.readFileSync(new URL("../src/lib/ai.ts", import.meta.url), "utf8");
   const server = fs.readFileSync(new URL("../supabase/functions/ai/index.ts", import.meta.url), "utf8");
@@ -137,4 +138,8 @@ test("production routes batch all book sections and expose both document downloa
   assert.match(library, /onClick=\{\(\) => void summarizeLibraryMaterial\(material\)\}/);
   assert.match(library, /Download DOCX/);
   assert.match(library, /Download PDF/);
+  assert.match(assignmentHelper, /countMaterialChunks\(selectedBook\.id\)/);
+  assert.match(assignmentHelper, /indexed sections \$\{part\.startSection\}/);
+  assert.match(assignmentHelper, /cleanBookReviewText/);
+  assert.match(assignmentHelper, /assignment-book-review-plain/);
 });
