@@ -9,6 +9,8 @@ export interface Entry {
   noSystem?: boolean;
 }
 
+const DISABLED_PROVIDERS = new Set(["mistral", "cerebras"]);
+
 export function combineProviderChains(
   preferred: readonly Entry[],
   fallback: readonly Entry[],
@@ -16,6 +18,7 @@ export function combineProviderChains(
   const seen = new Set<string>();
   const result: Entry[] = [];
   for (const entry of [...preferred, ...fallback]) {
+    if (DISABLED_PROVIDERS.has(entry.provider.trim().toLowerCase())) continue;
     const baseUrl = entry.baseUrl.replace(/\/+$/, "");
     const identity = `${entry.provider}\0${baseUrl}\0${entry.model}\0${entry.keyEnv}`;
     if (seen.has(identity)) continue;
@@ -35,8 +38,13 @@ export function modelRouteCooldownMs(status: number, retryAfterSeconds = 0): num
   return 45_000;
 }
 
+export function isTransientProviderFailure(status: number): boolean {
+  return status === 0 || status === 408 || status === 425 || (status >= 500 && status < 600);
+}
+
 export function shouldTryAlternateApiKey(status: number, hasAnotherKey: boolean): boolean {
-  return hasAnotherKey && [401, 402, 403, 429].includes(status);
+  if (!hasAnotherKey) return false;
+  return [0, 401, 402, 403, 408, 425, 429].includes(status) || (status >= 500 && status < 600);
 }
 
 export function boundedProviderTimeoutMs(
@@ -67,8 +75,6 @@ const BASE = {
   nvidia: ["https://integrate.api.nvidia.com/v1", "NVIDIA_API_KEY"],
   openrouter: ["https://openrouter.ai/api/v1", "OPENROUTER_API_KEY"],
   groq: ["https://api.groq.com/openai/v1", "GROQ_API_KEY"],
-  cerebras: ["https://api.cerebras.ai/v1", "CEREBRAS_API_KEY"],
-  mistral: ["https://api.mistral.ai/v1", "MISTRAL_API_KEY"],
 } as const;
 
 const e = (
@@ -83,8 +89,6 @@ const e = (
 // The OpenRouter free router selects from models it currently marks available,
 // avoiding hard-coded free slugs that quickly become stale.
 export const DEFAULT_CHAIN: Entry[] = [
-  e("cerebras", "gpt-oss-120b", "effort", false, 12000),
-  e("mistral", "mistral-large-latest"),
   e("gemini", "gemini-3.8-flash", "effort", false, 16000),
   e("groq", "openai/gpt-oss-20b", "effort", false, 8192),
   e("openrouter", "openrouter/free", "openrouter", false, 8192),

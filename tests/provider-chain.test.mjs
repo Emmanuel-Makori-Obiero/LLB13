@@ -1,13 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { boundedProviderTimeoutMs, combineProviderChains, DEFAULT_CHAIN, modelRouteCooldownMs, reasoningAttemptVariants, shouldTryAlternateApiKey } from "../supabase/functions/ai/providers.ts";
+import { boundedProviderTimeoutMs, combineProviderChains, DEFAULT_CHAIN, isTransientProviderFailure, modelRouteCooldownMs, reasoningAttemptVariants, shouldTryAlternateApiKey } from "../supabase/functions/ai/providers.ts";
 import { failoverKeyCandidates, newestKeySlotsFirst, selectFastFailoverKey } from "../supabase/functions/_shared/keys.ts";
 
 test("the AI provider chain uses current high-availability fallback model IDs", () => {
   const ids = DEFAULT_CHAIN.map(({ provider, model }) => `${provider}:${model}`);
-  assert.equal(ids[0], "cerebras:gpt-oss-120b");
-  assert.equal(ids[1], "mistral:mistral-large-latest");
+  assert.equal(ids[0], "gemini:gemini-3.8-flash");
+  assert.equal(ids[1], "groq:openai/gpt-oss-20b");
+  assert.ok(!DEFAULT_CHAIN.some(({ provider }) => ["mistral", "cerebras"].includes(provider.toLowerCase())));
   for (const expected of [
     "gemini:gemini-3.8-flash",
     "groq:openai/gpt-oss-20b",
@@ -46,6 +47,16 @@ test("configured duplicates are removed while alternate key sources are retained
   assert.equal(merged[2].model, DEFAULT_CHAIN[1].model);
 });
 
+test("custom chains cannot re-enable Mistral or Cerebras", () => {
+  const disabled = ["Mistral", "CEREBRAS"].map((provider) => ({
+    ...DEFAULT_CHAIN[0],
+    provider,
+    baseUrl: `https://${provider.toLowerCase()}.invalid/v1`,
+  }));
+  const merged = combineProviderChains(disabled, DEFAULT_CHAIN);
+  assert.ok(merged.every(({ provider }) => !["mistral", "cerebras"].includes(provider.toLowerCase())));
+});
+
 test("one model attempt uses one key, and later provider models rotate through newer slots first", () => {
   const entries = [
     { slot: 0, value: "legacy" },
@@ -67,15 +78,26 @@ test("each model route can fall through every configured API-key slot", () => {
   assert.deepEqual(failoverKeyCandidates(entries, 1).map(({ slot }) => slot), [1, 0, 7]);
   assert.equal(shouldTryAlternateApiKey(401, true), true);
   assert.equal(shouldTryAlternateApiKey(403, true), true);
+  assert.equal(shouldTryAlternateApiKey(402, true), true);
   assert.equal(shouldTryAlternateApiKey(429, true), true);
+  for (const status of [0, 408, 425, 500, 502, 503, 504, 599]) {
+    assert.equal(shouldTryAlternateApiKey(status, true), true, `should retry another key after ${status}`);
+  }
   assert.equal(shouldTryAlternateApiKey(404, true), false);
+  assert.equal(shouldTryAlternateApiKey(413, true), false);
   assert.equal(shouldTryAlternateApiKey(429, false), false);
+  assert.equal(isTransientProviderFailure(0), true);
+  assert.equal(isTransientProviderFailure(503), true);
+  assert.equal(isTransientProviderFailure(429), false);
 });
 
 test("the Edge Function wires key-slot failover into the provider request loop", () => {
   const handler = readFileSync(new URL("../supabase/functions/ai/index.ts", import.meta.url), "utf8");
   assert.match(handler, /failoverKeyCandidates\(keys, cursor\)/);
   assert.match(handler, /shouldTryAlternateApiKey\(res\.status, keyIndex < keyCandidates\.length - 1\)/);
+  assert.match(handler, /isTransientProviderFailure\(res\.status\)/);
+  assert.match(handler, /shouldTryAlternateApiKey\(0, keyIndex < keyCandidates\.length - 1\)/);
+  assert.match(handler, /transientKeyRetries < 1/);
   assert.match(handler, /if \(retryWithNextKey\) continue;/);
   assert.match(handler, /invalidKeyUntil\.set\(credentialId/);
 });

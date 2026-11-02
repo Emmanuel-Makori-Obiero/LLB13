@@ -31,7 +31,7 @@ import { materialVisibleToLevel, normalizeLearnerLevel } from "../_shared/cohort
 export type Msg = { role: "system" | "user" | "assistant"; content: string };
 type ReasoningStyle = "openrouter" | "effort" | "none";
 
-import { boundedProviderTimeoutMs, combineProviderChains, DEFAULT_CHAIN, modelRouteCooldownMs, reasoningAttemptVariants, shouldTryAlternateApiKey, type Entry } from "./providers.ts";
+import { boundedProviderTimeoutMs, combineProviderChains, DEFAULT_CHAIN, isTransientProviderFailure, modelRouteCooldownMs, reasoningAttemptVariants, shouldTryAlternateApiKey, type Entry } from "./providers.ts";
 
 function chain(feature?: string): Entry[] {
   const stageName = feature
@@ -153,8 +153,8 @@ export async function callChain(
   const perCall = boundedProviderTimeoutMs(configuredPerCall, inputChars, opts.feature);
   const attempts: Attempt[] = [];
   let retryAfterMs = 0;
-  // Try key alternatives on credential/quota failures, rotate the starting slot
-  // across later routes, and advance to another provider after terminal failures.
+  // Try other configured keys on credential/quota failures and one backup key
+  // on transient failures, then move on to another model/provider route.
   const unavailableRoutes = new Set<string>();
   // Key cursors are request-local: each new request begins with the newest
   // available key, then advances across later model routes in this chain.
@@ -181,6 +181,7 @@ export async function callChain(
       continue;
     }
     keyCursors.set(ent.keyEnv, cursor + 1);
+    let transientKeyRetries = 0;
     for (const [keyIndex, keyEntry] of keyCandidates.entries()) {
       const key = keyEntry.value;
       const slotLabel = keyEntry.slot > 0 ? `#${keyEntry.slot}` : "#legacy";
@@ -240,8 +241,12 @@ export async function callChain(
             if (withReasoning) continue;
             attempts.push({ id: eid, status: "empty" });
             cooldownUntil.set(eid, Date.now() + 60_000);
-            unavailableRoutes.add(route);
-            routeCooldownUntil.set(route, Date.now() + 60_000);
+            retryWithNextKey = shouldTryAlternateApiKey(0, keyIndex < keyCandidates.length - 1) && transientKeyRetries < 1;
+            if (retryWithNextKey) transientKeyRetries += 1;
+            if (!retryWithNextKey) {
+              unavailableRoutes.add(route);
+              routeCooldownUntil.set(route, Date.now() + 60_000);
+            }
             break;
           }
           if (res.status === 400 && withReasoning) continue;
@@ -253,7 +258,10 @@ export async function callChain(
           const retryAfter = Number(res.headers.get("retry-after")) || 0;
           retryAfterMs = Math.max(retryAfterMs, retryAfter * 1000);
           const cool = modelRouteCooldownMs(res.status, retryAfter);
-          retryWithNextKey = shouldTryAlternateApiKey(res.status, keyIndex < keyCandidates.length - 1);
+          const transientFailure = isTransientProviderFailure(res.status);
+          retryWithNextKey = shouldTryAlternateApiKey(res.status, keyIndex < keyCandidates.length - 1) &&
+            (!transientFailure || transientKeyRetries < 1);
+          if (retryWithNextKey && transientFailure) transientKeyRetries += 1;
           cooldownUntil.set(eid, Date.now() + cool);
           if (res.status === 401) invalidKeyUntil.set(credentialId, Date.now() + cool);
           if (!retryWithNextKey) {
@@ -267,8 +275,12 @@ export async function callChain(
           break;
         } catch (err) {
           cooldownUntil.set(eid, Date.now() + 45_000);
-          unavailableRoutes.add(route);
-          routeCooldownUntil.set(route, Date.now() + 45_000);
+          retryWithNextKey = shouldTryAlternateApiKey(0, keyIndex < keyCandidates.length - 1) && transientKeyRetries < 1;
+          if (retryWithNextKey) transientKeyRetries += 1;
+          if (!retryWithNextKey) {
+            unavailableRoutes.add(route);
+            routeCooldownUntil.set(route, Date.now() + 45_000);
+          }
           attempts.push({ id: eid, status: err instanceof DOMException ? "timeout" : "network" });
           break;
         }
