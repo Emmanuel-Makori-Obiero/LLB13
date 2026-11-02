@@ -22,6 +22,7 @@ export type AIFeature =
   | "explain"
   | "book_explain"
   | "book_chat"
+  | "book_review"
   | "summarize"
   | "book_summary_synthesis"
   | "book_contents"

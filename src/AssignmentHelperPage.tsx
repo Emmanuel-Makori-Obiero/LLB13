@@ -15,6 +15,7 @@ const tools: Tool[] = [
   { feature: "irac", label: "Make an IRAC plan", description: "Turn a problem question into issues, rules, application points, and conclusions." },
   { feature: "rw_critique", label: "Review my draft", description: "Find gaps in reasoning, structure, authority, counterarguments, and clarity without rewriting your voice." },
   { feature: "rw_citations", label: "Check citations", description: "Format the authorities you provide and flag missing details instead of inventing them." },
+  { feature: "book_review", label: "Write a book review", description: "Create a review in the book-report format using one selected AI-readable book." },
 ];
 
 export default function AssignmentHelperPage({ assignments, learnerLevel = "" }: { assignments: Assignment[]; learnerLevel?: string }) {
@@ -61,12 +62,17 @@ export default function AssignmentHelperPage({ assignments, learnerLevel = "" }:
 
   const run = async () => {
     if (!brief.trim()) { setNotice("Paste the assignment question or brief first."); return; }
+    if (tool.feature === "book_review" && selectedSources.length !== 1) {
+      setNotice("Select exactly one AI-readable book in the source list to write its review.");
+      return;
+    }
     setBusy(true); setResult(null); setNotice("The assignment helper is working from your brief and selected sources…");
     const context = [
       `Assignment title: ${title || "Untitled assignment"}`,
       `Assignment brief/question:\n${brief.trim()}`,
       selectedSources.length ? `Selected AI-readable source documents:\n${selectedSources.map((source) => `- ${source.title}${source.citation ? ` (${source.citation})` : ""}`).join("\n")}` : "",
       draft.trim() ? `Student draft or working notes:\n${draft.trim()}` : "No draft supplied yet.",
+      tool.feature === "book_review" ? `Selected book for review: ${selectedSources[0]?.title ?? ""}${selectedSources[0]?.author ? ` — ${selectedSources[0].author}` : ""}\nReviewer name to print: ${reviewerName.trim() || "Not provided"}\nWrite the review from this selected book only. Do not treat the assignment title as the book title.` : "",
       tool.feature === "rw_outline" ? "Include a practical section-by-section outline, thesis options, counterargument, and approximate word counts." : "",
       tool.feature === "irac" ? "Do not write the final answer. Produce a study-ready IRAC plan tied to the facts." : "",
       tool.feature === "rw_critique" ? "Give specific improvements and preserve the student's own voice; do not fabricate authorities." : "",
@@ -95,8 +101,9 @@ export default function AssignmentHelperPage({ assignments, learnerLevel = "" }:
         <label>Draft or working notes <span className="field-hint">Optional for question analysis; useful for review.</span><textarea value={draft} onChange={(event) => setDraft(event.target.value)} rows={8} placeholder="Paste your introduction, outline, argument, or draft here." /></label>
         <div className="section-label">2. Choose a tool</div>
         <div className="assignment-tools">{tools.map((item) => <button type="button" key={item.feature} className={`assignment-tool ${tool.feature === item.feature ? "active" : ""}`} onClick={() => setTool(item)}><Lightbulb size={15} /><span><strong>{item.label}</strong><small>{item.description}</small></span></button>)}</div>
+        {tool.feature === "book_review" && <label>Reviewer name <span className="field-hint">Optional; omitted names are shown as “Not provided”.</span><input value={reviewerName} onChange={(event) => setReviewerName(event.target.value)} placeholder="e.g. Hillary Ogwankwa" /></label>}
         <div className="section-label">3. Choose source text</div>
-        <p className="field-hint">Choose AI-readable books and documents to ground the helper. The list is scrollable so a large Library will not make the page longer.</p>
+        <p className="field-hint">{tool.feature === "book_review" ? "Select exactly one AI-readable book. The review uses that book's indexed text and marks missing publication details as not stated instead of guessing." : "Choose AI-readable books and documents to ground the helper. The list is scrollable so a large Library will not make the page longer."}</p>
         <div className="assignment-source-toolbar" role="group" aria-label="Filter assignment sources">
           <span className="field-hint">{selectedSources.length} source{selectedSources.length === 1 ? "" : "s"} selected</span>
           <div className="assignment-source-filters">
@@ -112,3 +119,4 @@ export default function AssignmentHelperPage({ assignments, learnerLevel = "" }:
     </div>
   </section>;
 }
+  const [reviewerName, setReviewerName] = useState("");

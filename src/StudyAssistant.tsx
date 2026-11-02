@@ -90,6 +90,13 @@ const TASKS: Task[] = [
     fallback: "Create complete, source-grounded study notes for the selected book, preserving the main points in order.",
   },
   {
+    feature: "book_review",
+    label: "Book review",
+    needsDoc: true,
+    placeholder: "Optional: add a review rubric, known publication details, or notes to include",
+    fallback: "Write a source-grounded book review in the requested metadata-and-prose format.",
+  },
+  {
     feature: "book_contents",
     label: "Book contents",
     needsDoc: true,
@@ -369,6 +376,7 @@ export function StudyAssistant({ learnerLevel = "" }: { learnerLevel?: string })
   const [mode, setMode] = useState<AIMode>("auto");
   const [task, setTask] = useState<Task>(TASKS[0]);
   const [input, setInput] = useState("");
+  const [reviewerName, setReviewerName] = useState("");
   const [turns, setTurns] = useState<Turn[]>([]);
   const [busy, setBusy] = useState(false);
   const [docs, setDocs] = useState<Doc[]>([]);
@@ -472,9 +480,16 @@ export function StudyAssistant({ learnerLevel = "" }: { learnerLevel?: string })
       setNote("Choose exactly one book for a complete summary. Multiple books cannot be mixed into one coverage report.");
       return;
     }
+    if (task.feature === "book_review" && selected.length !== 1) {
+      setNote("Choose exactly one readable book to write its review. Multiple books cannot be mixed into one review.");
+      return;
+    }
     setNote("");
-    const selectedBook = task.feature === "summarize" ? docs.find((doc) => doc.id === selected[0]) : undefined;
-    const turn: Turn = { id: nextId.current++, task, prompt: text, bookTitle: selectedBook?.title };
+    const selectedBook = task.feature === "summarize" || task.feature === "book_review" ? docs.find((doc) => doc.id === selected[0]) : undefined;
+    const requestText = task.feature === "book_review"
+      ? `${text}\n\nSelected book for review: ${selectedBook?.title ?? "Selected book"}${selectedBook?.author ? ` — ${selectedBook.author}` : ""}\nReviewer name to print: ${reviewerName.trim() || "Not provided"}\nUse only the selected book's readable source text; do not treat the assignment title or prompt as book metadata.`
+      : text;
+    const turn: Turn = { id: nextId.current++, task, prompt: requestText, bookTitle: selectedBook?.title };
 
     // Document tasks need the chosen documents, so "Any law" is switched to "Smart" for them.
     const useMode: AIMode =
@@ -546,7 +561,7 @@ export function StudyAssistant({ learnerLevel = "" }: { learnerLevel?: string })
       const result = await askAI({
         feature: task.feature,
         mode: useMode,
-        messages: [...history, { role: "user", content: text }],
+        messages: [...history, { role: "user", content: requestText }],
         docIds: selected.length ? selected : undefined,
       });
       setTurns((all) =>
@@ -623,6 +638,10 @@ export function StudyAssistant({ learnerLevel = "" }: { learnerLevel?: string })
               </button>
             ))}
           </div>
+          {task.feature === "book_review" && <>
+            <label className="sa-reviewer-field">Reviewer name <span className="field-hint">Optional. If blank, the review says “Not provided”.</span><input value={reviewerName} onChange={(event) => setReviewerName(event.target.value)} placeholder="e.g. Hillary Ogwankwa" /></label>
+            <p className="field-hint">Select exactly one readable book on the right. Unknown publisher, year, price, page count, or availability will be marked as not stated instead of guessed.</p>
+          </>}
           <div className="sa-inputrow">
             <textarea
               value={input}
@@ -718,7 +737,7 @@ export function StudyAssistant({ learnerLevel = "" }: { learnerLevel?: string })
             />
           </div>
           <p className="field-hint">
-            PDF, Word, text, markdown, or scanned images. OCR runs automatically.
+            {task.feature === "book_review" ? "Select exactly one readable book to create a structured review." : "PDF, Word, text, markdown, or scanned images. OCR runs automatically."}
           </p>
           {mine.length === 0 ? (
             <p className="empty sa-none">No uploads yet.</p>
