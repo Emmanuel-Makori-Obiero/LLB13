@@ -70,6 +70,36 @@ const kenyanOpportunityBoards = [
     url: "https://lsk.or.ke/careers/",
     description: "Check the Law Society of Kenya’s official page for legal-sector vacancies when they are published.",
   },
+  {
+    label: "Jobs marketplace",
+    title: "BrighterMonday Kenya",
+    url: "https://www.brightermonday.co.ke/jobs",
+    description: "A large public Kenya jobs index with Nairobi, Mombasa, county, graduate, internship, and other location filters.",
+  },
+  {
+    label: "Jobs marketplace",
+    title: "Fuzu Kenya jobs",
+    url: "https://www.fuzu.com/kenya/job",
+    description: "Public Kenya vacancies across job categories and locations. Open the original listing to confirm eligibility and application steps.",
+  },
+  {
+    label: "Jobs marketplace",
+    title: "MyJobMag Kenya",
+    url: "https://www.myjobmag.co.ke/jobs",
+    description: "Public Kenya jobs index with county, industry, and job-field categories. Listings may remain visible after closing, so verify dates.",
+  },
+  {
+    label: "International development",
+    title: "ReliefWeb Kenya jobs",
+    url: "https://reliefweb.int/jobs?list=Kenya%20Jobs&advanced-search=%28C131%29",
+    description: "Kenya-filtered humanitarian and development vacancies from the public ReliefWeb jobs index.",
+  },
+  {
+    label: "United Nations and NGOs",
+    title: "UNjobs — vacancies in Kenya",
+    url: "https://unjobs.org/duty_stations/kenya",
+    description: "Public Kenya duty-station vacancy index. This is an independent listing site, not an official UN document; verify every vacancy with the employer.",
+  },
 ];
 
 function interestTags(item: CareerFeedItem): Set<string> {

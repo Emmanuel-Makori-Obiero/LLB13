@@ -29,6 +29,7 @@ function memoryStorage() {
 test("accepts only listings hosted by the Kenya-filtered provider", () => {
   assert.equal(normalizeCareerFeed({ items: [goodItem] })?.items?.length, 1);
   assert.equal(normalizeCareerFeed({ items: [{ ...goodItem, url: "https://www.ngojobsinafrica.com/job/kenya-role/" }] })?.items?.length, 1);
+  assert.equal(normalizeCareerFeed({ items: [{ ...goodItem, url: "https://www.careerpointkenya.co.ke/job/legal-research-intern/" }] })?.items?.length, 1);
   assert.equal(normalizeCareerFeed({ items: [{ ...goodItem, url: "https://opportunitiesfeed.com/global-role/" }] }), null);
   assert.equal(normalizeCareerFeed({ items: [{ ...goodItem, url: "https://opportunitiesforyouth.org/global-role/" }] }), null);
 });

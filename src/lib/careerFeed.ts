@@ -20,6 +20,8 @@ export const CAREER_FEED_CACHE_KEY = "group13:career-feed:kenya:v2";
 const ALLOWED_LISTING_HOSTS = new Set([
   "ngojobsinafrica.com",
   "www.ngojobsinafrica.com",
+  "careerpointkenya.co.ke",
+  "www.careerpointkenya.co.ke",
 ]);
 
 function validFeedItem(value: unknown): value is CareerFeedItem {
