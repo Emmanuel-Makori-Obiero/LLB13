@@ -24,6 +24,7 @@ export type AIFeature =
   | "book_chat"
   | "summarize"
   | "book_summary_synthesis"
+  | "book_review_synthesis"
   | "book_contents"
   | "topic_summary"
   | "book_metadata"
