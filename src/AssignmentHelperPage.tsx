@@ -128,17 +128,23 @@ ORIGINALITY AND MEANINGFULNESS: Build this review around the primary critical an
         const totalSections = await countMaterialChunks(selectedBook.id);
         const plan = planBookSummary(totalSections);
         const completed: { plan: (typeof plan)[number]; result: AIResult }[] = [];
-        for (const part of plan) {
-          setNotice(`Reading the complete book: indexed sections ${part.startSection}–${part.endSection} of ${totalSections}…`);
-          const parts = await requestBookSummaryPart(
-            `Prepare concise but information-dense evidence for an eventual book review. Preserve important events, characters, arguments, themes, writing techniques, strengths, weaknesses, turning points, qualifications and conclusions from this range. Do not use outside knowledge. The final review must not claim details that are absent from these ordered notes.`,
-            part,
-            selectedBook.id,
-            groundingMode,
-            askAI,
-          );
-          completed.push(...parts);
-        }
+        let nextPart = 0;
+        const worker = async () => {
+          while (nextPart < plan.length) {
+            const part = plan[nextPart++];
+            setNotice(`Reading the complete book quickly: sections ${part.startSection}–${part.endSection} of ${totalSections}…`);
+            const parts = await requestBookSummaryPart(
+              `Prepare concise but information-dense evidence for an eventual book review. Preserve important events, characters, arguments, themes, writing techniques, strengths, weaknesses, turning points, qualifications and conclusions from this range. Do not use outside knowledge. The final review must not claim details that are absent from these ordered notes.`,
+              part,
+              selectedBook.id,
+              groundingMode,
+              askAI,
+            );
+            completed.push(...parts);
+          }
+        };
+        await Promise.all(Array.from({ length: Math.min(3, plan.length) }, () => worker()));
+        completed.sort((left, right) => left.plan.startSection - right.plan.startSection);
         const orderedEvidence = completed.map(({ plan: part, result: partResult }) => {
           const notes = partResult.answer.replace(/^>[^\n]*\n?/m, "").trim().slice(0, 1400);
           return `[Indexed sections ${part.startSection}–${part.endSection}] ${extractBookPartRecap(partResult.answer)}\nDetailed evidence: ${notes}`;

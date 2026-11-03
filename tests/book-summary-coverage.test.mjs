@@ -78,6 +78,19 @@ test("a failed single-section request is not split, hidden, or marked complete",
   assert.equal(requests[0].size, 1);
 });
 
+test("transient book-section failures retry without losing the exact range", async () => {
+  const plan = planBookSummary(10)[0];
+  let attempts = 0;
+  const results = await requestBookSummaryPart("Retry this source range", plan, "book-doc", "materials", async () => {
+    attempts += 1;
+    if (attempts < 2) throw new Error("The assistant is unavailable right now (503)");
+    return result("> Part recap: The range was processed after a transient failure.");
+  });
+  assert.equal(attempts, 2);
+  assert.equal(results[0].plan.startSection, 1);
+  assert.equal(results[0].plan.endSection, 10);
+});
+
 test("whole-book merge preserves every part in order and deduplicates source tags", () => {
   const plan = planBookSummary(21);
   const completed = plan.map((part) => ({ plan: part, result: result(`> Part recap: Part ${part.part + 1} follows the source.\n\nPoint [S1].`) }));
@@ -139,11 +152,20 @@ test("production routes batch all book sections and expose both document downloa
   assert.match(library, /Download DOCX/);
   assert.match(library, /Download PDF/);
   assert.match(assignmentHelper, /countMaterialChunks\(selectedBook\.id\)/);
-  assert.match(assignmentHelper, /indexed sections \$\{part\.startSection\}/);
+  assert.match(assignmentHelper, /sections \$\{part\.startSection\}/);
+  assert.match(assignmentHelper, /Promise\.all\(Array\.from/);
+  assert.match(assignmentHelper, /Math\.min\(3, plan\.length\)/);
   assert.match(assignmentHelper, /cleanBookReviewText/);
   assert.match(assignmentHelper, /assignment-book-review-plain/);
   assert.match(assignmentHelper, /const reviewAngles =/);
   assert.match(assignmentHelper, /ORIGINALITY AND MEANINGFULNESS/);
   assert.match(assignmentHelper, /specific book detail in each body paragraph/);
   assert.match(assignmentHelper, /Do not copy phrases, sentence shapes, paragraph order/);
+  const courseOutline = fs.readFileSync(new URL("../src/CourseOutlinePage.tsx", import.meta.url), "utf8");
+  const shareMigration = fs.readFileSync(new URL("../supabase/migrations/20261103070000_share_saved_course_outline_plans.sql", import.meta.url), "utf8");
+  assert.match(courseOutline, /shareOnSave/);
+  assert.match(courseOutline, /updatePlanVisibility/);
+  assert.match(courseOutline, /visibility: shareOnSave \? "group" : "private"/);
+  assert.match(shareMigration, /visibility text not null default 'private'/);
+  assert.match(shareMigration, /Members read shared saved course plans/);
 });
