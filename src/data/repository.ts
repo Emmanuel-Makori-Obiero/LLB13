@@ -24,6 +24,7 @@ import type {
   StudyGroup,
   StudyGroupMember,
   ClubPoster,
+  DailyCase,
 } from "./types";
 
 export type Group13Repository = {
@@ -139,6 +140,7 @@ export type Group13Repository = {
   getActiveClubPosters: () => Promise<ClubPoster[]>;
   adminCreateClubPoster: (input: { title: string; file: File; linkUrl: string; aiAnalysis: string; onProgress?: (stage: "checking" | "uploading" | "saving") => void }) => Promise<ClubPoster>;
   adminDeleteClubPoster: (poster: ClubPoster) => Promise<void>;
+  getDailyCase: () => Promise<DailyCase | null>;
 };
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
@@ -296,6 +298,35 @@ async function readRequired<T>(
 }
 
 const supabaseRepository: Group13Repository = {
+  getDailyCase: async () => {
+    if (!supabase) throw new Error("Not connected.");
+    const { data: documents, error: documentsError } = await supabase
+      .from("ai_documents")
+      .select("id,title,citation,created_at")
+      .eq("scope", "library")
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (documentsError) throw new Error(`Could not load the daily case: ${documentsError.message}`);
+    if (!documents?.length) return null;
+    const caseLike = documents.filter((item) => /\b(v|vs|versus)\b|ex parte|republic|attorney|director|commission|case/i.test(`${item.title ?? ""} ${item.citation ?? ""}`));
+    const pool = caseLike.length ? caseLike : documents;
+    const dayNumber = Math.floor(Date.now() / 86400000);
+    const document = pool[dayNumber % pool.length] as { id: string; title: string; citation?: string | null };
+    const { data: chunks, error: chunksError } = await supabase
+      .from("ai_chunks")
+      .select("content")
+      .eq("document_id", document.id)
+      .order("idx")
+      .limit(120);
+    if (chunksError) throw new Error(`Could not load the daily case text: ${chunksError.message}`);
+    return {
+      id: document.id,
+      title: document.title,
+      citation: document.citation,
+      content: (chunks ?? []).map((chunk) => String(chunk.content ?? "")).filter(Boolean).join("\n\n"),
+      sourceCount: chunks?.length ?? 0,
+    };
+  },
   getTimetable: () =>
     readRequired<Lesson>("timetable", async () =>
       supabase!

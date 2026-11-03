@@ -33,6 +33,14 @@ export type Material = {
   ingestion_error?: string | null;
   metadata_confidence?: number | null;
 };
+
+export type DailyCase = {
+  id: string;
+  title: string;
+  citation?: string | null;
+  content: string;
+  sourceCount: number;
+};
 export type AssignmentStatus =
   | "Not Started"
   | "In Progress"

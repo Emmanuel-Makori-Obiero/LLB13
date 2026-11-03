@@ -137,6 +137,7 @@ const FeaturesGuidePage = lazy(() => import("./FeaturesGuidePage"));
 const ScannerNotesPage = lazy(() => import("./ScannerNotesPage"));
 const KenyaLawCasesPage = lazy(() => import("./KenyaLawCasesPage"));
 const ScheduledCourtCasesPage = lazy(() => import("./ScheduledCourtCasesPage"));
+const DailyCasePage = lazy(() => import("./DailyCasePage"));
 const AttendancePage = lazy(() => import("./AttendancePage"));
 const GroupsPage = lazy(() => import("./GroupsPage"));
 const GroupAttendancePage = lazy(() => import("./GroupAttendancePage"));
@@ -174,6 +175,7 @@ const nav = [
   { id: "growth", label: "Growth studio", icon: Sparkles },
   { id: "opportunities", label: "Career research", icon: GraduationCap },
   { id: "cases", label: "Case law", icon: BookOpen },
+  { id: "daily-case", label: "Daily Case", icon: Sparkles },
   { id: "scheduled-cases", label: "Scheduled cases", icon: CalendarDays },
   { id: "counsellor", label: "Counsellor", icon: Users },
 ];
@@ -1206,6 +1208,11 @@ function App() {
               userId={userId}
               setPage={setPage}
             />
+          )}
+          {view === "daily-case" && (
+            <Suspense fallback={<div className="subheading">Opening today's case…</div>}>
+              <DailyCasePage learnerLevel={profile.learnerLevel} userId={userId} />
+            </Suspense>
           )}
           {view === "growth" && (
             <GrowthPage

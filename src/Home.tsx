@@ -3,6 +3,7 @@ import type { Assignment, Lesson, Todo } from "./data/types";
 import LearningLoop from "./LearningLoop";
 import ClubPosterCarousel from "./ClubPosterCarousel";
 import "./home-groups.css";
+import "./daily-case-home.css";
 type Props = { name: string; learnerLevel: string; learningPreference: string; lessons: Lesson[]; todos: Todo[]; assignments: Assignment[]; userId: string | null; setPage: (id: string) => void };
 const today = () => new Date().toISOString().slice(0, 10);
 const hm = (t?: string | null) => (t ? t.slice(0, 5) : "");
@@ -27,6 +28,10 @@ export default function Home({ name, learnerLevel, learningPreference, lessons, 
   return <div className="home-dashboard">
     <section className="home-welcome"><div className="home-welcome-copy"><span className="home-kicker"><Sparkles size={14} /> GROUP 13 · LAW LEARNING HUB</span><h1>{greet}, {name}.</h1><p>{level.next}</p><div className="home-welcome-actions"><button className="home-primary" onClick={() => setPage("library")}><Library size={16} /> Explore your library <ArrowRight size={15} /></button><span className="home-level-badge"><BookOpen size={14} /> {level.label}</span><span className="home-level-badge"><Sparkles size={14} /> {preferenceLabel}</span></div></div><div className="home-welcome-mark" aria-hidden="true"><Gavel size={58} /><span>13</span></div></section>
     <ClubPosterCarousel />
+    <section className="home-daily-case" aria-labelledby="home-daily-case-title">
+      <div><span className="home-groups-label"><Sparkles size={14} /> DAILY CASE · IRAC PRACTICE</span><h2 id="home-daily-case-title">Start with a case, not a blank page.</h2><p>Read the uploaded case of the day, write your own thoughts, and work through Issue, Rule, Application, and Conclusion with a plain-language AI tutor.</p></div>
+      <button className="home-primary" onClick={() => setPage("daily-case")}>Open today's case <ArrowRight size={15} /></button>
+    </section>
     <section className="home-groups-intro" aria-labelledby="home-groups-title">
       <div className="home-groups-copy">
         <span className="home-groups-label"><Users size={14} /> STUDY TOGETHER</span>
