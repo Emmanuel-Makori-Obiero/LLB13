@@ -9,6 +9,7 @@ import AdminOversight from "./AdminOversight";
 import AdminEngagement from "./AdminEngagement";
 import GroupLeadersAdmin from "./GroupLeadersAdmin";
 import AdminClubPosters from "./AdminClubPosters";
+import PlatformAppearanceAdmin from "./PlatformAppearanceAdmin";
 import { extractText } from "./lib/ai";
 import "./admin.css";
 
@@ -333,6 +334,7 @@ export default function AdminPage({
 
       <div className="admin-stack">
         <AdminEngagement />
+        {canManageAdmins && <PlatformAppearanceAdmin setNotice={setNotice} />}
         <div className="card card-pad">
           <div className="card-header"><span className="section-label">Library organization</span><span className="quiet">Admin only</span></div>
           <p className="field-hint">Read each imported past paper itself and correct titles, units, course codes, exam sessions, years, and variants. Completed papers are skipped automatically; reloads and rate limits resume from the saved checkpoint.</p>

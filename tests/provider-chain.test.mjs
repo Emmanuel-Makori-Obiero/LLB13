@@ -129,3 +129,10 @@ test("exam analysis makes exactly one reasoning-mode attempt per model route", (
   assert.deepEqual(reasoningAttemptVariants("chat", "effort"), [true, false]);
   assert.deepEqual(reasoningAttemptVariants("chat", "none"), [false]);
 });
+
+test("course outline extraction gets a long timeout and no reasoning pass", () => {
+  assert.equal(boundedProviderTimeoutMs(undefined, 40_000, "course_outline"), 45_000);
+  assert.equal(boundedProviderTimeoutMs(5_000, 40_000, "course_outline"), 30_000);
+  assert.equal(boundedProviderTimeoutMs(120_000, 40_000, "course_outline"), 60_000);
+  assert.deepEqual(reasoningAttemptVariants("course_outline", "effort"), [false]);
+});

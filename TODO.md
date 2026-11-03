@@ -40,3 +40,8 @@
 - Save review history privately with owner-scoped RLS; allow reopening prior reports and corrected notes. Do not share anything with the group automatically.
 - Let a student explicitly publish edited corrected notes to the shared Library with AI indexing, and show a success/failure status.
 - In Transcript, open a notes review from generated notes and allow a rerun using those generated/edited notes instead of only the original transcript. Run project check, full tests, and build.
+
+
+## Wallpaper rendering and member default
+- Built-in theme wallpapers and separately uploaded personal wallpapers render as page backgrounds in both light and dark themes; profile avatars are never backgrounds.
+- The primary admin can choose or clear a platform-default theme from the Admin page. It applies only when an account has no explicit personal theme or custom wallpaper; personal themes, uploaded wallpapers, and avatars remain untouched, and the default is stored server-side.

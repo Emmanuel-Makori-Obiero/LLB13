@@ -37,6 +37,9 @@ export function splitBookSummaryPart(plan: BookSummaryPartPlan): BookSummaryPart
   ];
 }
 
+const isTransientBookSummaryError = (error: unknown) => /\b(?:429|500|502|503|504)\b|timeout|timed out|busy|unavailable|network|fetch failed/i.test(error instanceof Error ? error.message : String(error));
+const waitForBookSummaryRetry = (attempt: number) => new Promise<void>((resolve) => setTimeout(resolve, 700 * (attempt + 1)));
+
 /** Retry oversized provider requests on smaller contiguous source ranges; never sample or truncate. */
 export async function requestBookSummaryPart(
   request: string,
@@ -48,30 +51,37 @@ export async function requestBookSummaryPart(
   onComplete?: (part: CompletedBookSummaryPart) => void,
 ): Promise<CompletedBookSummaryPart[]> {
   const requestRange = async (range: BookSummaryPartPlan): Promise<CompletedBookSummaryPart[]> => {
-    try {
-      const result = await sendRequest({
-        feature: "summarize",
-        mode,
-        messages: [{ role: "user", content: bookSummaryPartPrompt(request, range) }],
-        docIds: [docId],
-        part: range.part,
-        size: range.size,
-        startIndex: range.startSection - 1,
-      });
-      if (!result.answer.trim() || !result.sources.length || result.basis === "none") {
-        throw new Error("The source section was not returned to the summarizer.");
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const result = await sendRequest({
+          feature: "summarize",
+          mode,
+          messages: [{ role: "user", content: bookSummaryPartPrompt(request, range) }],
+          docIds: [docId],
+          part: range.part,
+          size: range.size,
+          startIndex: range.startSection - 1,
+        });
+        if (!result.answer.trim() || !result.sources.length || result.basis === "none") {
+          throw new Error("The source section was not returned to the summarizer.");
+        }
+        const completed = { plan: range, result };
+        onComplete?.(completed);
+        return [completed];
+      } catch (error) {
+        if (isTransientBookSummaryError(error) && attempt < 2) {
+          await waitForBookSummaryRetry(attempt);
+          continue;
+        }
+        const halves = splitBookSummaryPart(range);
+        if (!halves || !/\b413\b|too large/i.test(error instanceof Error ? error.message : String(error))) throw error;
+        onSplit?.(range);
+        const first = await requestRange(halves[0]);
+        const second = await requestRange(halves[1]);
+        return [...first, ...second];
       }
-      const completed = { plan: range, result };
-      onComplete?.(completed);
-      return [completed];
-    } catch (error) {
-      const halves = splitBookSummaryPart(range);
-      if (!halves || !/\b413\b|too large/i.test(error instanceof Error ? error.message : String(error))) throw error;
-      onSplit?.(range);
-      const first = await requestRange(halves[0]);
-      const second = await requestRange(halves[1]);
-      return [...first, ...second];
     }
+    throw new Error("The source section could not be processed after retries.");
   };
   return requestRange(plan);
 }

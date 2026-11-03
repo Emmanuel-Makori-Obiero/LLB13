@@ -15,3 +15,10 @@ test("retry a transient gateway failure that has no provider chain response", ()
   assert.equal(shouldRetryAiRequest(504), true);
   assert.equal(shouldRetryAiRequest(500), false);
 });
+
+test("wait out a short provider cooldown once", async () => {
+  const { cooldownRetryDelayMs } = await import("../src/lib/aiRetryPolicy.ts");
+  assert.equal(cooldownRetryDelayMs(503, { retry_after_seconds: 13 }), 13_500);
+  assert.equal(cooldownRetryDelayMs(429, { retry_after_seconds: 60 }), 0);
+  assert.equal(cooldownRetryDelayMs(503, null), 0);
+});

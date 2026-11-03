@@ -53,6 +53,12 @@ export function boundedProviderTimeoutMs(
   feature?: string,
 ): number {
   const isLegalWhatIf = feature === "legal_process" || feature === "legal_explain";
+  // A full-outline extraction emits thousands of JSON tokens; the generic 18s
+  // large-document ceiling times out before the model can finish.
+  if (feature === "course_outline") {
+    const requested = Number.isFinite(configured) ? configured as number : 45_000;
+    return Math.min(60_000, Math.max(30_000, requested));
+  }
   const isLargeDocumentRequest = inputChars >= 8_000;
   const ceiling = isLegalWhatIf || isLargeDocumentRequest ? 18_000 : 8_000;
   const fallback = isLegalWhatIf || isLargeDocumentRequest ? 15_000 : 8_000;
@@ -66,7 +72,7 @@ export function reasoningAttemptVariants(
   reasoning: Entry["reasoning"],
   fast = false,
 ): boolean[] {
-  if (["exam_analysis", "notes_review", "notes_research"].includes(feature ?? "") || reasoning === "none" || fast) return [false];
+  if (["exam_analysis", "notes_review", "notes_research", "course_outline"].includes(feature ?? "") || reasoning === "none" || fast) return [false];
   return [true, false];
 }
 

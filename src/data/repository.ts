@@ -26,6 +26,7 @@ import type {
   ClubPoster,
   DailyCase,
 } from "./types";
+import { isThemeId, type ThemeId } from "../lib/appearance";
 
 export type Group13Repository = {
   getUnits: () => Promise<Unit[]>;
@@ -113,6 +114,8 @@ export type Group13Repository = {
   getExamAnalyses: () => Promise<SavedExamAnalysis[]>;
   saveExamAnalysis: (draft: ExamAnalysisDraft) => Promise<SavedExamAnalysis>;
   getGroupMemberLimit: () => Promise<number>;
+  getDefaultWallpaperTheme: () => Promise<ThemeId | null>;
+  adminSetDefaultWallpaperTheme: (themeId: ThemeId | null) => Promise<void>;
   canCreateStudyGroup: () => Promise<boolean>;
   getMyStudyGroup: () => Promise<{ group: StudyGroup; members: StudyGroupMember[] } | null>;
   getStudyGroupMembers: (groupId: string) => Promise<StudyGroupMember[]>;
@@ -903,6 +906,24 @@ const supabaseRepository: Group13Repository = {
       .single();
     if (error) throw new Error(`Could not save exam analysis: ${error.message}`);
     return data as SavedExamAnalysis;
+  },
+  getDefaultWallpaperTheme: async () => {
+    const { data, error } = await db()
+      .from("site_appearance_settings")
+      .select("default_theme_id")
+      .eq("singleton", true)
+      .maybeSingle();
+    if (error) throw new Error(`Could not load the platform wallpaper default: ${error.message}`);
+    const themeId = data?.default_theme_id;
+    if (themeId == null) return null;
+    if (!isThemeId(themeId)) throw new Error("The platform wallpaper default is invalid.");
+    return themeId;
+  },
+  adminSetDefaultWallpaperTheme: async (themeId) => {
+    const { error } = await db().rpc("admin_set_default_wallpaper_theme", {
+      p_theme_id: themeId,
+    });
+    if (error) throw new Error(`Could not save the platform wallpaper default: ${error.message}`);
   },
   getGroupMemberLimit: async () => {
     const { data, error } = await db().rpc("group_member_limit");

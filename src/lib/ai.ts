@@ -7,7 +7,7 @@ import * as mammoth from "mammoth";
 import { ocrImage, ocrPdfPages } from "./ocr";
 import { extractLegacyWordHtml } from "./legacyWord";
 import { isPersonalizedStudyFeature, personalizeMessages, type LearningProfile } from "./learnerAdaptation";
-import { shouldRetryAiRequest } from "./aiRetryPolicy";
+import { cooldownRetryDelayMs, shouldRetryAiRequest } from "./aiRetryPolicy";
 import { extractArticleNumbers, MAX_CONSTITUTION_ARTICLES_PER_BATCH, shouldReuseConstitutionHistory, splitArticleNumbers } from "./constitutionArticles";
 
 function db() {
@@ -157,6 +157,11 @@ async function askAISingle(
     }
     if (attempt === 0 && shouldRetryAiRequest(status, errorBody)) {
       await new Promise((resolve) => setTimeout(resolve, 1200));
+      continue;
+    }
+    const cooldownMs = cooldownRetryDelayMs(status, errorBody);
+    if (attempt === 0 && cooldownMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, cooldownMs));
       continue;
     }
     break;
