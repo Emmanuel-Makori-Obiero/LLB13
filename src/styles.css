@@ -1049,7 +1049,7 @@ h2 {
   --wallpaper-overlay: rgba(10,18,14,.48);
   color-scheme: dark;
 }
-:root[data-theme="dark"] body { background: var(--paper); color: var(--ink); }
+:root[data-theme="dark"] body { background-color: var(--paper); color: var(--ink); }
 :root[data-theme="dark"] .app-shell { background: transparent; }
 :root[data-theme="dark"] .main, :root[data-theme="dark"] .content { background: transparent; }
 :root[data-theme="dark"] .topbar { background: rgba(17,24,21,.92); }
@@ -1073,7 +1073,7 @@ h2 {
 :root { --user-wallpaper: none; }
 html, body { background-color: var(--on-dark); background-image: linear-gradient(var(--wallpaper-overlay), var(--wallpaper-overlay)), var(--user-wallpaper); background-position: center center; background-repeat: no-repeat; background-size: cover; background-attachment: fixed; }
 .app-shell { background: transparent; }
-:root[data-theme="dark"] html, :root[data-theme="dark"] body { background-color: var(--on-dark); }
+:root[data-theme="dark"] html, :root[data-theme="dark"] body { background-color: var(--paper); }
 
 :root[data-skin="halloween"] { --forest: #81472e; --oxblood: #a94a38; --clay: #f0a44b; --moss: #392631; --line: #503846; --soft: #2a202b; --wallpaper-overlay: rgba(16,9,17,.45); }
 :root[data-skin="forest"] { --forest: #285744; --oxblood: #a86a4f; --clay: #a5c982; --moss: #294334; --line: #3a5647; --soft: #202f27; --wallpaper-overlay: rgba(8,19,14,.42); }
