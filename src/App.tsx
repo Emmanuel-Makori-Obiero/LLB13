@@ -350,7 +350,7 @@ function App() {
     const effectiveTheme = resolveProfileTheme(
       profile.appearanceTheme,
       profile.appearanceThemeUserSelected,
-      platformDefaultTheme ?? themeId,
+      platformDefaultTheme ?? profile.appearanceTheme,
     );
     if (profile.appearanceTheme === effectiveTheme) return;
     setProfile((current) => current.appearanceThemeUserSelected
@@ -413,9 +413,7 @@ function App() {
         metadata.appearance_theme,
         metadata.appearance_theme_selected,
       );
-      const appearanceTheme = appearanceThemeUserSelected
-        ? normalizeThemeId(metadata.appearance_theme)
-        : normalizeThemeId(themeId);
+      const appearanceTheme = normalizeThemeId(metadata.appearance_theme ?? themeId);
       const learnerProfile: import("./lib/learnerAdaptation").LearningProfile = { learnerLevel: level as import("./lib/learnerAdaptation").LearnerLevel, learningPreference: preference as import("./lib/learnerAdaptation").LearningPreference };
       setLearnerAdaptation(learnerProfile);
       setTheme(appearanceTheme);
