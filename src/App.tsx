@@ -350,7 +350,7 @@ function App() {
     const effectiveTheme = resolveProfileTheme(
       profile.appearanceTheme,
       profile.appearanceThemeUserSelected,
-      platformDefaultTheme,
+      platformDefaultTheme ?? themeId,
     );
     if (profile.appearanceTheme === effectiveTheme) return;
     setProfile((current) => current.appearanceThemeUserSelected
