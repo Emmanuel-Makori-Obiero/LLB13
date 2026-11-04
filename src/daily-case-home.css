@@ -97,3 +97,15 @@
   }
   .home-daily-case > button::before { top: 18px; left: 22px; }
 }
+
+@media (max-width: 700px) {
+  .home-daily-case { min-height: 0; margin: 8px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: transparent; color: var(--ink); }
+  .home-daily-case::before { display: none; }
+  .home-daily-case > div { padding: 18px 0 14px; }
+  .home-daily-case .home-groups-label { color: var(--muted); font-size: 9px; letter-spacing: .08em; }
+  .home-daily-case h2 { max-width: none; margin: 8px 0 7px; color: var(--ink); font: 600 23px/1.15 inherit; letter-spacing: -.02em; }
+  .home-daily-case p { color: var(--muted); font-size: 12px; line-height: 1.5; }
+  .home-daily-case > button { min-height: 0; padding: 12px 0 16px; border-top: 0; background: transparent; color: var(--forest); font-weight: 600; }
+  .home-daily-case > button::before { display: none; }
+  .home-daily-case > button:hover { background: transparent; color: var(--forest); }
+}
