@@ -8,6 +8,7 @@ import { Markdown } from "./Markdown";
 import { initialDebateDifficulty, type LearnerLevel, type LearningPreference } from "./lib/learnerAdaptation";
 import { appendSpeechTranscript, dictationErrorMessage } from "./lib/speechDictation";
 import { extractDebateMotion, resolveLegalDebateTopic, validateGeneratedCasePacket } from "./lib/debateCase";
+import { awardReward, POINT_VALUES } from "./lib/rewards";
 import {
   createDebateRoom,
   createAiDebateRoom,
@@ -482,6 +483,7 @@ Return only these six Markdown sections, with substantive content under each:
         try { window.localStorage.setItem(`legal-arena-training:${userId ?? "guest"}`, JSON.stringify(next)); } catch { /* storage is optional */ }
         return next;
       });
+      if (userId) void awardReward({ eventKey: `arena-training:${trainingDrill.title}:${new Date().toISOString().slice(0, 10)}`, activityType: "game_round", points: POINT_VALUES.game_round, displayName, metadata: { game: "Training Court", score: Number(result.score ?? 0) } }).catch(() => undefined);
       setTrainingStep((step) => step + 1);
     } catch (error) { setNotice(error instanceof Error ? error.message : "The training judge is unavailable."); }
     finally { setTrainingBusy(false); }
@@ -743,6 +745,7 @@ Return only these six Markdown sections, with substantive content under each:
     if (choice.next !== undefined && choice.next !== null) setNotice(choice.consequence);
     else {
       setChoiceDebrief(choice.consequence);
+      if (userId) void awardReward({ eventKey: `arena-choices:${sourceId}:${new Date().toISOString().slice(0, 10)}`, activityType: "game_round", points: POINT_VALUES.game_round, displayName, metadata: { game: "Choices" } }).catch(() => undefined);
       setNotice("Decision path complete. Retry to compare a different legal strategy.");
     }
   };
@@ -752,6 +755,7 @@ Return only these six Markdown sections, with substantive content under each:
 
   return <>
     <div className="page-heading"><div><div className="eyebrow">Learn · play · improve</div><h1>Legal Arena.</h1><p>Choose a legal issue, make your argument, and earn points. The cases are fictional study games—not legal advice.</p></div><Trophy size={32} /></div>
+    <div className="leaderboard-actions"><button type="button" className="secondary-button" onClick={() => { window.history.pushState({}, "", "/leaderboard"); window.dispatchEvent(new PopStateEvent("popstate")); }}><Trophy size={14} /> View learning leaderboard</button><span className="field-hint">Training Court and Choices award points toward your streak and rank.</span></div>
     <div className="games-directory" role="group" aria-label="Choose a Legal Arena game">
       <button type="button" aria-pressed={tab === "computer"} className={`game-domain-card ${tab === "computer" ? "active" : ""}`} onClick={() => setTab("computer")}><span className="game-domain-icon"><Swords size={20} /></span><span><strong>Computer Court</strong><small>Test yourself as claimant or defendant against an AI opponent.</small></span><em>01</em></button>
       <button type="button" aria-pressed={tab === "training"} className={`game-domain-card ${tab === "training" ? "active" : ""}`} onClick={() => setTab("training")}><span className="game-domain-icon"><GraduationCap size={20} /></span><span><strong>Training Court</strong><small>Build one advocacy skill at a time with feedback from an AI judge.</small></span><em>02</em></button>

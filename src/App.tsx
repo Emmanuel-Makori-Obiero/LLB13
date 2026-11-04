@@ -13,6 +13,7 @@ import {
   Bell,
   CalendarDays,
   Check,
+  CheckCircle2,
   CheckSquare,
   ChevronLeft,
   ChevronRight,
@@ -52,6 +53,7 @@ import {
   Sparkles,
   Sun,
   Trash2,
+  Trophy,
   UserCircle,
   Users,
   Video,
@@ -118,6 +120,9 @@ import { hasCustomWallpaper, hasPersonalThemeSelection, normalizeThemeId, resolv
 import { extractPastPaperArchive } from "./lib/pastPaperArchive";
 import GamesHub from "./GamesHub";
 import { readDebateInviteCode } from "./lib/debate-links";
+import DailyQuizPage from "./DailyQuizPage";
+import LeaderboardPage from "./LeaderboardPage";
+import RewardWelcomePopup from "./RewardWelcomePopup";
 import {
   analyzeImage,
   createFilmProject,
@@ -172,6 +177,8 @@ const nav = [
   { id: "assistant", label: "Study assistant", icon: Sparkles },
   { id: "research", label: "Research writer", icon: PenLine },
   { id: "arena", label: "Games Hub", icon: Gavel },
+  { id: "daily-quiz", label: "Daily Quiz", icon: CheckCircle2 },
+  { id: "leaderboard", label: "Leaderboard", icon: Trophy },
   { id: "growth", label: "Growth studio", icon: Sparkles },
   { id: "opportunities", label: "Career research", icon: GraduationCap },
   { id: "cases", label: "Case law", icon: BookOpen },
@@ -1011,6 +1018,7 @@ function App() {
   const visibleNav = nav.filter((item) => item.id !== "group-attendance" || isAdmin);
   return (
     <div className="app-shell">
+      <RewardWelcomePopup userId={userId} name={profile.displayName || userEmail?.split("@")[0] || "learner"} onNavigate={setPage} />
       <HelpButton floating onNavigate={setPage} />
       <FloatingLawyerAgent historyKey={userEmail ?? "workspace"} currentPage={currentPageLabel} onOpenDictionary={() => setPage("dictionary")} />
       <aside className="sidebar">
@@ -1458,6 +1466,8 @@ function App() {
             />
           )}
           {view === "arena" && <GamesHub materials={visibleMaterials} userId={userId} displayName={profile.displayName || userEmail?.split("@")[0] || "Player"} learnerLevel={profile.learnerLevel} learningPreference={profile.learningPreference} isAdmin={isAdmin} inviteCode={readDebateInviteCode(window.location.search)} />}
+          {view === "daily-quiz" && <DailyQuizPage userId={userId} displayName={profile.displayName || userEmail?.split("@")[0] || "Learner"} learnerLevel={profile.learnerLevel} />}
+          {view === "leaderboard" && <LeaderboardPage userId={userId} displayName={profile.displayName || userEmail?.split("@")[0] || "Learner"} onNavigate={setPage} />}
           {view === "members" && <SectionedMembersPage members={members} />}
           {view === "dictionary" && <LegalDictionaryPage />}
           {view === "legal-process" && (
