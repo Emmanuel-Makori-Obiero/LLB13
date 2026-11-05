@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { boundedProviderTimeoutMs, combineProviderChains, DEFAULT_CHAIN, isTransientProviderFailure, modelRouteCooldownMs, reasoningAttemptVariants, shouldTryAlternateApiKey } from "../supabase/functions/ai/providers.ts";
+import { boundedProviderTimeoutMs, combineProviderChains, DEFAULT_CHAIN, isTransientProviderFailure, modelRouteCooldownMs, orderCourseOutlineRoutes, providerCallTimeoutMs, reasoningAttemptVariants, shouldTryAlternateApiKey } from "../supabase/functions/ai/providers.ts";
 import { failoverKeyCandidates, newestKeySlotsFirst, selectFastFailoverKey } from "../supabase/functions/_shared/keys.ts";
 
 test("the AI provider chain uses current high-availability fallback model IDs", () => {
@@ -94,6 +94,8 @@ test("each model route can fall through every configured API-key slot", () => {
 test("the Edge Function wires key-slot failover into the provider request loop", () => {
   const handler = readFileSync(new URL("../supabase/functions/ai/index.ts", import.meta.url), "utf8");
   assert.match(handler, /failoverKeyCandidates\(keys, cursor\)/);
+  assert.match(handler, /orderCourseOutlineRoutes\(entries, preferred\)/);
+  assert.match(handler, /providerCallTimeoutMs\(perCall, opts\.feature, ent\.provider, ent\.model\)/);
   assert.match(handler, /shouldTryAlternateApiKey\(res\.status, keyIndex < keyCandidates\.length - 1\)/);
   assert.match(handler, /isTransientProviderFailure\(res\.status\)/);
   assert.match(handler, /shouldTryAlternateApiKey\(0, keyIndex < keyCandidates\.length - 1\)/);
@@ -121,6 +123,23 @@ test("large document requests get a longer but bounded model window", () => {
   assert.equal(boundedProviderTimeoutMs(undefined, 10_000), 15_000);
   assert.equal(boundedProviderTimeoutMs(8_000, 10_000), 15_000);
   assert.equal(boundedProviderTimeoutMs(30_000, 10_000), 18_000);
+});
+
+test("course outline prioritizes direct provider routes before slow free routers", () => {
+  const ordered = orderCourseOutlineRoutes(DEFAULT_CHAIN);
+  const ids = ordered.map(({ provider, model }) => `${provider}:${model}`);
+  assert.ok(ids.indexOf("groq:openai/gpt-oss-120b") < ids.indexOf("openrouter:openrouter/free"));
+  assert.ok(ids.indexOf("gemini:gemini-3.1-flash-lite") < ids.indexOf("openrouter:google/gemma-4-31b-it:free"));
+
+  const preferred = orderCourseOutlineRoutes(DEFAULT_CHAIN, "openrouter:openrouter/free:OPENROUTER_API_KEY");
+  assert.equal(preferred[0].model, "openrouter/free", "a previously successful planner route remains preferred");
+});
+
+test("course outline caps free OpenRouter timeouts so later fallbacks can run", () => {
+  assert.equal(providerCallTimeoutMs(45_000, "course_outline", "openrouter", "openrouter/free"), 20_000);
+  assert.equal(providerCallTimeoutMs(45_000, "course_outline", "openrouter", "google/gemma-4-31b-it:free"), 20_000);
+  assert.equal(providerCallTimeoutMs(45_000, "course_outline", "groq", "openai/gpt-oss-120b"), 45_000);
+  assert.equal(providerCallTimeoutMs(8_000, "chat", "openrouter", "openrouter/free"), 8_000);
 });
 
 test("exam analysis makes exactly one reasoning-mode attempt per model route", () => {

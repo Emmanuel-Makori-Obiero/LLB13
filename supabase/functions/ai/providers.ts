@@ -76,6 +76,25 @@ export function reasoningAttemptVariants(
   return [true, false];
 }
 
+const isOpenRouterFreeRoute = (provider: string, model: string) =>
+  provider.trim().toLowerCase() === "openrouter" && (model === "openrouter/free" || model.endsWith(":free"));
+
+export function orderCourseOutlineRoutes(entries: readonly Entry[], preferredId?: string): Entry[] {
+  const freeRoutes = entries.filter((entry) => isOpenRouterFreeRoute(entry.provider, entry.model));
+  const directRoutes = entries.filter((entry) => !isOpenRouterFreeRoute(entry.provider, entry.model));
+  const ordered = [...directRoutes, ...freeRoutes];
+  if (!preferredId) return ordered;
+  const index = ordered.findIndex((entry) => `${entry.provider}:${entry.model}:${entry.keyEnv}` === preferredId);
+  return index <= 0 ? ordered : [ordered[index], ...ordered.slice(0, index), ...ordered.slice(index + 1)];
+}
+
+export function providerCallTimeoutMs(baseTimeoutMs: number, feature: string | undefined, provider: string, model: string): number {
+  // Free OpenRouter routes often stall; cap them so they cannot consume the
+  // Course Planner request budget before the direct-provider fallbacks run.
+  if (feature === "course_outline" && isOpenRouterFreeRoute(provider, model)) return Math.min(baseTimeoutMs, 20_000);
+  return baseTimeoutMs;
+}
+
 const BASE = {
   gemini: ["https://generativelanguage.googleapis.com/v1beta/openai", "GEMINI_API_KEY"],
   nvidia: ["https://integrate.api.nvidia.com/v1", "NVIDIA_API_KEY"],

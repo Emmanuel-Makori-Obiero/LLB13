@@ -172,8 +172,12 @@ async function askAISingle(
     try {
       const body = await (error as { context?: Response }).context?.json();
       msg = body?.error ?? msg;
-      if (Number(body?.retry_after_seconds) > 0) {
-        msg += ` The configured API-key alternatives and provider fallbacks were already tried; at least one provider asked that it not be retried for about ${Number(body.retry_after_seconds)} seconds. This request will not restart automatically.`;
+      const retryAfterSeconds = Number(body?.retry_after_seconds);
+      if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
+        const retryHint = args.feature === "course_outline"
+          ? "Your outline remains in the planner; after the cooldown, press Build source-backed plan to retry."
+          : "You can retry after the cooldown.";
+        msg += ` The provider fallback attempt ended without a response; at least one route requested a cooldown of about ${retryAfterSeconds} seconds. This request will not restart automatically. ${retryHint}`;
       }
       if (Array.isArray(body?.attempts) && body.attempts.length)
         msg += ` [${body.attempts
