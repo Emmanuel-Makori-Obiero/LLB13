@@ -232,6 +232,12 @@ const profileInitials = (name: string, email = "") =>
     .map((part) => part[0])
     .join("")
     .toUpperCase();
+const displayNameForUser = (name: string, email = "") => {
+  const clean = name.trim();
+  if (clean) return clean;
+  const local = email.split("@")[0].replace(/[._-]+/g, " ").replace(/\d{3,}/g, " ").replace(/\s+/g, " ").trim();
+  return local ? local.replace(/\b\w/g, (letter) => letter.toUpperCase()) : "Law student";
+};
 type LearnerLevel = "llb-year-1" | "llb-year-2" | "llb-year-3" | "llb-year-4" | "masters" | "phd" | "prefer-not-to-say";
 type LearningPreference = "guided" | "balanced" | "challenge";
 const learningPreferences: { id: LearningPreference; label: string; description: string }[] = [
@@ -1079,9 +1085,7 @@ function App() {
             />
             <div>
               <div className="profile-name">
-                {profile.displayName ||
-                  userEmail?.split("@")[0] ||
-                  "Your profile"}
+                {displayNameForUser(profile.displayName, userEmail ?? "")}
               </div>
               <div className="profile-role">{profile.role}</div>
             </div>
@@ -1125,7 +1129,7 @@ function App() {
               />
               <div>
                 <div className="profile-name">
-                  {profile.displayName || userEmail?.split("@")[0]}
+                  {displayNameForUser(profile.displayName, userEmail ?? "")}
                 </div>
                 <div className="profile-role">{userEmail}</div>
               </div>
@@ -1256,7 +1260,7 @@ function App() {
           )}
           {view === "dashboard" && (
             <Home
-              name={profile.displayName || userEmail?.split("@")[0] || "there"}
+              name={displayNameForUser(profile.displayName, userEmail ?? "")}
               learnerLevel={profile.learnerLevel}
               learningPreference={profile.learningPreference}
               lessons={lessons}
@@ -1744,7 +1748,7 @@ function App() {
       {assignmentFormOpen && (
         <AssignmentForm
           units={units}
-          owner={profile.displayName || userEmail?.split("@")[0] || "Member"}
+          owner={displayNameForUser(profile.displayName, userEmail ?? "")}
           onClose={() => setAssignmentFormOpen(false)}
           onCreated={async (assignment) => {
             try {
@@ -4085,7 +4089,7 @@ function LibraryPageReal({
   const [yearFilter, setYearFilter] = useState(isAdmin ? "all" : learnerLevel || "all");
   useEffect(() => setYearFilter(isAdmin ? "all" : learnerLevel || "all"), [learnerLevel, isAdmin]);
   const [sortBy, setSortBy] = useState("date-desc");
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(true);
   const [libraryGuideOpen, setLibraryGuideOpen] = useState(false);
   const [libraryPage, setLibraryPage] = useState(1);
   const libraryPageSize = 18;

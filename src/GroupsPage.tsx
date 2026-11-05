@@ -28,6 +28,7 @@ export default function GroupsPage() {
   const [attendance, setAttendance] = useState<GroupAttendance[]>([]);
   const [summary, setSummary] = useState<GroupAttendanceSummary[]>([]);
   const [userId, setUserId] = useState("");
+  const [userEmail, setUserEmail] = useState("");
   const [isLeader, setIsLeader] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [memberLimit, setMemberLimit] = useState(0);
@@ -66,6 +67,7 @@ export default function GroupsPage() {
       ]);
       if (authError || !user) throw new Error("Sign in again to load your study group.");
       setUserId(user.id);
+      setUserEmail(user.email ?? "");
       setCanCreate(allowedToCreate);
       setIsAdmin(admin);
       setMemberLimit(configuredMemberLimit);
@@ -207,6 +209,15 @@ export default function GroupsPage() {
     const status = await repository.checkInGroupSession(sessionId);
     setNotice(`Your record is ${status}.`);
   });
+  const copyApprovalRequest = async () => {
+    try {
+      await navigator.clipboard.writeText(userEmail);
+      setNotice("Your email is copied. Send it to the primary admin and ask for group-leader approval.");
+      setError("");
+    } catch {
+      setError(`Ask the primary admin to approve this account: ${userEmail}`);
+    }
+  };
 
   return (
     <div className="groups-page">
@@ -229,8 +240,8 @@ export default function GroupsPage() {
       {loading ? <div className="card card-pad"><p className="field-hint">Loading your group…</p></div> : !group ? (
         <div className="groups-entry-grid">
           <section className="card card-pad">
-            <div className="card-header"><span className="section-label">Join a group</span><span className="quiet">8-character invite code</span></div>
-            <p className="field-hint">Each student can belong to one study group at a time.</p>
+            <div className="card-header"><span className="section-label">1 · Join a group</span><span className="quiet">Use a leader’s code</span></div>
+            <p className="field-hint">Have an invite code? Enter it here. Each student can belong to one study group at a time.</p>
             <form className="groups-form" onSubmit={joinGroup}>
               <label className="groups-field">Invite code
                 <input required minLength={8} maxLength={8} autoCapitalize="characters" value={joinCode} onChange={(event) => setJoinCode(event.target.value.toUpperCase())} placeholder="AB12CD34" />
@@ -238,9 +249,15 @@ export default function GroupsPage() {
               <button className="primary-button" type="submit" disabled={busy === "join" || !online}><KeyRound size={14} /> {busy === "join" ? "Joining…" : "Join group"}</button>
             </form>
           </section>
+          <section className="card card-pad groups-approval-card">
+            <div className="card-header"><span className="section-label">2 · Become a group leader</span><span className="quiet">No invite code needed</span></div>
+            <p className="field-hint">You cannot create a group until the primary admin approves your account. Copy your account email and send it to the admin with a request for approval.</p>
+            <div className="groups-approval-email"><strong>{userEmail || "Your signed-in email"}</strong><button className="secondary-button" type="button" onClick={() => void copyApprovalRequest()}><Copy size={14} /> Copy email</button></div>
+            <p className="field-hint">After approval, return here and the “Create a group” form will appear automatically.</p>
+          </section>
           {canCreate && <section className="card card-pad">
-            <div className="card-header"><span className="section-label">Create a group</span><span className="quiet">Maximum {memberLimit} members</span></div>
-            <p className="field-hint">Approved leaders and admins can create one group. You will appear on its roster as leader.</p>
+            <div className="card-header"><span className="section-label">3 · Create a group</span><span className="quiet">Maximum {memberLimit} members</span></div>
+            <p className="field-hint">You are approved. Choose a name and you will appear on its roster as leader.</p>
             <form className="groups-form" onSubmit={createGroup}>
               <label className="groups-field">Group name
                 <input required maxLength={80} value={newGroupName} onChange={(event) => setNewGroupName(event.target.value)} placeholder="e.g. Evidence study group" />
@@ -248,7 +265,7 @@ export default function GroupsPage() {
               <button className="primary-button" type="submit" disabled={busy === "create" || !online}><Plus size={14} /> {busy === "create" ? "Creating…" : "Create a group"}</button>
             </form>
           </section>}
-          {!canCreate && <p className="field-hint groups-leader-note">Group creation is available to approved group leaders.</p>}
+          {!canCreate && <p className="field-hint groups-leader-note">The create form is intentionally hidden until approval; joining a group does not require leader approval.</p>}
         </div>
       ) : (
         <>

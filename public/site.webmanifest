@@ -1,7 +1,7 @@
 {
-  "name": "Law Student Community Hub Kenya",
-  "short_name": "Law Study Hub",
-  "description": "Study tools for Kenyan law students: guided revision, case-law research, notes and exam practice. Workspace sign-up is limited to approved Group 13 students.",
+  "name": "Group 13 Hub — Kenya Law Student Learning Platform",
+  "short_name": "Group 13 Hub",
+  "description": "Guided revision, case-law research, notes, study groups, and exam practice for Kenyan law students.",
   "id": "/",
   "start_url": "/",
   "scope": "/",

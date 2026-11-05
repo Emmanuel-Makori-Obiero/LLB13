@@ -54,7 +54,7 @@ export default function GroupLeadersAdmin() {
         <span id="approved-group-leaders-heading" className="section-label">Approved group leaders</span>
         <span className="quiet">Primary admin</span>
       </div>
-      <p className="field-hint">Approve a registered account to create one study group. Removing approval does not delete a group that already exists.</p>
+      <p className="field-hint">Add a verified account here to let that student create one study group. Removing approval does not delete a group that already exists. Students who are not yet approved can copy their email from the Groups page and send it to the primary admin.</p>
       {error && <div className="connection-error" role="alert">{error}</div>}
       {message && <p className="field-hint" role="status">{message}</p>}
       <form className="groups-admin-form" onSubmit={submit}>
@@ -66,7 +66,7 @@ export default function GroupLeadersAdmin() {
           <UserPlus size={14} /> {busy ? "Saving…" : "Approve leader"}
         </button>
       </form>
-      {loading ? <p className="field-hint">Loading approved leaders…</p> : !leaders.length ? <p className="empty">No approved group leaders yet.</p> : (
+      {loading ? <p className="field-hint">Loading approved leaders…</p> : !leaders.length ? <p className="empty">No group-leader approvals have been granted yet. Use the form above when a student requests access.</p> : (
         <div className="row-list">
           {leaders.map((leader) => (
             <div className="row" key={leader.user_id}>
