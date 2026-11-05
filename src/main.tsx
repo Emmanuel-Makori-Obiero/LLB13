@@ -17,7 +17,7 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, BoundaryState>
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('Group 13 Hub runtime error', error, info)
+    console.error('Law Hub runtime error', error, info)
   }
 
   render() {
@@ -25,7 +25,7 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, BoundaryState>
     return (
       <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24, background: '#f5f1e8' }}>
         <section style={{ width: 'min(560px, 100%)', padding: 28, border: '1px solid #d7cec0', background: '#fffdf8', color: '#17352d', boxShadow: '0 16px 45px rgba(23,53,45,.12)' }}>
-          <p style={{ margin: '0 0 8px', fontSize: 11, letterSpacing: '.14em', textTransform: 'uppercase', color: '#7a6b5b' }}>Group 13 Hub</p>
+          <p style={{ margin: '0 0 8px', fontSize: 11, letterSpacing: '.14em', textTransform: 'uppercase', color: '#7a6b5b' }}>Law Hub</p>
           <h1 style={{ margin: '0 0 12px', fontFamily: 'Georgia, serif', fontSize: 32, fontWeight: 500 }}>The page needs a refresh.</h1>
           <p style={{ margin: '0 0 20px', lineHeight: 1.6, color: '#53645d' }}>Your work is normally saved as you go. Refresh the page to recover the workspace and continue where you left off.</p>
           <button type="button" onClick={() => window.location.reload()} style={{ padding: '11px 16px', border: 0, background: '#17352d', color: '#fffdf8', cursor: 'pointer', fontWeight: 700 }}>Refresh workspace</button>

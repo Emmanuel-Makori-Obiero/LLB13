@@ -126,7 +126,7 @@ export function TranscriptAI({
   userId,
   title,
   unit,
-  ownerName = "Group 13 member",
+  ownerName = "Law Hub member",
   getText,
   ready,
   onReviewNotes,
@@ -560,7 +560,7 @@ export function TranscriptAI({
     }
     setSaveMsg(
       visibility === "group"
-        ? "Saved and shared with Group 13."
+        ? "Saved and shared with Law Hub."
         : "Saved. Only you can see it.",
     );
     setReload((n) => n + 1);
@@ -787,7 +787,7 @@ export function TranscriptAI({
                     checked={visibility === "group"}
                     onChange={() => setVisibility("group")}
                   />
-                  <Globe size={13} /> Share with Group 13
+                  <Globe size={13} /> Share with members
                 </label>
               </div>
               <button
@@ -878,7 +878,7 @@ function SavedNotes({
             {isMine ? "you" : row.owner_name || "a member"}
           </button>
           <span className="chip">
-            {row.visibility === "group" ? "Shared with Group 13" : "Only you"}
+            {row.visibility === "group" ? "Shared with members" : "Only you"}
           </span>
           <span className="quiet">
             {new Date(row.updated_at).toLocaleDateString()}

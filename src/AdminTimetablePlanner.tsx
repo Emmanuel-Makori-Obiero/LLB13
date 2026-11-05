@@ -241,7 +241,7 @@ export default function AdminTimetablePlanner({
       );
     const issues = timetableIssues(valid);
     if (issues.length) {
-      throw new Error(`Group 13 timetables are Monday–Friday only: ${issues.join("; ")}`);
+      throw new Error(`shared timetables are Monday–Friday only: ${issues.join("; ")}`);
     }
     const created = await repository.createTimetableProposal({
       title,
@@ -282,9 +282,9 @@ export default function AdminTimetablePlanner({
       setClassTimetable(parsed);
       setClassSourceText(text);
       setSourceFilename(file.name);
-      setUploadStatus({ kind: "success", text: `${file.name} uploaded for admin review · ${parsed.length} structured row${parsed.length === 1 ? "" : "s"} found. Students see only the approved Group 13 timetable.` });
+      setUploadStatus({ kind: "success", text: `${file.name} uploaded for admin review · ${parsed.length} structured row${parsed.length === 1 ? "" : "s"} found. Students see only the approved shared timetable.` });
       setNotice(
-        `Official class timetable loaded: ${parsed.length} structured rows${parsed.length ? "" : " (the AI will read the extracted document text directly)"}. Now describe how to turn it into the Group 13 timetable.`,
+        `Official class timetable loaded: ${parsed.length} structured rows${parsed.length ? "" : " (the AI will read the extracted document text directly)"}. Now describe how to turn it into the shared timetable.`,
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown extraction error.";
@@ -309,12 +309,12 @@ export default function AdminTimetablePlanner({
     }
     const issues = timetableIssues(classTimetable);
     if (issues.length) {
-      const message = `This upload includes dates that cannot be used for Group 13 classes. Weekends are never allowed. ${issues.join("; ")}`;
+      const message = `This upload includes dates that cannot be used for scheduled classes. Weekends are never allowed. ${issues.join("; ")}`;
       setProposalStatus({ kind: "error", text: message });
       setNotice(message);
       return;
     }
-    if (!window.confirm(`Apply the ${classTimetable.length} rows from “${sourceFilename || "the uploaded file"}” and replace the current Group 13 timetable?`)) return;
+    if (!window.confirm(`Apply the ${classTimetable.length} rows from “${sourceFilename || "the uploaded file"}” and replace the current shared timetable?`)) return;
     setBusy(true);
     setProposalStatus({ kind: "working", text: `Saving and applying ${classTimetable.length} uploaded rows…` });
     try {
@@ -356,7 +356,7 @@ export default function AdminTimetablePlanner({
         messages: [
           {
             role: "user",
-            content: `Today is ${today}. Available units: ${JSON.stringify(units.map((unit) => unit.name))}\n\nDATE RULES: Resolve “this week” and “next week” from today's date, not from dates printed in an old uploaded PDF. Never schedule a date before today unless the administrator explicitly asks for a historical timetable. Calculate the real weekday for every ISO date. Never schedule Saturday or Sunday. Use at most one lesson per date.\n\nOFFICIAL CLASS TIMETABLE (source; extracted from PDF, Word or CSV):\n${classSourceText}\n\nBEST-EFFORT STRUCTURED ROWS:\n${JSON.stringify(classTimetable)}\n\nCURRENT GROUP 13 TIMETABLE (context only):\n${JSON.stringify(lessons)}\n\nADMIN INSTRUCTION FOR THE GROUP TIMETABLE:\n${instruction.trim()}\n\nReturn all eligible crucial units that fit the requested weekday windows, not only the first few units. Exclude Communication Skills for Lawyers when requested or prohibited by the instruction.`,
+            content: `Today is ${today}. Available units: ${JSON.stringify(units.map((unit) => unit.name))}\n\nDATE RULES: Resolve “this week” and “next week” from today's date, not from dates printed in an old uploaded PDF. Never schedule a date before today unless the administrator explicitly asks for a historical timetable. Calculate the real weekday for every ISO date. Never schedule Saturday or Sunday. Use at most one lesson per date.\n\nOFFICIAL CLASS TIMETABLE (source; extracted from PDF, Word or CSV):\n${classSourceText}\n\nBEST-EFFORT STRUCTURED ROWS:\n${JSON.stringify(classTimetable)}\n\nCURRENT LAW HUB TIMETABLE (context only):\n${JSON.stringify(lessons)}\n\nADMIN INSTRUCTION FOR THE GROUP TIMETABLE:\n${instruction.trim()}\n\nReturn all eligible crucial units that fit the requested weekday windows, not only the first few units. Exclude Communication Skills for Lawyers when requested or prohibited by the instruction.`,
           },
         ],
       });
@@ -385,10 +385,10 @@ export default function AdminTimetablePlanner({
         setUploadStatus({ kind: "success", text: `${sourceFilename} is now structured and shared · ${proposed.length} timetable rows ready.` });
       }
       await createProposal(
-        data.title?.trim() || "Group 13 timetable proposal",
+        data.title?.trim() || "shared timetable proposal",
         proposed,
         data.rationale?.trim() ||
-          "The planner generated this Group 13 schedule from the official class timetable and the admin instruction.",
+          "The planner generated this Law Hub schedule from the official class timetable and the admin instruction.",
       );
     } catch (error) {
       setProposalStatus({ kind: "error", text: error instanceof Error ? `Proposal failed: ${error.message}` : "Proposal failed. Please try again." });
@@ -417,7 +417,7 @@ export default function AdminTimetablePlanner({
       onApplied(fresh);
       const refreshedProposals = await repository.getTimetableProposals();
       setProposals(refreshedProposals);
-      setProposalStatus({ kind: "success", text: `Approved successfully · ${count} lessons are now in the shared Group 13 timetable.` });
+      setProposalStatus({ kind: "success", text: `Approved successfully · ${count} lessons are now in the shared shared timetable.` });
       setNotice(
         `Approved. ${count} lessons now apply to the current timetable.`,
       );
@@ -446,7 +446,7 @@ export default function AdminTimetablePlanner({
         mode: "general",
         messages: [{
           role: "user",
-          content: `Today is ${new Date().toISOString().slice(0, 10)}. Revise this existing timetable proposal into a new draft. Treat the existing proposal as a starting point, not as a permanent template: add, remove, move, replace or reschedule lessons as requested while preserving unaffected lessons. Resolve this week and next week from today's date, not from old dates in the source; move old lessons forward when the administrator asks for a current timetable. Never schedule a date before today unless a historical timetable is explicitly requested. Calculate the real weekday for every ISO date; never trust a weekday label if it conflicts with the calendar. HARD RULE: Saturday and Sunday are never allowed in the shared Group 13 class timetable, even if the administrator requests a weekend. If a requested change requires a weekend, explain that it cannot be applied and return a weekday alternative. Use at most one lesson per date when the request says one class per day.\n\nEXISTING PROPOSAL:\n${JSON.stringify(proposal.proposed_lessons)}\n\nOFFICIAL SOURCE EXTRACT:\n${classSourceText || "Use the existing proposal as the source."}\n\nADMINISTRATOR EDIT REQUEST:\n${editInstruction.trim()}`,
+          content: `Today is ${new Date().toISOString().slice(0, 10)}. Revise this existing timetable proposal into a new draft. Treat the existing proposal as a starting point, not as a permanent template: add, remove, move, replace or reschedule lessons as requested while preserving unaffected lessons. Resolve this week and next week from today's date, not from old dates in the source; move old lessons forward when the administrator asks for a current timetable. Never schedule a date before today unless a historical timetable is explicitly requested. Calculate the real weekday for every ISO date; never trust a weekday label if it conflicts with the calendar. HARD RULE: Saturday and Sunday are never allowed in the shared Law Hub class timetable, even if the administrator requests a weekend. If a requested change requires a weekend, explain that it cannot be applied and return a weekday alternative. Use at most one lesson per date when the request says one class per day.\n\nEXISTING PROPOSAL:\n${JSON.stringify(proposal.proposed_lessons)}\n\nOFFICIAL SOURCE EXTRACT:\n${classSourceText || "Use the existing proposal as the source."}\n\nADMINISTRATOR EDIT REQUEST:\n${editInstruction.trim()}`,
         }],
       });
       const data = (response.data ?? {}) as { title?: string; rationale?: string; lessons?: unknown };
@@ -551,11 +551,11 @@ export default function AdminTimetablePlanner({
       <div className="card-header">
         <div>
           <span className="section-label">
-            Class timetable → Group 13 timetable · admin only
+            Class timetable → shared timetable · admin only
           </span>
           <p className="field-hint">
             Load the official class timetable as the source, describe the
-            group’s needs, then review and approve the generated Group 13
+            group’s needs, then review and approve the generated Law Hub
             timetable.
           </p>
         </div>
@@ -582,7 +582,7 @@ export default function AdminTimetablePlanner({
           <div className={`timetable-status ${uploadStatus.kind}`} role="status">{uploadStatus.text}</div>
           <p className="field-hint">
             This only loads the official class timetable into the planner. It
-            does not alter the current Group 13 timetable.
+            does not alter the current shared timetable.
           </p>
           {classTimetable?.length ? (
             <button className="secondary-button timetable-import-apply" onClick={() => void applyUploadedRows()} disabled={busy}>
@@ -592,7 +592,7 @@ export default function AdminTimetablePlanner({
         </div>
         <div>
           <label className="field-label">
-            Describe the Group 13 timetable needs
+            Describe the shared timetable needs
             <textarea
               value={instruction}
               onChange={(event) => setInstruction(event.target.value)}
@@ -607,7 +607,7 @@ export default function AdminTimetablePlanner({
             disabled={busy || !classSourceText}
           >
             <Lightbulb size={14} />{" "}
-            {busy ? "Working…" : "Make Group 13 proposal"}
+            {busy ? "Working…" : "Make Law Hub proposal"}
           </button>
           <div className={`timetable-status ${proposalStatus.kind}`} role="status">{proposalStatus.text}</div>
         </div>

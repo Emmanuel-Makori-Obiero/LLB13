@@ -223,7 +223,7 @@ const initials = "13";
 const roomLink = (id: string) => `${window.location.origin}/meetings/${id}`;
 const playlistLink = (id: string) => `${window.location.origin}/playlist/${id}`;
 const whatsappLink = (discussion: Discussion) =>
-  `https://wa.me/?text=${encodeURIComponent(`Join "${discussion.title}" on Group 13: ${roomLink(discussion.id)}`)}`;
+  `https://wa.me/?text=${encodeURIComponent(`Join "${discussion.title}" on Law Hub: ${roomLink(discussion.id)}`)}`;
 const profileInitials = (name: string, email = "") =>
   (name || email.split("@")[0] || initials)
     .split(/\s+/)
@@ -458,7 +458,7 @@ function App() {
       if (code) {
         const { error } = await supabase!.auth.exchangeCodeForSession(code);
         if (error) {
-          setAuthCallbackNotice("We could not complete that email confirmation. Request a new confirmation email and open it from the canonical Group 13 link.");
+          setAuthCallbackNotice("We could not complete that email confirmation. Request a new confirmation email and open it from the canonical Law Hub link.");
           setView("login");
           console.error(
             "Could not complete the email confirmation:",
@@ -636,7 +636,7 @@ function App() {
   );
   const visibleAssignmentIds = new Set(visibleAssignments.map((assignment) => assignment.id));
   const visibleTodos = todos.filter((todo) => !todo.assignment_id || visibleAssignmentIds.has(todo.assignment_id));
-  const currentPageLabel = nav.find((item) => item.id === view)?.label ?? "Group 13 workspace";
+  const currentPageLabel = nav.find((item) => item.id === view)?.label ?? "learning workspace";
   const setPage = (next: string) => {
     const target = validViews.has(next) ? next : "dashboard";
     setMenuOpen(false);
@@ -681,8 +681,8 @@ function App() {
   const startMeeting = async (title: string) => {
     try {
       const created = await repository.createMeeting(
-        title.trim() || "Group 13 meeting",
-        profile.displayName || userEmail?.split("@")[0] || "Group 13",
+        title.trim() || "Law Hub meeting",
+        profile.displayName || userEmail?.split("@")[0] || "Law Hub",
       );
       setDiscussions((current) =>
         current.some((item) => item.id === created.id)
@@ -1446,7 +1446,7 @@ function App() {
               displayName={
                 profile.displayName ||
                 userEmail?.split("@")[0] ||
-                "Group 13 member"
+                "Law Hub member"
               }
               openMeeting={openMeeting}
               onStart={startMeeting}
@@ -1664,7 +1664,7 @@ function App() {
           {view === "meeting" && activeMeeting && (
             <div className="meeting-page">
               <PageHeading
-                eyebrow="Group 13 live room"
+                eyebrow="Law Hub live room"
                 title={activeMeeting.title}
                 subtitle="Your private browser-based discussion room is ready."
                 stamp={false}
@@ -1790,7 +1790,7 @@ function Brand({ compact = false }: { compact?: boolean }) {
       <div className="brand-mark">13</div>
       {!compact && (
         <div>
-          <div className="brand-name">GROUP 13</div>
+          <div className="brand-name">LAW HUB</div>
           <div className="brand-sub">Law school hub</div>
         </div>
       )}
@@ -1935,7 +1935,7 @@ function Topbar({
   return (
     <header className="topbar">
       <div className="breadcrumb">
-        <span>Group 13</span>
+        <span>Law Hub</span>
         <ChevronRight size={13} />
         <strong>{label}</strong>
       </div>
@@ -2399,7 +2399,7 @@ function AnnouncementPanel({
       .from("group_announcements")
       .insert({
         created_by: userId,
-        author_name: displayName || "Group 13 member",
+        author_name: displayName || "Law Hub member",
         title: title.trim(),
         message: message.trim(),
       })
@@ -2442,7 +2442,7 @@ function AnnouncementPanel({
     <div className="card card-pad announcement-panel">
       <div className="card-header">
         <span className="section-label">Group announcements</span>
-        <span className="quiet">Notify everyone in Group 13</span>
+        <span className="quiet">Notify everyone in Law Hub</span>
       </div>
       <form className="data-form announcement-form" onSubmit={send}>
         <label>
@@ -2960,7 +2960,7 @@ function PublicPlaylistPage() {
   }, [playlistId]);
   return <main className="public-playlist-page">
     <div className="public-playlist-shell">
-      <p className="eyebrow">Group 13 public media</p>
+      <p className="eyebrow">Law Hub public media</p>
       <h1>{playlist?.title || "Emmanuels playlist"}</h1>
       <p className="subheading">Anyone can listen to this playlist. Select play on any song below.</p>
       {error && <div className="connection-error">{error}</div>}
@@ -3379,7 +3379,7 @@ function MediaPage({
   const shareCloudAssetWithGroup = async (asset: MediaAsset) => {
     try {
       await createMediaShare({ assetId: asset.id, visibility: "group" });
-      setFilmNote("Saved media is now shared with Group 13. Other signed-in members can find it in Media.");
+      setFilmNote("Saved media is now shared with Law Hub. Other signed-in members can find it in Media.");
     } catch (error) {
       setCloudError(error instanceof Error ? error.message : "Could not share cloud media with the group.");
     }
@@ -3608,7 +3608,7 @@ function MediaPage({
       </div>
 
       {cloudError && <div className="connection-error" style={{ marginTop: 18 }}>{cloudError}</div>}
-        {cloudAssets.length > 0 && <><PageHeading eyebrow="Generated and uploaded" title="Cloud media archive." subtitle="Generated podcasts, lessons, images, and videos are saved privately here and remain available across signed-in devices." /><div className="media-grid">{cloudAssets.map((asset) => <article className="card media-card" key={asset.id}><div className="media-link-card"><Film size={24} /><strong>{asset.title}</strong><span className="chip">{asset.kind} · {asset.status}</span><div className="media-actions">{asset.kind === "podcast_audio" && asset.status === "ready" && <button className="secondary-button" onClick={() => void playCloudAsset(asset)}><Play size={13} /> Play podcast</button>}{(asset.kind === "video_lesson" || asset.kind === "film_clip") && (asset.status === "queued" || asset.status === "processing") && <button className="secondary-button" disabled={videoBusy || checkingVideoId === asset.id} onClick={() => void refreshVideoStatus(asset)}>{checkingVideoId === asset.id ? "Checking…" : videoBusy ? "Generation checking…" : "Refresh video status"}</button>}<button className="secondary-button" onClick={() => void openCloudAsset(asset)}>Open cloud file</button><button className="secondary-button" onClick={() => void shareCloudAssetWithGroup(asset)}>Share with Group 13</button><button className="secondary-button" onClick={() => void shareCloudAsset(asset)}>Copy 7-day link</button><button className="danger-button" onClick={() => void removeCloudAsset(asset)}>Delete</button></div></div></article>)}</div></>}
+        {cloudAssets.length > 0 && <><PageHeading eyebrow="Generated and uploaded" title="Cloud media archive." subtitle="Generated podcasts, lessons, images, and videos are saved privately here and remain available across signed-in devices." /><div className="media-grid">{cloudAssets.map((asset) => <article className="card media-card" key={asset.id}><div className="media-link-card"><Film size={24} /><strong>{asset.title}</strong><span className="chip">{asset.kind} · {asset.status}</span><div className="media-actions">{asset.kind === "podcast_audio" && asset.status === "ready" && <button className="secondary-button" onClick={() => void playCloudAsset(asset)}><Play size={13} /> Play podcast</button>}{(asset.kind === "video_lesson" || asset.kind === "film_clip") && (asset.status === "queued" || asset.status === "processing") && <button className="secondary-button" disabled={videoBusy || checkingVideoId === asset.id} onClick={() => void refreshVideoStatus(asset)}>{checkingVideoId === asset.id ? "Checking…" : videoBusy ? "Generation checking…" : "Refresh video status"}</button>}<button className="secondary-button" onClick={() => void openCloudAsset(asset)}>Open cloud file</button><button className="secondary-button" onClick={() => void shareCloudAssetWithGroup(asset)}>Share with members</button><button className="secondary-button" onClick={() => void shareCloudAsset(asset)}>Copy 7-day link</button><button className="danger-button" onClick={() => void removeCloudAsset(asset)}>Delete</button></div></div></article>)}</div></>}
 
       <div className="media-grid">
         {media.map((item) => (
@@ -4795,7 +4795,7 @@ function MaterialForm({
             month: "short",
             year: "numeric",
           }),
-          source: "Group 13",
+          source: "Law Hub",
           url: "",
           target_years: [],
         },
@@ -4992,7 +4992,7 @@ function MaterialForm({
             Upload document{" "}
             <span className="field-hint">Optional PDF, Word, PPTX, or text file</span>
           </label>
-          <span className="field-hint">Scanned or photographed PDFs are supported. Group 13 will read them page by page with OCR; keep this window open until the page count finishes.</span>
+          <span className="field-hint">Scanned or photographed PDFs are supported. Law Hub will read them page by page with OCR; keep this window open until the page count finishes.</span>
           <span className={`material-dropzone ${dragActive ? "active" : ""} ${file ? "has-file" : ""}`}>
             <strong>{file ? file.name : "Drag and drop a book here"}</strong>
             <small>{file ? "AI details are ready to review below." : "or choose a PDF, Word DOCX, PPTX, or text file"}</small>

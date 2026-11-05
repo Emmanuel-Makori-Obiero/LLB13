@@ -174,7 +174,7 @@ ORIGINALITY AND MEANINGFULNESS: Build this review around the primary critical an
   };
 
   const resultTitle = isBookReview ? `Book review — ${selectedBook?.title || title || "Library book"}` : (title || "Assignment helper");
-  const exportOptions = { plainBookReview: isBookReview, eyebrow: isBookReview ? "Group 13 · Library book review" : "Group 13 · Assignment helper", subtitle: isBookReview ? (selectedBook?.title || "Official book review") : title || "Study notes", sources: selectedSources.map((source) => source.title) };
+  const exportOptions = { plainBookReview: isBookReview, eyebrow: isBookReview ? "Law Hub · Library book review" : "Law Hub · Assignment helper", subtitle: isBookReview ? (selectedBook?.title || "Official book review") : title || "Study notes", sources: selectedSources.map((source) => source.title) };
   return <section className="assignment-helper-page">
     <div className="page-heading">
       <div><div className="eyebrow">Plan, understand, improve</div><h1 className="heading">AI Assignment Helper.</h1><p className="subheading">Paste the assignment brief, select AI-readable source documents, and work through the question step by step. It helps you think and improve; it does not submit work for you.</p></div>

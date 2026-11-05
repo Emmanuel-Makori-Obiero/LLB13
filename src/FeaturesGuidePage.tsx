@@ -66,7 +66,7 @@ export default function FeaturesGuidePage() {
           <p>Browse the full platform before you sign in. See what each feature does, how to use it, who can access it, and where setup or limits still apply.</p>
           <a className="fg-primary" href="#feature-list">Explore the features <ArrowRight size={16} /></a>
         </div>
-        <aside className="fg-hero-note"><ShieldCheck size={18} /><span><strong>Public guide for Kenyan law students.</strong> Workspace sign-up is currently limited to approved Group 13 accounts.</span></aside>
+        <aside className="fg-hero-note"><ShieldCheck size={18} /><span><strong>Public guide for Kenyan law students.</strong> Workspace sign-up is currently limited to approved student accounts.</span></aside>
       </section>
 
       <section className="fg-directory" id="feature-list" aria-label="Feature directory">

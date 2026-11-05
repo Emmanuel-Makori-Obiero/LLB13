@@ -260,7 +260,7 @@ export default function RealtimeJudgeRoom() {
       typeof AudioWorkletNode === "undefined"
     ) {
       setError(
-        "Live voice is not supported by this browser. Use the Layer 1 judge, which works with ordinary speech controls, or open Group 13 in a recent Safari, Chrome, or Edge browser.",
+        "Live voice is not supported by this browser. Use the Layer 1 judge, which works with ordinary speech controls, or open the learning hub in a recent Safari, Chrome, or Edge browser.",
       );
       setState("error");
       return;

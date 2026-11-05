@@ -378,7 +378,7 @@ export async function extractText(file: File, onProgress?: (completed: number, t
   if (isLegacyDoc) {
     const legacyExport = extractLegacyWordHtml(await file.text());
     if (legacyExport) return legacyExport;
-    throw new Error("This .doc is a binary Word file, not an older Group 13 export, so the browser cannot read it directly. For other .doc files, save or export a copy as .docx and upload that copy.");
+    throw new Error("This .doc is a binary Word file, not an older learning hub export, so the browser cannot read it directly. For other .doc files, save or export a copy as .docx and upload that copy.");
   }
   if (name.endsWith(".pptx")) {
     const JSZip = (await import("jszip")).default;

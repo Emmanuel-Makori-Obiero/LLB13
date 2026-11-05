@@ -111,7 +111,7 @@ function wordTable(rows: TableRow[]) {
 
 function wordDocumentXml(title: string, text: string, options: ExportOptions) {
   const content: string[] = [
-    wordParagraph(options.eyebrow ?? "Group 13 · Study document", "Eyebrow"),
+    wordParagraph(options.eyebrow ?? "Law Hub · Study document", "Eyebrow"),
     wordParagraph(title, "Title"),
   ];
   if (options.subtitle) content.push(wordParagraph(options.subtitle, "Subtitle"));
@@ -252,7 +252,7 @@ export function buildPdfDocument(title: string, text: string, options: ExportOpt
       "q", "0.969 0.961 0.941 rg", "0 0 612 792 re", "f",
       "0.086 0.227 0.204 rg", "0 705 612 87 re", "f", "Q",
     ], y: 686 };
-    drawText(page, (options.eyebrow ?? "GROUP 13 - STUDY DOCUMENT").toUpperCase(), 48, 770, 8, "F2", "0.95 0.76 0.65");
+    drawText(page, (options.eyebrow ?? "LAW HUB - STUDY DOCUMENT").toUpperCase(), 48, 770, 8, "F2", "0.95 0.76 0.65");
     const titleLines = wrapPdf(title, 58).slice(0, 2);
     titleLines.forEach((line, index) => drawText(page, line, 48, 744 - index * 20, 17, "F3", "1 1 1"));
     if (pageIndex === 0 && options.subtitle) {
@@ -345,7 +345,7 @@ export function buildPdfDocument(title: string, text: string, options: ExportOpt
   const objects: string[] = ["<< /Type /Catalog /Pages 2 0 R >>", "", "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>", "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>", "<< /Type /Font /Subtype /Type1 /BaseFont /Times-Roman >>"];
   const pageIds: number[] = [];
   pages.forEach((pdfPage, pageIndex) => {
-    const footer = wrapPdf(`${options.footer ?? "Prepared in Group 13"}  ·  ${pageIndex + 1}/${pages.length}`, 105)[0];
+    const footer = wrapPdf(`${options.footer ?? "Prepared in Law Hub"}  ·  ${pageIndex + 1}/${pages.length}`, 105)[0];
     drawText(pdfPage, footer, 48, 27, 7.5, "F1", "0.47 0.47 0.43");
     const stream = pdfPage.commands.join("\n");
     const contentId = objects.length + 1;
@@ -355,7 +355,7 @@ export function buildPdfDocument(title: string, text: string, options: ExportOpt
     objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents ${contentId} 0 R >>`);
   });
   objects[1] = `<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pageIds.length} >>`;
-  let pdf = "%PDF-1.4\n% Group 13\n";
+  let pdf = "%PDF-1.4\n% Law Hub\n";
   const offsets = [0];
   objects.forEach((object, index) => {
     offsets[index + 1] = pdf.length;
