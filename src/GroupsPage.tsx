@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { Check, Copy, DoorOpen, KeyRound, Plus, RotateCw, Trash2, UserRoundX } from "lucide-react";
+import { Check, Copy, Download, DoorOpen, KeyRound, Plus, RotateCw, Trash2, UserRoundX } from "lucide-react";
 import { repository, supabase } from "./data/repository";
 import { studyGroupDisplayName, type GroupAttendance, type GroupAttendanceStatus, type GroupAttendanceSummary, type GroupSession, type StudyGroup, type StudyGroupMember } from "./data/types";
 import "./groups.css";
@@ -218,6 +218,22 @@ export default function GroupsPage() {
       setError(`Ask the primary admin to approve this account: ${userEmail}`);
     }
   };
+  const exportAttendance = () => {
+    if (!group || !summary.length) return;
+    const cell = (value: string | number | null) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+    const rows = [
+      ["Group", "From", "To", "Member", "Sessions held", "Present", "Late", "Excused", "Absent", "Attendance %", "Last active"],
+      ...summary.map((item) => [studyGroupDisplayName(group.name), fromDate, toDate, item.display_name, item.sessions_held, item.present, item.late, item.excused, item.absent, item.attendance_percentage, item.last_active_date ?? ""]),
+    ];
+    const csv = rows.map((row) => row.map(cell).join(",")).join("\r\n");
+    const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${studyGroupDisplayName(group.name).replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase()}-attendance-${fromDate}-to-${toDate}.csv`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setNotice(`Attendance downloaded for ${fromDate} to ${toDate}.`);
+  };
 
   return (
     <div className="groups-page">
@@ -331,7 +347,7 @@ export default function GroupsPage() {
                       {isLeader && <button className="small-danger" disabled={busy === `delete-session-${session.id}` || !online} onClick={() => { if (window.confirm("Delete this session and its attendance records?")) void act(`delete-session-${session.id}`, () => repository.deleteGroupSession(session.id), "Session deleted."); }}><Trash2 size={13} /> Delete</button>}
                     </div>
                   </div>
-                  {isLeader && session.status === "open" && <div className="groups-mark-grid">
+                  {isLeader && <div className="groups-mark-grid">
                     {members.map((member) => {
                       const key = `${session.id}:${member.user_id}`;
                       const record = attendanceByKey.get(key);
@@ -351,8 +367,9 @@ export default function GroupsPage() {
           </section>
 
           <section className="card card-pad groups-summary-section">
-            <div className="card-header"><span className="section-label">Attendance summary</span><span className="quiet">Visibility only · no effect on marks</span></div>
+            <div className="card-header"><div><span className="section-label">Attendance summary</span><span className="quiet">Visibility only · no effect on marks</span></div>{isLeader && <button className="secondary-button" type="button" onClick={exportAttendance} disabled={!summary.length}><Download size={14} /> Download selected period</button>}</div>
             <div className="groups-date-range"><label className="groups-field">From<input type="date" value={fromDate} max={toDate} onChange={(event) => setFromDate(event.target.value)} /></label><label className="groups-field">To<input type="date" value={toDate} min={fromDate} onChange={(event) => setToDate(event.target.value)} /></label></div>
+            {isLeader && <p className="field-hint">Choose the dates first. The download will contain this group’s member attendance summary for exactly that period.</p>}
             <div className="table-wrap"><table className="table groups-summary-table"><thead><tr><th>Member</th><th>Sessions held</th><th>Present</th><th>Late</th><th>Excused</th><th>Absent</th><th>Attendance</th><th>Last active</th></tr></thead><tbody>{summary.map((item) => <tr key={item.user_id}><td>{item.display_name}</td><td>{item.sessions_held}</td><td>{item.present}</td><td>{item.late}</td><td>{item.excused}</td><td>{item.absent}</td><td>{item.attendance_percentage}%</td><td>{showDate(item.last_active_date)}</td></tr>)}</tbody></table></div>
             {!summary.length && <p className="empty">No attendance summary is available for this date range yet.</p>}
           </section>
