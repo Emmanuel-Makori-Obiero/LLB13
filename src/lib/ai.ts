@@ -347,7 +347,7 @@ function chunkText(text: string, size = 1200, overlap = 200): string[] {
   return chunks;
 }
 
-export async function extractText(file: File): Promise<string> {
+export async function extractText(file: File, onProgress?: (completed: number, total: number) => void): Promise<string> {
   const name = file.name.toLowerCase();
   const isDocx = name.endsWith(".docx") || file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
   const isLegacyDoc = name.endsWith(".doc") || file.type === "application/msword";
@@ -363,7 +363,7 @@ export async function extractText(file: File): Promise<string> {
         tc.items.map((it) => ("str" in it ? it.str : "")).join(" ") + "\n\n";
     }
     if (out.trim().length >= 40) return out;
-    return ocrPdfPages(pdf);
+    return ocrPdfPages(pdf, onProgress);
   }
   if (file.type.startsWith("image/") || /\.(png|jpe?g|webp|bmp|tiff?)$/i.test(name)) {
     return ocrImage(file);

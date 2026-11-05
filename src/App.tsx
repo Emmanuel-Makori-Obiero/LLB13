@@ -4806,9 +4806,13 @@ function MaterialForm({
     setFile(selectedFile);
     if (!selectedFile || initial) return;
       setExtracting(true);
-      setExtractNote("Reading the book and extracting details…");
+      setExtractNote(selectedFile.name.toLowerCase().endsWith(".pdf")
+        ? "Checking the PDF text layer; scanned pages will be read with OCR…"
+        : "Reading the book and extracting details…");
       try {
-        const text = (await extractText(selectedFile)).trim();
+        const text = (await extractText(selectedFile, (completed, total) => {
+          setExtractNote(`Reading scanned PDF with OCR: page ${completed} of ${total}… Keep this window open.`);
+        })).trim();
       if (!text) {
         throw new Error(
           "OCR could not find readable text in this file. Try a clearer scan or enter the details manually.",
@@ -4857,7 +4861,7 @@ function MaterialForm({
         author: metadata?.author?.trim() || current.author,
         date: metadata?.date?.trim() || current.date,
       }));
-      setExtractNote("Details extracted. Review them before saving.");
+      setExtractNote("Details extracted. Review them before saving. Scanned pages were read with OCR; check names, case citations, and section numbers against the original PDF.");
     } catch (error) {
       setExtractNote(
         error instanceof Error
@@ -4988,6 +4992,7 @@ function MaterialForm({
             Upload document{" "}
             <span className="field-hint">Optional PDF, Word, PPTX, or text file</span>
           </label>
+          <span className="field-hint">Scanned or photographed PDFs are supported. Group 13 will read them page by page with OCR; keep this window open until the page count finishes.</span>
           <span className={`material-dropzone ${dragActive ? "active" : ""} ${file ? "has-file" : ""}`}>
             <strong>{file ? file.name : "Drag and drop a book here"}</strong>
             <small>{file ? "AI details are ready to review below." : "or choose a PDF, Word DOCX, PPTX, or text file"}</small>
@@ -5004,7 +5009,7 @@ function MaterialForm({
           <input ref={imagePickerRef} type="file" hidden accept="image/*" onChange={(event) => { chooseFile(event.target.files?.[0]); event.currentTarget.value = ""; }} />
           {extracting && (
             <span className="field-hint">
-              AI is analysing the readable text…
+              {extractNote || "AI is analysing the readable text…"}
             </span>
           )}
           {savingMaterial && file && file.size > 6 * 1024 * 1024 && (
