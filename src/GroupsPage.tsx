@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Check, Copy, DoorOpen, KeyRound, Plus, RotateCw, Trash2, UserRoundX } from "lucide-react";
 import { repository, supabase } from "./data/repository";
-import type { GroupAttendance, GroupAttendanceStatus, GroupAttendanceSummary, GroupSession, StudyGroup, StudyGroupMember } from "./data/types";
+import { studyGroupDisplayName, type GroupAttendance, type GroupAttendanceStatus, type GroupAttendanceSummary, type GroupSession, type StudyGroup, type StudyGroupMember } from "./data/types";
 import "./groups.css";
 
 const STATUS_OPTIONS: GroupAttendanceStatus[] = ["present", "late", "excused", "absent"];
@@ -174,7 +174,7 @@ export default function GroupsPage() {
     }, "Group name updated.");
   };
   const deleteGroup = () => {
-    if (!group || !window.confirm(`Delete “${group.name}”, its roster, sessions, and attendance records? This cannot be undone.`)) return;
+    if (!group || !window.confirm(`Delete “${studyGroupDisplayName(group.name)}”, its roster, sessions, and attendance records? This cannot be undone.`)) return;
     void act("delete", async () => repository.deleteStudyGroup(group.id), "Group deleted.");
   };
   const leaveGroup = () => {
@@ -234,7 +234,7 @@ export default function GroupsPage() {
       {isAdmin && adminGroups.length > 0 && <label className="groups-field groups-admin-group-select">Manage any group
         <select value={adminSelectedGroupId} onChange={(event) => setAdminSelectedGroupId(event.target.value)}>
           <option value="">My group</option>
-          {adminGroups.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              {adminGroups.map((item) => <option key={item.id} value={item.id}>{studyGroupDisplayName(item.name)}</option>)}
         </select>
       </label>}
       {loading ? <div className="card card-pad"><p className="field-hint">Loading your group…</p></div> : !group ? (
@@ -261,6 +261,7 @@ export default function GroupsPage() {
             <form className="groups-form" onSubmit={createGroup}>
               <label className="groups-field">Group name
                 <input required maxLength={80} value={newGroupName} onChange={(event) => setNewGroupName(event.target.value)} placeholder="e.g. Evidence study group" />
+                <span className="field-hint">Shown to everyone as “{newGroupName.trim() || "Your name"} Law Study Hub”.</span>
               </label>
               <button className="primary-button" type="submit" disabled={busy === "create" || !online}><Plus size={14} /> {busy === "create" ? "Creating…" : "Create a group"}</button>
             </form>
@@ -277,11 +278,11 @@ export default function GroupsPage() {
                   <label className="groups-field">Group name<input required maxLength={80} value={renameValue} onChange={(event) => setRenameValue(event.target.value)} /></label>
                   <button className="primary-button" disabled={busy === "rename" || !online}>{busy === "rename" ? "Saving…" : "Save name"}</button>
                   <button className="secondary-button" type="button" onClick={() => setRenameOpen(false)}>Cancel</button>
-                </form> : <h2>{group.name}</h2>}
+                </form> : <h2>{studyGroupDisplayName(group.name)}</h2>}
                 <p className="groups-count">{members.length} / {memberLimit} members <span>·</span> Leader: {members.find((member) => member.user_id === group.leader_id)?.display_name ?? "Group leader"}</p>
               </div>
               <div className="groups-actions">
-                {isLeader && !renameOpen && <button className="secondary-button" onClick={() => { setRenameValue(group.name); setRenameOpen(true); }}>Rename</button>}
+                {isLeader && !renameOpen && <button className="secondary-button" onClick={() => { setRenameValue(group.name.replace(/\s+Law Study Hub\s*$/i, "").trim()); setRenameOpen(true); }}>Rename</button>}
                 {members.some((member) => member.user_id === userId) && group.leader_id !== userId && <button className="secondary-button" disabled={busy === "leave" || !online} onClick={leaveGroup}><DoorOpen size={14} /> Leave group</button>}
                 {isLeader && <button className="small-danger" disabled={busy === "delete" || !online} onClick={deleteGroup}><Trash2 size={13} /> Delete group</button>}
               </div>

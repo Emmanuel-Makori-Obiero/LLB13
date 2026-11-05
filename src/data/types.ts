@@ -115,6 +115,11 @@ export type StudyGroup = {
   created_at: string;
 };
 
+export const studyGroupDisplayName = (name: string) => {
+  const base = name.trim().replace(/\s+Law Study Hub\s*$/i, "").replace(/\s+/g, " ");
+  return base ? `${base} Law Study Hub` : "Law Study Hub";
+};
+
 export type StudyGroupMember = {
   group_id: string;
   user_id: string;
