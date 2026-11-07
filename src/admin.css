@@ -265,6 +265,12 @@
 .admin-activity-day-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 10px 0 5px; color: var(--ink); font-size: 12px; }
 .admin-activity-day-heading span { color: var(--muted); font-size: 10px; }
 .admin-activity-list { max-height: 390px; overflow-y: auto; padding-right: 5px; }
+.admin-provider-events-card { min-width: 0; }
+.admin-provider-events-list { max-height: 360px; overflow-y: auto; padding-right: 5px; scrollbar-width: thin; }
+.admin-provider-events-list .row { min-width: 0; }
+.admin-provider-events-list .row-main { min-width: 0; }
+.admin-provider-events-list .row-title,
+.admin-provider-events-list .row-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .admin-collapsible { overflow: hidden; }
 .admin-collapsible-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; list-style: none; }
 .admin-collapsible-summary::-webkit-details-marker { display: none; }
@@ -275,7 +281,7 @@
 @media (max-width: 600px) {
   .admin-activity-days { margin-right: -17px; padding-right: 17px; }
   .admin-activity-days button { min-width: 102px; padding: 9px; }
-  .admin-activity-list { max-height: 330px; }
+  .admin-activity-list, .admin-provider-events-list { max-height: 300px; }
   .admin-collapsible-summary { align-items: flex-start; }
   .admin-collapsible-summary .quiet { text-align: right; }
 }
