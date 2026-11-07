@@ -115,8 +115,8 @@ export function CounsellorChat({ storageKey }: { storageKey?: string }) {
       </form>
       <p className="field-hint">
         Replies come from AI, not a person or licensed counsellor. This is not crisis care. {storageKey
-          ? "This conversation is saved only in this browser profile under your account-specific key; anyone with access to this browser profile may see it. It is not stored in the Group 13 database."
-          : "This conversation is not saved by Group 13 Hub and disappears when you leave this page."}
+          ? "This conversation is saved only in this browser profile under your account-specific key; anyone with access to this browser profile may see it. It is not stored in the learning database."
+          : "This conversation is not saved by Law Hub and disappears when you leave this page."}
       </p>
       {storageKey && turns.length > 0 && (
         <button type="button" className="secondary-button" onClick={clearHistory} disabled={busy}>

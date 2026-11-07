@@ -147,7 +147,7 @@ export function HelpButton({
           >
             <div className="g13-help-head">
               <div>
-                <span className="g13-help-kicker">GROUP 13 · QUICK GUIDE</span>
+                <span className="g13-help-kicker">LAW HUB · QUICK GUIDE</span>
                 <h2 id="g13-help-title">Find your way around.</h2>
               </div>
               <button
@@ -182,7 +182,7 @@ export function HelpButton({
             </div>
             <div className="g13-help-note">
               <strong>Can’t sign up?</strong>
-              <span>Accounts are limited to approved Group 13 emails. Ask a class administrator to add your address.</span>
+              <span>Accounts are limited to approved student accounts. Ask a class administrator to add your address.</span>
             </div>
             <div className="g13-help-install">
               <div><strong>Install on your phone</strong><small>Use your browser menu to choose “Install app” or “Add to Home Screen”. On iPhone, open the site in Safari and use Share → Add to Home Screen.</small></div>
@@ -334,7 +334,7 @@ export default function LandingPage({
               <a className="g13-hero-guide-link" href="/cases">Search Kenyan case law <ArrowRight size={14} /></a>
             </div>
             <p className="g13-access-note" role={signedInPreview ? "status" : undefined} aria-live={signedInPreview ? "polite" : undefined}>
-              {signedInPreview ? <><span className="g13-opening-dot" /> Opening your workspace…</> : <><LockKeyhole size={13} /> For approved Group 13 accounts.</>}
+              {signedInPreview ? <><span className="g13-opening-dot" /> Opening your workspace…</> : <><LockKeyhole size={13} /> For approved student accounts.</>}
             </p>
           </div>
           <div className="g13-hero-index"><span>FIELD NOTES</span><strong>LS</strong><small>LEARN · REASON · REPEAT</small></div>
@@ -498,18 +498,18 @@ export default function LandingPage({
 
         <section className="g13-final-cta">
           <div className="g13-final-mark">LS</div>
-          <span className="g13-kicker">{signedInPreview ? "YOUR GROUP 13 WORKSPACE" : "YOUR NEXT GOOD STUDY SESSION STARTS HERE"}</span>
+          <span className="g13-kicker">{signedInPreview ? "YOUR LAW HUB WORKSPACE" : "YOUR NEXT GOOD STUDY SESSION STARTS HERE"}</span>
           <h2>{signedInPreview ? <>Welcome back.<br /><strong>Pick up your work.</strong></> : <>Read closely.<br /><strong>Think boldly.</strong></>}</h2>
           <div className="g13-final-actions">
             <button type="button" className="g13-hero-primary" onClick={signedInPreview ? openWorkspace : onSignUp}>{signedInPreview ? "Open your workspace" : "Create your account"} <ArrowRight size={17} /></button>
             {!signedInPreview && <button type="button" className="g13-final-login" onClick={onSignIn}>Already have an account? Sign in</button>}
           </div>
           <a className="g13-final-guide-link" href="/features">See every feature and how to use it <ArrowRight size={14} /></a>
-          {!signedInPreview && <p>Account creation is available to approved Group 13 emails.</p>}
+          {!signedInPreview && <p>Account creation is available to approved student accounts.</p>}
         </section>
       </main>
 
-      <footer className="g13-footer"><Brand /><span>Private academic workspace · Group 13</span><a href="#top" onClick={(event) => { event.preventDefault(); window.scrollTo({ top: 0, behavior: "smooth" }); }}>Back to top ↑</a></footer>
+      <footer className="g13-footer"><Brand /><span>Private academic workspace · Law Hub</span><a href="#top" onClick={(event) => { event.preventDefault(); window.scrollTo({ top: 0, behavior: "smooth" }); }}>Back to top ↑</a></footer>
       <HelpButton floating onSignUp={signedInPreview ? undefined : onSignUp} />
       {!configured && <div className="g13-config-note" role="status">The public overview is available. Sign-in will open as soon as the workspace configuration is complete.</div>}
     </div>

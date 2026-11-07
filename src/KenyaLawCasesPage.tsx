@@ -77,9 +77,9 @@ export default function KenyaLawCasesPage() {
   return (
     <main className="kl-page" id="top">
       <header className="kl-header">
-        <a className="kl-brand" href="/" aria-label="Group 13 home">
+        <a className="kl-brand" href="/" aria-label="home">
           <span className="kl-brand-mark">13</span>
-          <span><strong>GROUP 13</strong><small>LAW SCHOOL HUB</small></span>
+          <span><strong>LAW HUB</strong><small>LAW SCHOOL HUB</small></span>
         </a>
         <nav className="kl-nav" aria-label="Public navigation">
           <button type="button" className="kl-back" onClick={() => window.history.length > 1 ? window.history.back() : window.location.assign("/")}><ArrowLeft size={14} /> Back</button>
@@ -151,7 +151,7 @@ export default function KenyaLawCasesPage() {
       </div>
 
       <footer className="kl-footer">
-        <a className="kl-brand" href="/" aria-label="Group 13 home"><span className="kl-brand-mark">13</span><span><strong>GROUP 13</strong><small>LAW SCHOOL HUB</small></span></a>
+        <a className="kl-brand" href="/" aria-label="home"><span className="kl-brand-mark">13</span><span><strong>LAW HUB</strong><small>LAW SCHOOL HUB</small></span></a>
         <span>Original judgments remain on Kenya Law. The app’s proxy only discovers public links and never bypasses a login or access control.</span>
         <a href="#top">Back to top ↑</a>
       </footer>

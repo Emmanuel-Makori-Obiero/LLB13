@@ -18,9 +18,9 @@ export const featureCatalog: FeatureEntry[] = [
     title: "Public landing and workspace entry",
     category: "Start here",
     availability: "partial",
-    access: "Anyone can visit the public landing page. An approved Group 13 account is needed to enter the study workspace.",
+    access: "Anyone can visit the public landing page. An approved student account is needed to enter the study workspace.",
     capabilities: [
-      "Introduces the Group 13 study hub, its learning approach, and the main study areas.",
+      "Introduces the law study hub, its learning approach, and the main study areas.",
       "Offers clear sign-in and account-creation paths, plus a quick guide for new visitors.",
       "Links directly to the public directory of all platform features.",
     ],
@@ -32,7 +32,7 @@ export const featureCatalog: FeatureEntry[] = [
     title: "Sign in and account recovery",
     category: "Start here",
     availability: "partial",
-    access: "Account creation is for approved Group 13 members. The public landing page and feature directory do not require an account.",
+    access: "Account creation is for approved members. The public landing page and feature directory do not require an account.",
     capabilities: [
       "Create an account, sign in, and confirm a new account by email.",
       "Request a password reset and choose a new password through the email link.",
@@ -45,7 +45,7 @@ export const featureCatalog: FeatureEntry[] = [
     title: "Home dashboard and daily review",
     category: "Planning & coursework",
     availability: "live",
-    access: "Sign in with an approved Group 13 account.",
+    access: "Sign in with an approved student account.",
     capabilities: [
       "Brings together upcoming lessons, open tasks, and assignment reminders on one home screen.",
       "Offers short review prompts to help revisit lessons and topics over time.",
@@ -58,7 +58,7 @@ export const featureCatalog: FeatureEntry[] = [
     title: "Timetable",
     category: "Planning & coursework",
     availability: "live",
-    access: "Sign in with an approved Group 13 account. Schedule changes depend on your access to the lesson.",
+    access: "Sign in with an approved student account. Schedule changes depend on your access to the lesson.",
     capabilities: [
       "View lessons by date, with topics, times, locations, and representatives.",
       "Add lessons and view past sessions; available edit and removal controls depend on your permissions.",
@@ -71,7 +71,7 @@ export const featureCatalog: FeatureEntry[] = [
     title: "Units curriculum",
     category: "Planning & coursework",
     availability: "partial",
-    access: "Sign in with an approved Group 13 account.",
+    access: "Sign in with an approved student account.",
     capabilities: [
       "Browse units, representatives, and a quick view of study progress.",
       "Open a unit to find its learning materials, assignments, discussions, and related lesson resources.",
@@ -84,7 +84,7 @@ export const featureCatalog: FeatureEntry[] = [
     title: "Unit workspace",
     category: "Planning & coursework",
     availability: "partial",
-    access: "Sign in with an approved Group 13 account.",
+    access: "Sign in with an approved student account.",
     capabilities: [
       "Shows a unit's progress, next steps, materials, and assignment information together.",
       "Provides links to unit discussions and lesson transcripts, with study actions for available transcripts.",
@@ -97,7 +97,7 @@ export const featureCatalog: FeatureEntry[] = [
     title: "Library and shared materials",
     category: "Library, reading & notes",
     availability: "live",
-    access: "Sign in with an approved Group 13 account.",
+    access: "Sign in with an approved student account.",
     capabilities: [
       "Search shared study materials by title, topic, unit, or type.",
       "Add supported documents or useful web links, then preview, read, and download materials.",
@@ -110,7 +110,7 @@ export const featureCatalog: FeatureEntry[] = [
     title: "Material reading desk",
     category: "Library, reading & notes",
     availability: "partial",
-    access: "Sign in with an approved Group 13 account and open a library item with a readable source.",
+    access: "Sign in with an approved student account and open a library item with a readable source.",
     capabilities: [
       "Read a linked or uploaded resource with adjustable viewing space and zoom.",
       "Save useful passages, ask for a plain-language explanation, and export study responses.",
@@ -123,7 +123,7 @@ export const featureCatalog: FeatureEntry[] = [
     title: "Assignments",
     category: "Planning & coursework",
     availability: "partial",
-    access: "Sign in with an approved Group 13 account.",
+    access: "Sign in with an approved student account.",
     capabilities: [
       "See assignment briefs, units, reviewers, due dates, and current progress.",
       "Add an assignment and move it through its available progress stages.",
@@ -136,7 +136,7 @@ export const featureCatalog: FeatureEntry[] = [
     title: "Personal to-do list",
     category: "Planning & coursework",
     availability: "live",
-    access: "Sign in with an approved Group 13 account.",
+    access: "Sign in with an approved student account.",
     capabilities: [
       "Add personal study tasks and optional due-date notes.",
       "Mark tasks complete or reopen them when plans change.",
@@ -149,7 +149,7 @@ export const featureCatalog: FeatureEntry[] = [
     title: "Discussions and study rooms",
     category: "Classes & community",
     availability: "live",
-    access: "Sign in with an approved Group 13 account. Room controls can vary by who started the room.",
+    access: "Sign in with an approved student account. Room controls can vary by who started the room.",
     capabilities: [
       "Browse scheduled and live discussion rooms, then join a session.",
       "Start an instant study room and share its invitation link with classmates.",
@@ -162,7 +162,7 @@ export const featureCatalog: FeatureEntry[] = [
     title: "Group announcements and notifications",
     category: "Classes & community",
     availability: "live",
-    access: "Sign in with an approved Group 13 account.",
+    access: "Sign in with an approved student account.",
     capabilities: [
       "Post a group announcement with a title and message.",
       "See an unread count in the workspace and open Discussions to catch up.",
@@ -175,7 +175,7 @@ export const featureCatalog: FeatureEntry[] = [
     title: "Live meeting room",
     category: "Classes & community",
     availability: "partial",
-    access: "Sign in with an approved Group 13 account. Microphone, camera, and transcription options depend on your browser and device.",
+    access: "Sign in with an approved student account. Microphone, camera, and transcription options depend on your browser and device.",
     capabilities: [
       "Join a browser-based study meeting with classmates.",
       "Capture English or Kiswahili speech as editable text when your device supports it, then download a transcript.",
@@ -188,7 +188,7 @@ export const featureCatalog: FeatureEntry[] = [
     title: "Members directory",
     category: "Classes & community",
     availability: "live",
-    access: "Sign in with an approved Group 13 account.",
+    access: "Sign in with an approved student account.",
     capabilities: [
       "Browse the member list and filter by section.",
       "See member profiles, study sections, units, and progress information shown in the directory.",
@@ -201,7 +201,7 @@ export const featureCatalog: FeatureEntry[] = [
     title: "Lecture transcription archive",
     category: "Library, reading & notes",
     availability: "partial",
-    access: "Sign in with an approved Group 13 account. Transcription availability depends on the recording and current service capacity.",
+    access: "Sign in with an approved student account. Transcription availability depends on the recording and current service capacity.",
     capabilities: [
       "Turn an audio or video lecture recording into searchable text, with language choices for English and Kiswahili.",
       "Pause and continue longer jobs, then read, search, copy, or download a completed transcript.",
@@ -214,12 +214,12 @@ export const featureCatalog: FeatureEntry[] = [
     title: "Transcript study tools",
     category: "Library, reading & notes",
     availability: "partial",
-    access: "Sign in with an approved Group 13 account and open a saved lecture transcript.",
+    access: "Sign in with an approved student account and open a saved lecture transcript.",
     capabilities: [
       "Create study notes and a topic summary from a lecture transcript.",
       "Generate quizzes and flashcards, then save notes privately or share them with the group.",
     ],
-    howToUse: "Open a transcript and choose Make notes, Summarise, Quiz, or Flashcards. Review the result, then copy, download, save privately, or share it with Group 13.",
+    howToUse: "Open a transcript and choose Make notes, Summarise, Quiz, or Flashcards. Review the result, then copy, download, save privately, or share it with Law Hub.",
     benefit: "Turns a lecture into several revision formats, reducing the time spent preparing notes and practice questions by hand.",
   },
   {
@@ -227,7 +227,7 @@ export const featureCatalog: FeatureEntry[] = [
     title: "Media resource collection",
     category: "Media & creative tools",
     availability: "live",
-    access: "Sign in with an approved Group 13 account.",
+    access: "Sign in with an approved student account.",
     capabilities: [
       "Organize law-related video, music, film, court, and lecture links by topic.",
       "Open compatible video resources in the page or follow a link to its source.",
@@ -240,7 +240,7 @@ export const featureCatalog: FeatureEntry[] = [
     title: "Cloud image studio",
     category: "Media & creative tools",
     availability: "partial",
-    access: "Sign in with an approved Group 13 account. Image creation depends on the availability of the image service.",
+    access: "Sign in with an approved student account. Image creation depends on the availability of the image service.",
     capabilities: [
       "Create an illustration or study visual from a written description.",
       "View the result and keep it in your personal media collection when generation succeeds.",
@@ -253,7 +253,7 @@ export const featureCatalog: FeatureEntry[] = [
     title: "Cloud short-video studio",
     category: "Media & creative tools",
     availability: "partial",
-    access: "Sign in with an approved Group 13 account. Video creation can take time and depends on external service availability.",
+    access: "Sign in with an approved student account. Video creation can take time and depends on external service availability.",
     capabilities: [
       "Request a short video clip by describing the scene you want.",
       "Check its progress, play a finished clip, and use a time-limited sharing link when available.",
@@ -266,7 +266,7 @@ export const featureCatalog: FeatureEntry[] = [
     title: "Long-form film planner",
     category: "Media & creative tools",
     availability: "partial",
-    access: "Sign in with an approved Group 13 account.",
+    access: "Sign in with an approved student account.",
     capabilities: [
       "Shape a longer film idea into a sequence of connected scenes.",
       "Save a storyboard-style plan with continuity notes to guide later production.",
@@ -279,7 +279,7 @@ export const featureCatalog: FeatureEntry[] = [
     title: "Study assistant",
     category: "AI study & practice",
     availability: "live",
-    access: "Sign in with an approved Group 13 account. Check generated legal content against original authorities.",
+    access: "Sign in with an approved student account. Check generated legal content against original authorities.",
     capabilities: [
       "Ask questions, clarify legal concepts, and work through problem questions or essay feedback.",
       "Study cases and readings, make quizzes or flashcards, and practice Moot Court or KMUN tasks using selected sources where available.",
@@ -292,7 +292,7 @@ export const featureCatalog: FeatureEntry[] = [
     title: "Law dictionary and Lawyer Agent",
     category: "AI study & practice",
     availability: "live",
-    access: "Sign in with an approved Group 13 account. Treat definitions as study references and verify the governing authority.",
+    access: "Sign in with an approved student account. Treat definitions as study references and verify the governing authority.",
     capabilities: [
       "Search a Black's quick-reference shelf and a broader law dictionary by term, meaning, or tag.",
       "Open a floating Lawyer Agent from any workspace page for contextual explanations and legal study guidance.",
@@ -305,7 +305,7 @@ export const featureCatalog: FeatureEntry[] = [
     title: "Learning studio",
     category: "AI study & practice",
     availability: "partial",
-    access: "Sign in with an approved Group 13 account. Audio and video options depend on your browser and the available voice service.",
+    access: "Sign in with an approved student account. Audio and video options depend on your browser and the available voice service.",
     capabilities: [
       "Turn selected readings or transcripts into a structured podcast script or narrated lesson outline in English or Kiswahili.",
       "Generate natural-sounding voice narration for listening, or make a narrated video lesson when supported.",
@@ -318,7 +318,7 @@ export const featureCatalog: FeatureEntry[] = [
     title: "Guided study and syllabus builder",
     category: "AI study & practice",
     availability: "partial",
-    access: "Sign in with an approved Group 13 account. Choose readable study sources for the most relevant results.",
+    access: "Sign in with an approved student account. Choose readable study sources for the most relevant results.",
     capabilities: [
       "Build an ordered syllabus with lessons, explanations, examples, and review questions from a chosen subject and reading.",
       "Practice with quizzes and written checkpoints, continue from saved progress, and use optional audio or document exports.",
@@ -331,7 +331,7 @@ export const featureCatalog: FeatureEntry[] = [
     title: "AI assignment helper",
     category: "AI study & practice",
     availability: "partial",
-    access: "Sign in with an approved Group 13 account. Source-based assistance works best when you select relevant readings.",
+    access: "Sign in with an approved student account. Source-based assistance works best when you select relevant readings.",
     capabilities: [
       "Break down an assignment question and plan a clear response structure, including IRAC where suitable.",
       "Review a draft or working notes, check citation details, and export useful feedback.",
@@ -344,7 +344,7 @@ export const featureCatalog: FeatureEntry[] = [
     title: "Research writer",
     category: "AI study & practice",
     availability: "partial",
-    access: "Sign in with an approved Group 13 account. Use selected sources to make research support more relevant.",
+    access: "Sign in with an approved student account. Use selected sources to make research support more relevant.",
     capabilities: [
       "Plan a research question, outline, and draft for a paper or project.",
       "Get feedback on writing, improve sections, check citation formatting, and export a draft.",
@@ -357,7 +357,7 @@ export const featureCatalog: FeatureEntry[] = [
     title: "Legal Arena source workspace",
     category: "AI study & practice",
     availability: "partial",
-    access: "Sign in with an approved Group 13 account and have a relevant reading in the library.",
+    access: "Sign in with an approved student account and have a relevant reading in the library.",
     capabilities: [
       "Choose a quick debate or a longer moot practice format.",
       "Open a selected case, statute, judgment, or note while preparing your argument.",
@@ -370,7 +370,7 @@ export const featureCatalog: FeatureEntry[] = [
     title: "Moot Court and KMUN coach",
     category: "AI study & practice",
     availability: "live",
-    access: "Sign in with an approved Group 13 account. Verify legal authorities and provisions independently.",
+    access: "Sign in with an approved student account. Verify legal authorities and provisions independently.",
     capabilities: [
       "Practice Moot Court or KMUN with step-by-step guidance and focused drills.",
       "Use an AI judge for Moot Court practice and get a specific follow-up question.",
@@ -383,7 +383,7 @@ export const featureCatalog: FeatureEntry[] = [
     title: "Live moot judge practice",
     category: "AI study & practice",
     availability: "partial",
-    access: "Sign in with an approved Group 13 account. Speech, voice, and camera options depend on your device and permissions.",
+    access: "Sign in with an approved student account. Speech, voice, and camera options depend on your device and permissions.",
     capabilities: [
       "Practice a spoken or typed submission in a one-question-at-a-time moot exchange.",
       "Listen to optional natural voice replies and record a local video for personal review.",
@@ -396,7 +396,7 @@ export const featureCatalog: FeatureEntry[] = [
     title: "Realtime voice judge",
     category: "AI study & practice",
     availability: "partial",
-    access: "Sign in with an approved Group 13 account. Requires a compatible browser and microphone permission; camera use is optional.",
+    access: "Sign in with an approved student account. Requires a compatible browser and microphone permission; camera use is optional.",
     capabilities: [
       "Hold a spoken moot-court practice exchange with a live voice judge.",
       "View separate speech transcripts and optionally provide camera context during practice.",
@@ -409,7 +409,7 @@ export const featureCatalog: FeatureEntry[] = [
     title: "Growth studio",
     category: "AI study & practice",
     availability: "partial",
-    access: "Sign in with an approved Group 13 account. Some progress views depend on saved learning activity.",
+    access: "Sign in with an approved student account. Some progress views depend on saved learning activity.",
     capabilities: [
       "Follow sequenced learning paths and mark steps complete.",
       "Review skill progress and get focused feedback on a short oral-practice response.",
@@ -422,7 +422,7 @@ export const featureCatalog: FeatureEntry[] = [
     title: "Counsellor support",
     category: "AI study & practice",
     availability: "partial",
-    access: "Sign in with an approved Group 13 account. This is an AI reflection tool, not professional or emergency care.",
+    access: "Sign in with an approved student account. This is an AI reflection tool, not professional or emergency care.",
     capabilities: [
       "Reflect privately on study pressure, workload, exams, or a difficult day.",
       "Find small next steps and see Kenya-based support contacts for human or urgent help.",
@@ -435,7 +435,7 @@ export const featureCatalog: FeatureEntry[] = [
     title: "Profile and account",
     category: "Account & profile",
     availability: "live",
-    access: "Sign in with your Group 13 account.",
+    access: "Sign in with your student account.",
     capabilities: [
       "Update your display name and profile details, and add a profile picture or workspace wallpaper.",
       "Review account controls shown for your profile; account deletion, when offered, is permanent.",
@@ -474,7 +474,7 @@ export const featureCatalog: FeatureEntry[] = [
     title: "Legal What-If process guides",
     category: "AI study & practice",
     availability: "new",
-    access: "Sign in with an approved Group 13 account. Treat current licences, fees, forms and deadlines as items to verify with the official authority.",
+    access: "Sign in with an approved student account. Treat current licences, fees, forms and deadlines as items to verify with the official authority.",
     capabilities: [
       "Turn a real-life legal question into connected process cards with arrows.",
       "Show what to do, why it matters, likely requirements, the next step, and the constitutional or official-law foundation.",

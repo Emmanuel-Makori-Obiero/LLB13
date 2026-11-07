@@ -110,12 +110,12 @@ export default function InstallButton({
         onClick={() => void install()}
         title={
           installed
-            ? "Group 13 Hub is installed"
+            ? "Law Hub is installed"
             : canInstall
-              ? "Install Group 13 Hub"
-              : "Use Group 13 Hub in your browser"
+              ? "Install Law Hub"
+              : "Use Law Hub in your browser"
         }
-        aria-label={installed ? "Group 13 Hub is installed" : fallback}
+        aria-label={installed ? "Law Hub is installed" : fallback}
       >
         {device === "legacy" ? <ExternalLink size={14} /> : <Download size={14} />}{" "}
         {installed ? "App installed" : fallback}
@@ -124,20 +124,20 @@ export default function InstallButton({
         <div className="pwa-guide-backdrop" role="presentation" onClick={() => setGuideOpen(false)}>
           <section className="pwa-guide" role="dialog" aria-modal="true" aria-labelledby="pwa-guide-title" onClick={(event) => event.stopPropagation()}>
             <button type="button" className="pwa-guide-close" aria-label="Close installation guide" onClick={() => setGuideOpen(false)}><X size={18} /></button>
-            <p className="pwa-guide-kicker">Install Group 13 Hub</p>
+            <p className="pwa-guide-kicker">Install Law Hub</p>
             <h2 id="pwa-guide-title">Keep your study workspace one tap away.</h2>
             {device === "ios" ? (
               <ol className="pwa-guide-steps">
                 <li>Open this page in <strong>Safari</strong>. Installation is not available from an in-app browser.</li>
                 <li>Tap the <strong>Share</strong> button <Share size={15} aria-label="Share" />.</li>
                 <li>Choose <strong>Add to Home Screen</strong>, then turn on <strong>Open as Web App</strong> if it appears.</li>
-                <li>Tap <strong>Add</strong>. The Group 13 icon will appear on your Home Screen.</li>
+                <li>Tap <strong>Add</strong>. The Law Hub icon will appear on your Home Screen.</li>
               </ol>
             ) : device === "legacy" ? (
               <ol className="pwa-guide-steps">
                 <li>Open the browser menu.</li>
                 <li>Choose <strong>Add to home screen</strong>, <strong>Add shortcut</strong>, or <strong>Add bookmark</strong>.</li>
-                <li>Name it <strong>Group 13 Hub</strong> and save it.</li>
+                <li>Name it <strong>Law Hub</strong> and save it.</li>
               </ol>
             ) : (
               <ol className="pwa-guide-steps">

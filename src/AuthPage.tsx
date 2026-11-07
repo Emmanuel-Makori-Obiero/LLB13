@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Eye, EyeOff, Mail } from "lucide-react";
 import { supabase } from "./data/repository";
+import { KENYAN_UNIVERSITIES } from "./universities";
 
 type Mode = "sign-in" | "sign-up";
 type Notice = { tone: "error" | "info" | "success"; text: string } | null;
@@ -33,7 +34,7 @@ function friendlyError(message: string): string {
   if (m.includes("password") && m.includes("weak"))
     return "That password is too weak. Use at least 8 characters with a mix of letters and numbers.";
   if (m.includes("database error saving new user"))
-    return "Sign-ups are limited to approved Group 13 emails. Ask the group admin to add yours.";
+    return "Sign-ups are limited to approved student accounts. Ask the group admin to add yours.";
   if (m.includes("failed to fetch") || m.includes("network"))
     return "Could not reach the server. Check your internet connection and try again.";
   return message;
@@ -44,7 +45,7 @@ function Logo() {
     <div className="auth-logo">
       <div className="brand-mark">13</div>
       <div className="auth-logo-text">
-        <span>GROUP 13</span>
+        <span>LAW HUB</span>
         <small>Law school hub</small>
       </div>
     </div>
@@ -106,6 +107,7 @@ export default function LoginPage({
 }) {
   const [mode, setMode] = useState<Mode>(initialMode);
   const [name, setName] = useState("");
+  const [university, setUniversity] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -268,7 +270,7 @@ export default function LoginPage({
         password,
         options: {
           emailRedirectTo: AUTH_APP_ORIGIN,
-          data: name.trim() ? { display_name: name.trim() } : undefined,
+          data: { ...(name.trim() ? { display_name: name.trim() } : {}), university },
         },
       });
       if (error) {
@@ -353,7 +355,7 @@ export default function LoginPage({
         <aside className="auth-aside">
           <Logo />
           <div>
-            <h2>Everything Group 13 needs, in one calm place.</h2>
+            <h2>Everything you need, in one calm place.</h2>
             <p>
               Units, materials, assignments and meeting rooms, private to your
               class.
@@ -373,7 +375,7 @@ export default function LoginPage({
               className="auth-home-link"
               onClick={onBackToHome}
             >
-              ← Back to Group 13 home
+              ← Back to home
             </button>
           )}
 
@@ -381,7 +383,7 @@ export default function LoginPage({
             <div className="auth-notice error">
               <strong>We’ll be right back</strong>
               <span>
-                Group 13 is being set up. Please try again in a little while.
+                The learning hub is being set up. Please try again in a little while.
               </span>
             </div>
           ) : pendingEmail ? (
@@ -446,7 +448,7 @@ export default function LoginPage({
               <h1>{isSignUp ? "Create your account" : "Welcome back"}</h1>
               <p className="auth-lead">
                 {isSignUp
-                  ? "Use your email to join the Group 13 workspace."
+                  ? "Use your email to join the learning workspace."
                   : "Sign in to reach your classes, materials and assignments."}
               </p>
 
@@ -465,6 +467,13 @@ export default function LoginPage({
                     />
                   </label>
                 )}
+                {isSignUp && <label className="auth-field">
+                  <span>University</span>
+                  <select required value={university} onChange={(event) => setUniversity(event.target.value)}>
+                    <option value="">Choose your university</option>
+                    {KENYAN_UNIVERSITIES.map((item) => <option key={item} value={item}>{item}</option>)}
+                  </select>
+                </label>}
                 <label className="auth-field">
                   <span>Email</span>
                   <input
@@ -574,7 +583,7 @@ export function ResetPasswordPage({ onDone }: { onDone: () => void }) {
           </div>
           <h1>Set a new password</h1>
           <p className="auth-lead">
-            Choose a new password for your Group 13 account.
+            Choose a new password for your student account.
           </p>
           <form className="auth-form" onSubmit={submit}>
             <PasswordField

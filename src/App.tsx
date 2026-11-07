@@ -13,6 +13,7 @@ import {
   Bell,
   CalendarDays,
   Check,
+  CheckCircle2,
   CheckSquare,
   ChevronLeft,
   ChevronRight,
@@ -52,6 +53,7 @@ import {
   Sparkles,
   Sun,
   Trash2,
+  Trophy,
   UserCircle,
   Users,
   Video,
@@ -103,6 +105,7 @@ import { TranscriptAI } from "./TranscriptAI";
 import { askAI, countMaterialChunks, extractText, getLibraryMaterialDocumentId, setLearnerAdaptation, uploadLibraryMaterial, type AIResult, type AIFeature } from "./lib/ai";
 import { bookSummarySynthesisPrompt, extractBookPartRecap, mergeBookSummaryParts, planBookSummary, requestBookSummaryPart, type CompletedBookSummaryPart } from "./lib/bookSummary";
 import { downloadPdf, downloadWord } from "./export";
+import { KENYAN_UNIVERSITIES } from "./universities";
 import { defaultLearningPreference, materialVisibleToLevel } from "./lib/learnerAdaptation";
 import { Markdown } from "./Markdown";
 import GrowthPage from "./GrowthPage";
@@ -118,6 +121,9 @@ import { hasCustomWallpaper, hasPersonalThemeSelection, normalizeThemeId, resolv
 import { extractPastPaperArchive } from "./lib/pastPaperArchive";
 import GamesHub from "./GamesHub";
 import { readDebateInviteCode } from "./lib/debate-links";
+import DailyQuizPage from "./DailyQuizPage";
+import LeaderboardPage from "./LeaderboardPage";
+import RewardWelcomePopup from "./RewardWelcomePopup";
 import {
   analyzeImage,
   createFilmProject,
@@ -152,6 +158,8 @@ const nav = [
   { id: "attendance", label: "Attendance", icon: Check },
   { id: "todos", label: "My to-do", icon: CheckSquare },
   { id: "assignments", label: "Assignments", icon: FileText },
+  { id: "daily-quiz", label: "Daily Quiz", icon: CheckCircle2 },
+  { id: "leaderboard", label: "Leaderboard", icon: Trophy },
   { id: "course-outline", label: "Course planner", icon: ClipboardList },
   { id: "support", label: "Support & complaints", icon: MessageSquare },
   { id: "library", label: "Library", icon: Library },
@@ -216,7 +224,7 @@ const initials = "13";
 const roomLink = (id: string) => `${window.location.origin}/meetings/${id}`;
 const playlistLink = (id: string) => `${window.location.origin}/playlist/${id}`;
 const whatsappLink = (discussion: Discussion) =>
-  `https://wa.me/?text=${encodeURIComponent(`Join "${discussion.title}" on Group 13: ${roomLink(discussion.id)}`)}`;
+  `https://wa.me/?text=${encodeURIComponent(`Join "${discussion.title}" on Law Hub: ${roomLink(discussion.id)}`)}`;
 const profileInitials = (name: string, email = "") =>
   (name || email.split("@")[0] || initials)
     .split(/\s+/)
@@ -225,6 +233,12 @@ const profileInitials = (name: string, email = "") =>
     .map((part) => part[0])
     .join("")
     .toUpperCase();
+const displayNameForUser = (name: string, email = "") => {
+  const clean = name.trim();
+  if (clean) return clean;
+  const local = email.split("@")[0].replace(/[._-]+/g, " ").replace(/\d{3,}/g, " ").replace(/\s+/g, " ").trim();
+  return local ? local.replace(/\b\w/g, (letter) => letter.toUpperCase()) : "Law student";
+};
 type LearnerLevel = "llb-year-1" | "llb-year-2" | "llb-year-3" | "llb-year-4" | "masters" | "phd" | "prefer-not-to-say";
 type LearningPreference = "guided" | "balanced" | "challenge";
 const learningPreferences: { id: LearningPreference; label: string; description: string }[] = [
@@ -242,6 +256,7 @@ type UserProfile = {
   learnerLevel: LearnerLevel | "";
   learningPreference: LearningPreference | "";
   displayName: string;
+  university: string;
   role: string;
   avatarUrl: string;
   wallpaperUrl: string;
@@ -287,6 +302,7 @@ function App() {
     learnerLevel: "",
     learningPreference: "",
     displayName: "",
+    university: "",
     role: "LLB · Year 1",
     avatarUrl: "",
     wallpaperUrl: "",
@@ -427,6 +443,7 @@ function App() {
           typeof metadata.display_name === "string"
             ? metadata.display_name
             : "",
+        university: typeof metadata.university === "string" ? metadata.university : "",
         role:
           typeof metadata.role === "string" ? metadata.role : "Law student",
         avatarUrl:
@@ -445,7 +462,7 @@ function App() {
       if (code) {
         const { error } = await supabase!.auth.exchangeCodeForSession(code);
         if (error) {
-          setAuthCallbackNotice("We could not complete that email confirmation. Request a new confirmation email and open it from the canonical Group 13 link.");
+          setAuthCallbackNotice("We could not complete that email confirmation. Request a new confirmation email and open it from the canonical Law Hub link.");
           setView("login");
           console.error(
             "Could not complete the email confirmation:",
@@ -623,7 +640,7 @@ function App() {
   );
   const visibleAssignmentIds = new Set(visibleAssignments.map((assignment) => assignment.id));
   const visibleTodos = todos.filter((todo) => !todo.assignment_id || visibleAssignmentIds.has(todo.assignment_id));
-  const currentPageLabel = nav.find((item) => item.id === view)?.label ?? "Group 13 workspace";
+  const currentPageLabel = nav.find((item) => item.id === view)?.label ?? "learning workspace";
   const setPage = (next: string) => {
     const target = validViews.has(next) ? next : "dashboard";
     setMenuOpen(false);
@@ -668,8 +685,8 @@ function App() {
   const startMeeting = async (title: string) => {
     try {
       const created = await repository.createMeeting(
-        title.trim() || "Group 13 meeting",
-        profile.displayName || userEmail?.split("@")[0] || "Group 13",
+        title.trim() || "Law Hub meeting",
+        profile.displayName || userEmail?.split("@")[0] || "Law Hub",
       );
       setDiscussions((current) =>
         current.some((item) => item.id === created.id)
@@ -865,6 +882,7 @@ function App() {
     const selectedPreference = changes.learningPreference ?? profile.learningPreference;
     const metadata = {
       display_name: changes.displayName ?? profile.displayName,
+      university: changes.university ?? profile.university,
       role: changes.role ?? profile.role,
       avatar_url: changes.avatarUrl ?? profile.avatarUrl,
       wallpaper_url: changes.wallpaperUrl ?? profile.wallpaperUrl,
@@ -881,6 +899,7 @@ function App() {
       learnerLevel: metadata.learner_level as LearnerLevel | "",
       learningPreference: metadata.learning_preference as LearningPreference | "",
       displayName: metadata.display_name,
+      university: metadata.university,
       role: metadata.role,
       avatarUrl: metadata.avatar_url,
       wallpaperUrl: metadata.wallpaper_url,
@@ -1011,6 +1030,7 @@ function App() {
   const visibleNav = nav.filter((item) => item.id !== "group-attendance" || isAdmin);
   return (
     <div className="app-shell">
+      <RewardWelcomePopup userId={userId} name={profile.displayName || userEmail?.split("@")[0] || "learner"} onNavigate={setPage} />
       <HelpButton floating onNavigate={setPage} />
       <FloatingLawyerAgent historyKey={userEmail ?? "workspace"} currentPage={currentPageLabel} onOpenDictionary={() => setPage("dictionary")} />
       <aside className="sidebar">
@@ -1071,9 +1091,7 @@ function App() {
             />
             <div>
               <div className="profile-name">
-                {profile.displayName ||
-                  userEmail?.split("@")[0] ||
-                  "Your profile"}
+                {displayNameForUser(profile.displayName, userEmail ?? "")}
               </div>
               <div className="profile-role">{profile.role}</div>
             </div>
@@ -1117,7 +1135,7 @@ function App() {
               />
               <div>
                 <div className="profile-name">
-                  {profile.displayName || userEmail?.split("@")[0]}
+                  {displayNameForUser(profile.displayName, userEmail ?? "")}
                 </div>
                 <div className="profile-role">{userEmail}</div>
               </div>
@@ -1248,7 +1266,7 @@ function App() {
           )}
           {view === "dashboard" && (
             <Home
-              name={profile.displayName || userEmail?.split("@")[0] || "there"}
+              name={displayNameForUser(profile.displayName, userEmail ?? "")}
               learnerLevel={profile.learnerLevel}
               learningPreference={profile.learningPreference}
               lessons={lessons}
@@ -1434,7 +1452,7 @@ function App() {
               displayName={
                 profile.displayName ||
                 userEmail?.split("@")[0] ||
-                "Group 13 member"
+                "Law Hub member"
               }
               openMeeting={openMeeting}
               onStart={startMeeting}
@@ -1458,6 +1476,8 @@ function App() {
             />
           )}
           {view === "arena" && <GamesHub materials={visibleMaterials} userId={userId} displayName={profile.displayName || userEmail?.split("@")[0] || "Player"} learnerLevel={profile.learnerLevel} learningPreference={profile.learningPreference} isAdmin={isAdmin} inviteCode={readDebateInviteCode(window.location.search)} />}
+          {view === "daily-quiz" && <DailyQuizPage userId={userId} displayName={profile.displayName || userEmail?.split("@")[0] || "Learner"} learnerLevel={profile.learnerLevel} />}
+          {view === "leaderboard" && <LeaderboardPage userId={userId} displayName={profile.displayName || userEmail?.split("@")[0] || "Learner"} onNavigate={setPage} />}
           {view === "members" && <SectionedMembersPage members={members} />}
           {view === "dictionary" && <LegalDictionaryPage />}
           {view === "legal-process" && (
@@ -1650,7 +1670,7 @@ function App() {
           {view === "meeting" && activeMeeting && (
             <div className="meeting-page">
               <PageHeading
-                eyebrow="Group 13 live room"
+                eyebrow="Law Hub live room"
                 title={activeMeeting.title}
                 subtitle="Your private browser-based discussion room is ready."
                 stamp={false}
@@ -1675,6 +1695,7 @@ function App() {
       {materialFormOpen && (
         <MaterialForm
           units={units}
+          university={profile.university}
           onClose={() => setMaterialFormOpen(false)}
           onCreated={async (material, file, extractedText) => {
             try {
@@ -1690,6 +1711,7 @@ function App() {
                     created.target_years ?? [],
                     created.id,
                     extractedText,
+                    created.sharing_scope === "university" ? created.university : null,
                   );
                   setNotice(`Material uploaded and added to AI knowledge (${indexed.chunks} sections).`);
                 } catch (indexError) {
@@ -1711,6 +1733,7 @@ function App() {
       {editingMaterial && (
         <MaterialForm
           units={units}
+          university={profile.university}
           initial={editingMaterial}
           onClose={() => setEditingMaterial(null)}
           onUpdated={(changes) => updateMaterial(editingMaterial, changes)}
@@ -1734,7 +1757,7 @@ function App() {
       {assignmentFormOpen && (
         <AssignmentForm
           units={units}
-          owner={profile.displayName || userEmail?.split("@")[0] || "Member"}
+          owner={displayNameForUser(profile.displayName, userEmail ?? "")}
           onClose={() => setAssignmentFormOpen(false)}
           onCreated={async (assignment) => {
             try {
@@ -1776,7 +1799,7 @@ function Brand({ compact = false }: { compact?: boolean }) {
       <div className="brand-mark">13</div>
       {!compact && (
         <div>
-          <div className="brand-name">GROUP 13</div>
+          <div className="brand-name">LAW HUB</div>
           <div className="brand-sub">Law school hub</div>
         </div>
       )}
@@ -1921,7 +1944,7 @@ function Topbar({
   return (
     <header className="topbar">
       <div className="breadcrumb">
-        <span>Group 13</span>
+        <span>Law Hub</span>
         <ChevronRight size={13} />
         <strong>{label}</strong>
       </div>
@@ -2385,7 +2408,7 @@ function AnnouncementPanel({
       .from("group_announcements")
       .insert({
         created_by: userId,
-        author_name: displayName || "Group 13 member",
+        author_name: displayName || "Law Hub member",
         title: title.trim(),
         message: message.trim(),
       })
@@ -2428,7 +2451,7 @@ function AnnouncementPanel({
     <div className="card card-pad announcement-panel">
       <div className="card-header">
         <span className="section-label">Group announcements</span>
-        <span className="quiet">Notify everyone in Group 13</span>
+        <span className="quiet">Notify everyone in Law Hub</span>
       </div>
       <form className="data-form announcement-form" onSubmit={send}>
         <label>
@@ -2946,7 +2969,7 @@ function PublicPlaylistPage() {
   }, [playlistId]);
   return <main className="public-playlist-page">
     <div className="public-playlist-shell">
-      <p className="eyebrow">Group 13 public media</p>
+      <p className="eyebrow">Law Hub public media</p>
       <h1>{playlist?.title || "Emmanuels playlist"}</h1>
       <p className="subheading">Anyone can listen to this playlist. Select play on any song below.</p>
       {error && <div className="connection-error">{error}</div>}
@@ -3365,7 +3388,7 @@ function MediaPage({
   const shareCloudAssetWithGroup = async (asset: MediaAsset) => {
     try {
       await createMediaShare({ assetId: asset.id, visibility: "group" });
-      setFilmNote("Saved media is now shared with Group 13. Other signed-in members can find it in Media.");
+      setFilmNote("Saved media is now shared with Law Hub. Other signed-in members can find it in Media.");
     } catch (error) {
       setCloudError(error instanceof Error ? error.message : "Could not share cloud media with the group.");
     }
@@ -3594,7 +3617,7 @@ function MediaPage({
       </div>
 
       {cloudError && <div className="connection-error" style={{ marginTop: 18 }}>{cloudError}</div>}
-        {cloudAssets.length > 0 && <><PageHeading eyebrow="Generated and uploaded" title="Cloud media archive." subtitle="Generated podcasts, lessons, images, and videos are saved privately here and remain available across signed-in devices." /><div className="media-grid">{cloudAssets.map((asset) => <article className="card media-card" key={asset.id}><div className="media-link-card"><Film size={24} /><strong>{asset.title}</strong><span className="chip">{asset.kind} · {asset.status}</span><div className="media-actions">{asset.kind === "podcast_audio" && asset.status === "ready" && <button className="secondary-button" onClick={() => void playCloudAsset(asset)}><Play size={13} /> Play podcast</button>}{(asset.kind === "video_lesson" || asset.kind === "film_clip") && (asset.status === "queued" || asset.status === "processing") && <button className="secondary-button" disabled={videoBusy || checkingVideoId === asset.id} onClick={() => void refreshVideoStatus(asset)}>{checkingVideoId === asset.id ? "Checking…" : videoBusy ? "Generation checking…" : "Refresh video status"}</button>}<button className="secondary-button" onClick={() => void openCloudAsset(asset)}>Open cloud file</button><button className="secondary-button" onClick={() => void shareCloudAssetWithGroup(asset)}>Share with Group 13</button><button className="secondary-button" onClick={() => void shareCloudAsset(asset)}>Copy 7-day link</button><button className="danger-button" onClick={() => void removeCloudAsset(asset)}>Delete</button></div></div></article>)}</div></>}
+        {cloudAssets.length > 0 && <><PageHeading eyebrow="Generated and uploaded" title="Cloud media archive." subtitle="Generated podcasts, lessons, images, and videos are saved privately here and remain available across signed-in devices." /><div className="media-grid">{cloudAssets.map((asset) => <article className="card media-card" key={asset.id}><div className="media-link-card"><Film size={24} /><strong>{asset.title}</strong><span className="chip">{asset.kind} · {asset.status}</span><div className="media-actions">{asset.kind === "podcast_audio" && asset.status === "ready" && <button className="secondary-button" onClick={() => void playCloudAsset(asset)}><Play size={13} /> Play podcast</button>}{(asset.kind === "video_lesson" || asset.kind === "film_clip") && (asset.status === "queued" || asset.status === "processing") && <button className="secondary-button" disabled={videoBusy || checkingVideoId === asset.id} onClick={() => void refreshVideoStatus(asset)}>{checkingVideoId === asset.id ? "Checking…" : videoBusy ? "Generation checking…" : "Refresh video status"}</button>}<button className="secondary-button" onClick={() => void openCloudAsset(asset)}>Open cloud file</button><button className="secondary-button" onClick={() => void shareCloudAssetWithGroup(asset)}>Share with members</button><button className="secondary-button" onClick={() => void shareCloudAsset(asset)}>Copy 7-day link</button><button className="danger-button" onClick={() => void removeCloudAsset(asset)}>Delete</button></div></div></article>)}</div></>}
 
       <div className="media-grid">
         {media.map((item) => (
@@ -4075,7 +4098,7 @@ function LibraryPageReal({
   const [yearFilter, setYearFilter] = useState(isAdmin ? "all" : learnerLevel || "all");
   useEffect(() => setYearFilter(isAdmin ? "all" : learnerLevel || "all"), [learnerLevel, isAdmin]);
   const [sortBy, setSortBy] = useState("date-desc");
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(true);
   const [libraryGuideOpen, setLibraryGuideOpen] = useState(false);
   const [libraryPage, setLibraryPage] = useState(1);
   const libraryPageSize = 18;
@@ -4737,12 +4760,14 @@ function FormShell({
 }
 function MaterialForm({
   units,
+  university,
   initial,
   onClose,
   onCreated,
   onUpdated,
 }: {
   units: Unit[];
+  university: string;
   initial?: Material;
   onClose: () => void;
   onCreated?: (material: Omit<Material, "id">, file?: File, extractedText?: string) => Promise<void>;
@@ -4768,6 +4793,8 @@ function MaterialForm({
           url: initial.url ?? "",
           storage_path: initial.storage_path,
           owner_id: initial.owner_id,
+          sharing_scope: initial.sharing_scope ?? "all",
+          university: initial.university ?? university,
           target_years: initial.target_years ?? [],
         }
         : {
@@ -4781,8 +4808,10 @@ function MaterialForm({
             month: "short",
             year: "numeric",
           }),
-          source: "Group 13",
+          source: "Law Hub",
           url: "",
+          sharing_scope: "all",
+          university,
           target_years: [],
         },
   );
@@ -4792,9 +4821,13 @@ function MaterialForm({
     setFile(selectedFile);
     if (!selectedFile || initial) return;
       setExtracting(true);
-      setExtractNote("Reading the book and extracting details…");
+      setExtractNote(selectedFile.name.toLowerCase().endsWith(".pdf")
+        ? "Checking the PDF text layer; scanned pages will be read with OCR…"
+        : "Reading the book and extracting details…");
       try {
-        const text = (await extractText(selectedFile)).trim();
+        const text = (await extractText(selectedFile, (completed, total) => {
+          setExtractNote(`Reading scanned PDF with OCR: page ${completed} of ${total}… Keep this window open.`);
+        })).trim();
       if (!text) {
         throw new Error(
           "OCR could not find readable text in this file. Try a clearer scan or enter the details manually.",
@@ -4843,7 +4876,7 @@ function MaterialForm({
         author: metadata?.author?.trim() || current.author,
         date: metadata?.date?.trim() || current.date,
       }));
-      setExtractNote("Details extracted. Review them before saving.");
+      setExtractNote("Details extracted. Review them before saving. Scanned pages were read with OCR; check names, case citations, and section numbers against the original PDF.");
     } catch (error) {
       setExtractNote(
         error instanceof Error
@@ -4949,6 +4982,14 @@ function MaterialForm({
           <p className="field-hint">Leave all unchecked to make it available to every cohort.</p>
           <div className="cohort-options">{learnerLevels.filter((item) => item.id !== "prefer-not-to-say").map((item) => <label key={item.id}><input type="checkbox" checked={form.target_years?.includes(item.id) ?? false} onChange={(event) => setForm((current) => ({ ...current, target_years: event.target.checked ? [...(current.target_years ?? []), item.id] : (current.target_years ?? []).filter((id) => id !== item.id) }))} />{item.label}</label>)}</div>
         </fieldset>
+        <label>Library visibility
+          <select value={form.sharing_scope ?? "all"} onChange={(event) => setForm((current) => ({ ...current, sharing_scope: event.target.value, university: event.target.value === "university" ? university : current.university }))}>
+            <option value="all">Share with all signed-in learners</option>
+            <option value="university" disabled={!university}>Share with my university only</option>
+            <option value="private">Keep private to me</option>
+          </select>
+          <span className="field-hint">University-only sharing requires a university saved in your profile.</span>
+        </label>
         <label>
           Source
           <input
@@ -4974,6 +5015,7 @@ function MaterialForm({
             Upload document{" "}
             <span className="field-hint">Optional PDF, Word, PPTX, or text file</span>
           </label>
+          <span className="field-hint">Scanned or photographed PDFs are supported. Law Hub will read them page by page with OCR; keep this window open until the page count finishes.</span>
           <span className={`material-dropzone ${dragActive ? "active" : ""} ${file ? "has-file" : ""}`}>
             <strong>{file ? file.name : "Drag and drop a book here"}</strong>
             <small>{file ? "AI details are ready to review below." : "or choose a PDF, Word DOCX, PPTX, or text file"}</small>
@@ -4990,7 +5032,7 @@ function MaterialForm({
           <input ref={imagePickerRef} type="file" hidden accept="image/*" onChange={(event) => { chooseFile(event.target.files?.[0]); event.currentTarget.value = ""; }} />
           {extracting && (
             <span className="field-hint">
-              AI is analysing the readable text…
+              {extractNote || "AI is analysing the readable text…"}
             </span>
           )}
           {savingMaterial && file && file.size > 6 * 1024 * 1024 && (
@@ -5107,16 +5149,18 @@ function ProfileSettings({
   setNotice: (notice: string) => void;
 }) {
   const [name, setName] = useState(profile.displayName);
+  const [university, setUniversity] = useState(profile.university);
   const [role, setRole] = useState(profile.role);
   const [learnerLevel, setLearnerLevel] = useState(profile.learnerLevel);
   const [learningPreference, setLearningPreference] = useState(profile.learningPreference);
   const [busy, setBusy] = useState("");
   useEffect(() => {
     setName(profile.displayName);
+    setUniversity(profile.university);
     setRole(profile.role);
     setLearnerLevel(profile.learnerLevel);
     setLearningPreference(profile.learningPreference);
-  }, [profile.displayName, profile.role, profile.learnerLevel, profile.learningPreference]);
+  }, [profile.displayName, profile.university, profile.role, profile.learnerLevel, profile.learningPreference]);
   const completion =
     ([name.trim(), role.trim(), profile.avatarUrl].filter(Boolean).length / 3) *
     100;
@@ -5124,7 +5168,7 @@ function ProfileSettings({
     event.preventDefault();
     setBusy("profile");
     try {
-      await onSave({ displayName: name.trim(), role: role.trim(), learnerLevel, learningPreference });
+      await onSave({ displayName: name.trim(), university, role: role.trim(), learnerLevel, learningPreference });
       setNotice("Profile saved.");
     } catch (error) {
       setNotice(
@@ -5217,6 +5261,13 @@ function ProfileSettings({
               {learnerLevels.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
             </select>
             <span className="field-hint">Save your profile to apply this level to the dashboard, learning tools and year-filtered Library.</span>
+          </label>
+          <label>University
+            <select value={university} onChange={(event) => setUniversity(event.target.value)}>
+              <option value="">Choose your university</option>
+              {KENYAN_UNIVERSITIES.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+            <span className="field-hint">This controls which school-only Library materials you can see.</span>
           </label>
           <label>How should study help be tailored?
             <select value={learningPreference} onChange={(event) => setLearningPreference(event.target.value as LearningPreference)}>

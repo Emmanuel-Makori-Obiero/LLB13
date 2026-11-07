@@ -203,7 +203,7 @@ export default function TimetablePage({
       return;
     }
     if (schedule === "group" && [0, 6].includes(new Date(`${f.lesson_date}T00:00:00`).getDay())) {
-      setNotice("Group 13 classes are Monday–Friday only. Choose a weekday; weekend dates are not allowed.");
+      setNotice("scheduled classes are Monday–Friday only. Choose a weekday; weekend dates are not allowed.");
       return;
     }
     try {
@@ -427,7 +427,7 @@ export default function TimetablePage({
         <div className="card card-pad empty-state">
           <CalendarDays size={22} />
           <p>
-            No upcoming {schedule === "personal" ? "personal events" : "Group 13 lessons"} yet. Tap “Add lesson” to put the first one here.
+            No upcoming {schedule === "personal" ? "personal events" : "shared lessons"} yet. Tap “Add lesson” to put the first one here.
           </p>
         </div>
       )}

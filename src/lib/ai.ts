@@ -172,8 +172,12 @@ async function askAISingle(
     try {
       const body = await (error as { context?: Response }).context?.json();
       msg = body?.error ?? msg;
-      if (Number(body?.retry_after_seconds) > 0) {
-        msg += ` The configured API-key alternatives and provider fallbacks were already tried; at least one provider asked that it not be retried for about ${Number(body.retry_after_seconds)} seconds. This request will not restart automatically.`;
+      const retryAfterSeconds = Number(body?.retry_after_seconds);
+      if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
+        const retryHint = args.feature === "course_outline"
+          ? "Your outline remains in the planner; after the cooldown, press Build source-backed plan to retry."
+          : "You can retry after the cooldown.";
+        msg += ` The provider fallback attempt ended without a response; at least one route requested a cooldown of about ${retryAfterSeconds} seconds. This request will not restart automatically. ${retryHint}`;
       }
       if (Array.isArray(body?.attempts) && body.attempts.length)
         msg += ` [${body.attempts
@@ -347,7 +351,7 @@ function chunkText(text: string, size = 1200, overlap = 200): string[] {
   return chunks;
 }
 
-export async function extractText(file: File): Promise<string> {
+export async function extractText(file: File, onProgress?: (completed: number, total: number) => void): Promise<string> {
   const name = file.name.toLowerCase();
   const isDocx = name.endsWith(".docx") || file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
   const isLegacyDoc = name.endsWith(".doc") || file.type === "application/msword";
@@ -363,7 +367,7 @@ export async function extractText(file: File): Promise<string> {
         tc.items.map((it) => ("str" in it ? it.str : "")).join(" ") + "\n\n";
     }
     if (out.trim().length >= 40) return out;
-    return ocrPdfPages(pdf);
+    return ocrPdfPages(pdf, onProgress);
   }
   if (file.type.startsWith("image/") || /\.(png|jpe?g|webp|bmp|tiff?)$/i.test(name)) {
     return ocrImage(file);
@@ -378,7 +382,7 @@ export async function extractText(file: File): Promise<string> {
   if (isLegacyDoc) {
     const legacyExport = extractLegacyWordHtml(await file.text());
     if (legacyExport) return legacyExport;
-    throw new Error("This .doc is a binary Word file, not an older Group 13 export, so the browser cannot read it directly. For other .doc files, save or export a copy as .docx and upload that copy.");
+    throw new Error("This .doc is a binary Word file, not an older learning hub export, so the browser cannot read it directly. For other .doc files, save or export a copy as .docx and upload that copy.");
   }
   if (name.endsWith(".pptx")) {
     const JSZip = (await import("jszip")).default;
@@ -439,12 +443,13 @@ export async function uploadLibraryMaterial(
   targetYears: string[] = [],
   materialId?: string,
   extractedText?: string,
+  university?: string | null,
 ): Promise<{ id: string; chunks: number }> {
   if (!file.size) throw new Error("The selected file is empty. Choose a file with at least 1 byte.");
   const text = (extractedText ?? await extractText(file)).trim();
   if (!text.length)
     throw new Error("No readable text found after OCR. Try a clearer scan, or save the Word file as .docx before indexing.");
-  return storeText(file.name.replace(/\.[^.]+$/, ""), text, citation, "library", author, targetYears, materialId);
+  return storeText(file.name.replace(/\.[^.]+$/, ""), text, citation, "library", author, targetYears, materialId, university);
 }
 
 export async function importLibraryMaterial(source: { title: string; url?: string | null; citation?: string | null; author?: string | null; target_years?: string[] | null }) {
@@ -493,9 +498,11 @@ async function storeText(
   author?: string,
   targetYears: string[] = [],
   materialId?: string,
+  audienceUniversity?: string | null,
 ): Promise<{ id: string; chunks: number }> {
   const { data: u } = await db().auth.getUser();
   if (!u.user) throw new Error("Sign in first.");
+  const university = scope === "library" ? audienceUniversity ?? null : null;
 
   const { data: doc, error } = await db()
     .from("ai_documents")
@@ -505,6 +512,7 @@ async function storeText(
       title,
       citation: citation ?? null,
       author: author?.trim() || null,
+      university,
       target_years: targetYears,
       material_id: materialId ?? null,
     })
@@ -516,6 +524,7 @@ async function storeText(
     document_id: doc.id,
     owner: scope === "user" ? u.user!.id : null,
     scope,
+    university,
     idx,
     content,
   }));

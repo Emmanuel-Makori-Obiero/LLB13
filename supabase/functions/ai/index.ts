@@ -31,7 +31,7 @@ import { materialVisibleToLevel, normalizeLearnerLevel } from "../_shared/cohort
 export type Msg = { role: "system" | "user" | "assistant"; content: string };
 type ReasoningStyle = "openrouter" | "effort" | "none";
 
-import { boundedProviderTimeoutMs, combineProviderChains, DEFAULT_CHAIN, isTransientProviderFailure, modelRouteCooldownMs, reasoningAttemptVariants, shouldTryAlternateApiKey, type Entry } from "./providers.ts";
+import { boundedProviderTimeoutMs, combineProviderChains, DEFAULT_CHAIN, isTransientProviderFailure, modelRouteCooldownMs, orderCourseOutlineRoutes, providerCallTimeoutMs, reasoningAttemptVariants, shouldTryAlternateApiKey, type Entry } from "./providers.ts";
 
 function chain(feature?: string): Entry[] {
   const stageName = feature
@@ -77,6 +77,7 @@ function mergeSystem(msgs: Msg[]): Msg[] {
 function orderedChain(feature?: string) {
   const entries = chain(feature);
   const preferred = feature ? preferredByFeature.get(feature) : undefined;
+  if (feature === "course_outline") return orderCourseOutlineRoutes(entries, preferred);
   if (!preferred) return entries;
   const index = entries.findIndex((entry) => id(entry) === preferred);
   return index <= 0 ? entries : [entries[index], ...entries.slice(0, index), ...entries.slice(index + 1)];
@@ -161,6 +162,7 @@ export async function callChain(
   const keyCursors = new Map<string, number>();
   for (const ent of orderedChain(opts.feature)) {
     const route = routeId(ent);
+    const routeTimeout = providerCallTimeoutMs(perCall, opts.feature, ent.provider, ent.model);
     if (unavailableRoutes.has(route)) {
       attempts.push({ id: id(ent), status: "route_skipped" });
       continue;
@@ -223,7 +225,7 @@ export async function callChain(
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}`, ...(ent.provider === "openrouter" ? { "X-Title": "Group 13 Hub" } : {}) },
             body: JSON.stringify(body),
-            signal: AbortSignal.timeout(Math.min(perCall, Math.max(5_000, deadline - (Date.now() - started)))),
+            signal: AbortSignal.timeout(Math.min(routeTimeout, Math.max(5_000, deadline - (Date.now() - started)))),
           });
           if (res.ok) {
             const data = await res.json();

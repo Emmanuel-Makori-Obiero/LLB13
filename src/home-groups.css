@@ -108,3 +108,47 @@
 .home-poster-detail p { margin: 0; color: #edf5ef; font-size: 11px; line-height: 1.45; }
 @keyframes poster-detail-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { .home-poster-detail { animation: none; } }
+
+/* Mobile home: compact study desk, not a stacked marketing page. */
+@media (max-width: 700px) {
+  .home-dashboard { gap: 12px; }
+  .home-welcome { min-height: 0; padding: 14px 0 16px; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; color: var(--ink); box-shadow: none; }
+  .home-welcome:after { display: none; }
+  .home-kicker { color: var(--muted); font-size: 9px; }
+  .home-welcome-copy h1 { margin: 8px 0 5px; color: var(--ink); font-size: 26px; letter-spacing: -.02em; }
+  .home-welcome-copy p { color: var(--muted); font-size: 12px; line-height: 1.5; }
+  .home-welcome-actions { gap: 8px; margin-top: 13px; }
+  .home-primary { border-radius: 2px; background: var(--forest); color: var(--paper); font-size: 11px; padding: 9px 11px; }
+  .home-level-badge { border: 0; padding: 0; background: transparent; color: var(--muted); font-size: 10px; }
+  .home-groups-intro, .home-quick-links, .learning-loop { display: none; }
+  .home-section-head { padding-top: 8px; border-top: 1px solid var(--line); }
+  .home-section-eyebrow { font-size: 8px; }
+  .home-section-head h2 { font-size: 17px; }
+  .home-grid-organized { gap: 0; }
+  .home-panel { min-height: 0; padding: 14px 0; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; box-shadow: none; }
+  .home-panel-head { margin-bottom: 9px; }
+  .home-panel-head h3 { font-size: 13px; }
+  .home-panel-head>button { width: 24px; height: 24px; border: 0; background: transparent; }
+  .home-panel-icon { width: 24px; height: 24px; background: transparent; }
+  .home-detail-row, .home-task-row { padding: 8px 0; }
+  .home-panel-link { padding-top: 9px; font-size: 10px; }
+}
+
+.home-feature-index { display: grid; gap: 14px; }
+.home-feature-index-head { display: flex; align-items: end; justify-content: space-between; }
+.home-feature-index-head h2 { margin: 5px 0 0; font-size: 21px; font-weight: 500; }
+.home-feature-groups { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.home-feature-group { display: grid; gap: 7px; min-width: 0; }
+.home-feature-group-label { color: var(--muted); font-size: 9px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.home-feature-buttons { display: grid; gap: 4px; }
+.home-feature-buttons button { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 2px; background: var(--paper); color: var(--ink); text-align: left; font: inherit; font-size: 11px; cursor: pointer; }
+.home-feature-buttons button:hover { border-color: var(--forest); color: var(--forest); }
+.home-feature-buttons button span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-feature-buttons button>svg:first-child { color: var(--forest); flex: 0 0 auto; }
+.home-feature-buttons button>svg:last-child { color: var(--muted); flex: 0 0 auto; }
+@media (max-width: 700px) {
+  .home-feature-index { gap: 10px; padding: 12px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .home-feature-index-head h2 { font-size: 17px; }
+  .home-feature-groups { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 10px; }
+  .home-feature-buttons button { padding: 9px 7px; font-size: 10px; }
+}

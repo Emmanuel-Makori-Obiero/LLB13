@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Download, Users } from "lucide-react";
 import { repository, supabase } from "./data/repository";
-import type { GroupAttendance, GroupAttendanceSummary, GroupSession, StudyGroup, StudyGroupMember } from "./data/types";
+import { studyGroupDisplayName, type GroupAttendance, type GroupAttendanceSummary, type GroupSession, type StudyGroup, type StudyGroupMember } from "./data/types";
 import "./groups.css";
 
 const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Nairobi", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
@@ -84,7 +84,7 @@ export default function GroupAttendancePage() {
   const exportCsv = () => {
     const rows = [
       ["Group", "Member", "Sessions held", "Present", "Late", "Excused", "Absent", "Attendance %", "Last active"],
-      ...visibleSummary.map((item) => [item.group_name ?? groupById.get(item.group_id)?.name ?? "", item.display_name, item.sessions_held, item.present, item.late, item.excused, item.absent, item.attendance_percentage, item.last_active_date ?? ""]),
+      ...visibleSummary.map((item) => [studyGroupDisplayName(item.group_name ?? groupById.get(item.group_id)?.name ?? ""), item.display_name, item.sessions_held, item.present, item.late, item.excused, item.absent, item.attendance_percentage, item.last_active_date ?? ""]),
     ];
     const body = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
     const blob = new Blob(["\uFEFF", body], { type: "text/csv;charset=utf-8" });
@@ -108,7 +108,7 @@ export default function GroupAttendancePage() {
       </section>
       {loading ? <div className="card card-pad"><p className="field-hint">Loading group attendance…</p></div> : !groups.length ? <div className="card card-pad empty">No study groups have been created yet.</div> : selectedGroup ? (
         <>
-          <div className="groups-detail-heading"><button className="secondary-button" onClick={() => setSelectedGroupId("")}><ArrowLeft size={14} /> All groups</button><div><span className="section-label">Group detail</span><h2>{selectedGroup.name}</h2><p className="quiet">{memberCounts.get(selectedGroup.id) ?? 0} members · {visibleSessions.length} sessions</p></div></div>
+          <div className="groups-detail-heading"><button className="secondary-button" onClick={() => setSelectedGroupId("")}><ArrowLeft size={14} /> All groups</button><div><span className="section-label">Group detail</span><h2>{studyGroupDisplayName(selectedGroup.name)}</h2><p className="quiet">{memberCounts.get(selectedGroup.id) ?? 0} members · {visibleSessions.length} sessions</p></div></div>
           <section className="card card-pad groups-summary-section">
             <div className="card-header"><span className="section-label">Member summary</span><span className="quiet">Sessions attended out of sessions held</span></div>
             <div className="table-wrap"><table className="table groups-summary-table"><thead><tr><th>Member</th><th>Sessions held</th><th>Present</th><th>Late</th><th>Excused</th><th>Absent</th><th>Attendance</th><th>Last active</th></tr></thead><tbody>{visibleSummary.map((item) => <tr key={item.user_id}><td>{item.display_name}</td><td>{item.sessions_held}</td><td>{item.present}</td><td>{item.late}</td><td>{item.excused}</td><td>{item.absent}</td><td>{item.attendance_percentage}%</td><td>{prettyDate(item.last_active_date)}</td></tr>)}</tbody></table></div>
@@ -132,7 +132,7 @@ export default function GroupAttendancePage() {
             const sessionCount = sessions.filter((session) => session.group_id === group.id).length;
             return <button className="groups-directory-row" type="button" key={group.id} onClick={() => setSelectedGroupId(group.id)}>
               <span className="groups-directory-icon"><Users size={17} /></span>
-              <span className="groups-directory-main"><strong>{group.name}</strong><small>{memberCounts.get(group.id) ?? 0} members · {sessionCount} sessions · {totalHeld} sessions held in range</small></span>
+              <span className="groups-directory-main"><strong>{studyGroupDisplayName(group.name)}</strong><small>{memberCounts.get(group.id) ?? 0} members · {sessionCount} sessions · {totalHeld} sessions held in range</small></span>
               <span className="groups-directory-arrow">View</span>
             </button>;
           })}</div>

@@ -189,7 +189,7 @@ export default function LearningStudio({ learnerLevel = "" }: { learnerLevel?: s
       setAudioJob(undefined);
       setAudioProgress(100);
       setAudioStage("Playable audio is ready.");
-      setAudioNote("Audio is ready and saved in Media archive. Listen below, download it, or open Media to play and share it with Group 13.");
+      setAudioNote("Audio is ready and saved in Media archive. Listen below, download it, or open Media to play and share it with Law Hub.");
       logPodcastAudioActivity("podcast_audio_generated");
     } catch (e) {
       logPodcastAudioActivity("podcast_audio_failed");
@@ -302,7 +302,7 @@ export default function LearningStudio({ learnerLevel = "" }: { learnerLevel?: s
         context.fillRect(76, 76, 108, 8);
         context.fillStyle = "#f7f5f0";
         context.font = "700 22px Arial";
-        context.fillText(`GROUP 13 HUB · SCENE ${index + 1}`, 76, 132);
+        context.fillText(`LAW HUB HUB · SCENE ${index + 1}`, 76, 132);
         context.font = "500 42px Georgia";
         context.fillText(topic.trim().slice(0, 48), 76, 205);
         context.fillStyle = "#ffffff";

@@ -411,7 +411,7 @@ export default function ScannerNotesPage({ userId }: { userId: string | null }) 
               </div>
               <article className="scan-print-area">
                 <h1>{activeNote.title}</h1>
-                <p className="scan-print-date">Group 13 · Scan notes · {new Date(activeNote.updated_at).toLocaleDateString("en-GB")}</p>
+                <p className="scan-print-date">Law Hub · Scan notes · {new Date(activeNote.updated_at).toLocaleDateString("en-GB")}</p>
                 <div className="scan-note-body">{activeNote.body}</div>
                 {activeNote.pages.length > 0 && <section className="scan-original-pages"><h3>Original scanned pages</h3><div className="scan-page-images">{activeNote.pages.map((page) => <figure key={page.id}>{page.signedUrl ? <img src={page.signedUrl} alt={`Scanned page ${page.pageNumber}`} /> : <div className="scan-page-unavailable"><FileImage size={22} /> Preview unavailable</div>}<figcaption>Page {page.pageNumber || "—"} · {page.originalName}</figcaption></figure>)}</div></section>}
               </article>

@@ -2,7 +2,7 @@
   "routes": [
     {
       "path": "/",
-      "title": "Group 13 Hub"
+      "title": "Law Hub"
     },
     {
       "path": "/dashboard",

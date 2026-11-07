@@ -69,7 +69,7 @@ export default function ScheduledCourtCasesPage() {
   return (
     <main className="scheduled-page" id="scheduled-top">
       <header className="scheduled-header">
-        <a className="scheduled-brand" href="/" aria-label="Group 13 home"><span>13</span><strong>GROUP 13<small>LAW SCHOOL HUB</small></strong></a>
+        <a className="scheduled-brand" href="/" aria-label="home"><span>LH</span><strong>LAW HUB<small>LAW SCHOOL</small></strong></a>
         <nav aria-label="Scheduled cases navigation">
           <button type="button" onClick={() => window.history.length > 1 ? window.history.back() : window.location.assign("/")}><ArrowLeft size={14} /> Back</button>
           <a href="/cases">Case law</a>
@@ -116,7 +116,7 @@ export default function ScheduledCourtCasesPage() {
 
         <section className="scheduled-caveat"><strong>How to read this page</strong><p>{caveat}</p><p>The schedule link is the authoritative document. The platform does not access private court files, and a missing cause-list entry does not prove that no case exists.</p></section>
       </div>
-      <footer className="scheduled-footer"><a className="scheduled-brand" href="/"><span>13</span><strong>GROUP 13<small>LAW SCHOOL HUB</small></strong></a><a href="#scheduled-top">Back to top ↑</a></footer>
+      <footer className="scheduled-footer"><a className="scheduled-brand" href="/"><span>LH</span><strong>LAW HUB<small>LAW SCHOOL</small></strong></a><a href="#scheduled-top">Back to top ↑</a></footer>
     </main>
   );
 }

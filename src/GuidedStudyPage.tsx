@@ -226,7 +226,7 @@ export default function GuidedStudyPage({ learnerLevel = "" }: { learnerLevel?: 
     try {
       const updated = await updateGuidedCourseVisibility(item.id, visibility);
       setCourses((current) => current.map((courseItem) => courseItem.id === item.id ? { ...courseItem, ...updated } : courseItem));
-      setNotice(visibility === "group" ? "Syllabus shared with Group 13." : "Syllabus is private again.");
+      setNotice(visibility === "group" ? "Syllabus shared with Law Hub." : "Syllabus is private again.");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Could not update syllabus sharing.");
     } finally {
@@ -381,10 +381,10 @@ export default function GuidedStudyPage({ learnerLevel = "" }: { learnerLevel?: 
       ),
     ].join("\n\n");
     const options = {
-      eyebrow: "Group 13 · Guided study",
+      eyebrow: "Law Hub · Guided study",
       subtitle: `${course.subject} · ${course.syllabus.lessons.length} lessons`,
       sources: course.source_labels.map((source) => `${source.title} (${source.kind === "material" ? "Library material" : source.scope === "library" ? "Library book" : source.kind === "transcript" ? "Saved transcript" : "My saved document"})`),
-      footer: "Prepared in Group 13 · Review authorities against the original source",
+      footer: "Prepared in Law Hub · Review authorities against the original source",
     };
     if (kind === "word") downloadWord(course.title, text, `${course.subject.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-guided-study.docx`, options);
     else downloadPdf(course.title, text, `${course.subject.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-guided-study.pdf`, options);
@@ -418,7 +418,7 @@ export default function GuidedStudyPage({ learnerLevel = "" }: { learnerLevel?: 
             <div className="section-label">Who can see this syllabus?</div>
             <div className="ta-share-choice" role="radiogroup">
               <label className={visibility === "private" ? "on" : ""}><input type="radio" name="syllabus-visibility" checked={visibility === "private"} onChange={() => setVisibility("private")} /> Only me</label>
-              <label className={visibility === "group" ? "on" : ""}><input type="radio" name="syllabus-visibility" checked={visibility === "group"} onChange={() => setVisibility("group")} /> Share with Group 13</label>
+              <label className={visibility === "group" ? "on" : ""}><input type="radio" name="syllabus-visibility" checked={visibility === "group"} onChange={() => setVisibility("group")} /> Share with members</label>
             </div>
             <p className="field-hint">You can choose whether other signed-in group members can open the generated course.</p>
           </div>
@@ -442,12 +442,12 @@ export default function GuidedStudyPage({ learnerLevel = "" }: { learnerLevel?: 
         {!!courses.length && <div className="card card-pad">
           <div className="section-label">Your saved guided syllabi</div>
           <div className="guide-courses">{courses.map((item) => <article className="guide-course" key={item.id}>
-            <div><strong>{item.subject}</strong><span>{item.syllabus.lessons.length} lessons · {item.source_labels.length} sources · {item.syllabus.language === "sw" ? "Kiswahili" : "English"} · {item.visibility === "group" ? "Shared with Group 13" : "Only you"}</span></div>
+            <div><strong>{item.subject}</strong><span>{item.syllabus.lessons.length} lessons · {item.source_labels.length} sources · {item.syllabus.language === "sw" ? "Kiswahili" : "English"} · {item.visibility === "group" ? "Shared with members" : "Only you"}</span></div>
             <div className="guide-mini-progress"><span style={{ width: `${item.progress}%` }} /></div><b>{item.progress}%</b>
             <div className="guide-course-actions">
               <button className="primary-button small-action" disabled={busy} onClick={() => void open(item)}>{item.progress > 0 && item.progress < 100 ? "Continue learning" : item.progress >= 100 ? "Review course" : "Start learning"} <ChevronRight size={13} /></button>
               {item.owner === currentUserId && <>
-                <button className="secondary-button small-action" disabled={busy} onClick={() => void changeCourseVisibility(item)}>{item.visibility === "group" ? "Make private" : "Share with Group 13"}</button>
+                <button className="secondary-button small-action" disabled={busy} onClick={() => void changeCourseVisibility(item)}>{item.visibility === "group" ? "Make private" : "Share with members"}</button>
                 <button className="danger-button small-action" disabled={busy} onClick={() => void removeCourse(item)}><Trash2 size={13} /> Delete</button>
               </>}
             </div>
