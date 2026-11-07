@@ -52,9 +52,9 @@ export default function GroupLeadersAdmin() {
     <section className="card card-pad groups-admin-panel" aria-labelledby="approved-group-leaders-heading">
       <div className="card-header">
         <span id="approved-group-leaders-heading" className="section-label">Approved group leaders</span>
-        <span className="quiet">Primary admin</span>
+        <span className="quiet">Administrators</span>
       </div>
-      <p className="field-hint">Add a verified account here to let that student create one study group. Removing approval does not delete a group that already exists. Students who are not yet approved can copy their email from the Groups page and send it to the primary admin.</p>
+      <p className="field-hint">Add a verified account here to let that student create one study group. Removing approval does not delete a group that already exists. Campus representatives and other authorized administrators can approve or remove group-leader access here.</p>
       {error && <div className="connection-error" role="alert">{error}</div>}
       {message && <p className="field-hint" role="status">{message}</p>}
       <form className="groups-admin-form" onSubmit={submit}>

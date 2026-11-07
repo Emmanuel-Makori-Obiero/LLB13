@@ -344,7 +344,7 @@ export default function AdminPage({
           {organizerJob?.status === "paused" && <div className="field-hint" style={{ marginTop: 10 }}>The unavailable model was skipped. Saved progress will continue automatically after the retry delay.</div>}
         </div>
         <AdminOversight />
-        {canManageAdmins && <GroupLeadersAdmin />}
+        {<GroupLeadersAdmin />}
         {canManageAdmins && <AdminClubPosters setNotice={setNotice} />}
         <AdminTimetablePlanner
           lessons={lessons}
