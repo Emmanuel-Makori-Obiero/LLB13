@@ -177,7 +177,7 @@ export async function uploadUserAsset(
 }
 
 const MATERIAL_COLUMNS =
-  "id,title,author,type,unit,topic,date,source,url,storage_path,owner_id,file_sha256,target_years,archive_path,exam_year,exam_session,course_code,paper_variant,mime_type,file_size,ingestion_status,ingestion_error,metadata_confidence";
+  "id,title,author,type,unit,topic,date,source,url,storage_path,owner_id,sharing_scope,university,file_sha256,target_years,archive_path,exam_year,exam_session,course_code,paper_variant,mime_type,file_size,ingestion_status,ingestion_error,metadata_confidence";
 const DISCUSSION_COLUMNS =
   "id,title,day,time,leader,status,prep,topics,instant,created_by";
 
@@ -656,6 +656,8 @@ const supabaseRepository: Group13Repository = {
         source: material.source,
         url: material.url || null,
         target_years: material.target_years ?? [],
+        sharing_scope: material.sharing_scope ?? "all",
+        university: material.university || null,
       })
       .eq("id", id)
       .select(MATERIAL_COLUMNS)

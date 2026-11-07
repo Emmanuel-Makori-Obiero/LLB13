@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Eye, EyeOff, Mail } from "lucide-react";
 import { supabase } from "./data/repository";
+import { KENYAN_UNIVERSITIES } from "./universities";
 
 type Mode = "sign-in" | "sign-up";
 type Notice = { tone: "error" | "info" | "success"; text: string } | null;
@@ -106,6 +107,7 @@ export default function LoginPage({
 }) {
   const [mode, setMode] = useState<Mode>(initialMode);
   const [name, setName] = useState("");
+  const [university, setUniversity] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -268,7 +270,7 @@ export default function LoginPage({
         password,
         options: {
           emailRedirectTo: AUTH_APP_ORIGIN,
-          data: name.trim() ? { display_name: name.trim() } : undefined,
+          data: { ...(name.trim() ? { display_name: name.trim() } : {}), university },
         },
       });
       if (error) {
@@ -465,6 +467,13 @@ export default function LoginPage({
                     />
                   </label>
                 )}
+                {isSignUp && <label className="auth-field">
+                  <span>University</span>
+                  <select required value={university} onChange={(event) => setUniversity(event.target.value)}>
+                    <option value="">Choose your university</option>
+                    {KENYAN_UNIVERSITIES.map((item) => <option key={item} value={item}>{item}</option>)}
+                  </select>
+                </label>}
                 <label className="auth-field">
                   <span>Email</span>
                   <input

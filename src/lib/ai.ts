@@ -443,12 +443,13 @@ export async function uploadLibraryMaterial(
   targetYears: string[] = [],
   materialId?: string,
   extractedText?: string,
+  university?: string | null,
 ): Promise<{ id: string; chunks: number }> {
   if (!file.size) throw new Error("The selected file is empty. Choose a file with at least 1 byte.");
   const text = (extractedText ?? await extractText(file)).trim();
   if (!text.length)
     throw new Error("No readable text found after OCR. Try a clearer scan, or save the Word file as .docx before indexing.");
-  return storeText(file.name.replace(/\.[^.]+$/, ""), text, citation, "library", author, targetYears, materialId);
+  return storeText(file.name.replace(/\.[^.]+$/, ""), text, citation, "library", author, targetYears, materialId, university);
 }
 
 export async function importLibraryMaterial(source: { title: string; url?: string | null; citation?: string | null; author?: string | null; target_years?: string[] | null }) {
@@ -497,9 +498,11 @@ async function storeText(
   author?: string,
   targetYears: string[] = [],
   materialId?: string,
+  audienceUniversity?: string | null,
 ): Promise<{ id: string; chunks: number }> {
   const { data: u } = await db().auth.getUser();
   if (!u.user) throw new Error("Sign in first.");
+  const university = scope === "library" ? audienceUniversity ?? null : null;
 
   const { data: doc, error } = await db()
     .from("ai_documents")
@@ -509,6 +512,7 @@ async function storeText(
       title,
       citation: citation ?? null,
       author: author?.trim() || null,
+      university,
       target_years: targetYears,
       material_id: materialId ?? null,
     })
@@ -520,6 +524,7 @@ async function storeText(
     document_id: doc.id,
     owner: scope === "user" ? u.user!.id : null,
     scope,
+    university,
     idx,
     content,
   }));

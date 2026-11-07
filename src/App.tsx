@@ -105,6 +105,7 @@ import { TranscriptAI } from "./TranscriptAI";
 import { askAI, countMaterialChunks, extractText, getLibraryMaterialDocumentId, setLearnerAdaptation, uploadLibraryMaterial, type AIResult, type AIFeature } from "./lib/ai";
 import { bookSummarySynthesisPrompt, extractBookPartRecap, mergeBookSummaryParts, planBookSummary, requestBookSummaryPart, type CompletedBookSummaryPart } from "./lib/bookSummary";
 import { downloadPdf, downloadWord } from "./export";
+import { KENYAN_UNIVERSITIES } from "./universities";
 import { defaultLearningPreference, materialVisibleToLevel } from "./lib/learnerAdaptation";
 import { Markdown } from "./Markdown";
 import GrowthPage from "./GrowthPage";
@@ -255,6 +256,7 @@ type UserProfile = {
   learnerLevel: LearnerLevel | "";
   learningPreference: LearningPreference | "";
   displayName: string;
+  university: string;
   role: string;
   avatarUrl: string;
   wallpaperUrl: string;
@@ -300,6 +302,7 @@ function App() {
     learnerLevel: "",
     learningPreference: "",
     displayName: "",
+    university: "",
     role: "LLB · Year 1",
     avatarUrl: "",
     wallpaperUrl: "",
@@ -440,6 +443,7 @@ function App() {
           typeof metadata.display_name === "string"
             ? metadata.display_name
             : "",
+        university: typeof metadata.university === "string" ? metadata.university : "",
         role:
           typeof metadata.role === "string" ? metadata.role : "Law student",
         avatarUrl:
@@ -878,6 +882,7 @@ function App() {
     const selectedPreference = changes.learningPreference ?? profile.learningPreference;
     const metadata = {
       display_name: changes.displayName ?? profile.displayName,
+      university: changes.university ?? profile.university,
       role: changes.role ?? profile.role,
       avatar_url: changes.avatarUrl ?? profile.avatarUrl,
       wallpaper_url: changes.wallpaperUrl ?? profile.wallpaperUrl,
@@ -894,6 +899,7 @@ function App() {
       learnerLevel: metadata.learner_level as LearnerLevel | "",
       learningPreference: metadata.learning_preference as LearningPreference | "",
       displayName: metadata.display_name,
+      university: metadata.university,
       role: metadata.role,
       avatarUrl: metadata.avatar_url,
       wallpaperUrl: metadata.wallpaper_url,
@@ -1689,6 +1695,7 @@ function App() {
       {materialFormOpen && (
         <MaterialForm
           units={units}
+          university={profile.university}
           onClose={() => setMaterialFormOpen(false)}
           onCreated={async (material, file, extractedText) => {
             try {
@@ -1704,6 +1711,7 @@ function App() {
                     created.target_years ?? [],
                     created.id,
                     extractedText,
+                    created.sharing_scope === "university" ? created.university : null,
                   );
                   setNotice(`Material uploaded and added to AI knowledge (${indexed.chunks} sections).`);
                 } catch (indexError) {
@@ -1725,6 +1733,7 @@ function App() {
       {editingMaterial && (
         <MaterialForm
           units={units}
+          university={profile.university}
           initial={editingMaterial}
           onClose={() => setEditingMaterial(null)}
           onUpdated={(changes) => updateMaterial(editingMaterial, changes)}
@@ -4751,12 +4760,14 @@ function FormShell({
 }
 function MaterialForm({
   units,
+  university,
   initial,
   onClose,
   onCreated,
   onUpdated,
 }: {
   units: Unit[];
+  university: string;
   initial?: Material;
   onClose: () => void;
   onCreated?: (material: Omit<Material, "id">, file?: File, extractedText?: string) => Promise<void>;
@@ -4782,6 +4793,8 @@ function MaterialForm({
           url: initial.url ?? "",
           storage_path: initial.storage_path,
           owner_id: initial.owner_id,
+          sharing_scope: initial.sharing_scope ?? "all",
+          university: initial.university ?? university,
           target_years: initial.target_years ?? [],
         }
         : {
@@ -4797,6 +4810,8 @@ function MaterialForm({
           }),
           source: "Law Hub",
           url: "",
+          sharing_scope: "all",
+          university,
           target_years: [],
         },
   );
@@ -4967,6 +4982,14 @@ function MaterialForm({
           <p className="field-hint">Leave all unchecked to make it available to every cohort.</p>
           <div className="cohort-options">{learnerLevels.filter((item) => item.id !== "prefer-not-to-say").map((item) => <label key={item.id}><input type="checkbox" checked={form.target_years?.includes(item.id) ?? false} onChange={(event) => setForm((current) => ({ ...current, target_years: event.target.checked ? [...(current.target_years ?? []), item.id] : (current.target_years ?? []).filter((id) => id !== item.id) }))} />{item.label}</label>)}</div>
         </fieldset>
+        <label>Library visibility
+          <select value={form.sharing_scope ?? "all"} onChange={(event) => setForm((current) => ({ ...current, sharing_scope: event.target.value, university: event.target.value === "university" ? university : current.university }))}>
+            <option value="all">Share with all signed-in learners</option>
+            <option value="university" disabled={!university}>Share with my university only</option>
+            <option value="private">Keep private to me</option>
+          </select>
+          <span className="field-hint">University-only sharing requires a university saved in your profile.</span>
+        </label>
         <label>
           Source
           <input
@@ -5126,16 +5149,18 @@ function ProfileSettings({
   setNotice: (notice: string) => void;
 }) {
   const [name, setName] = useState(profile.displayName);
+  const [university, setUniversity] = useState(profile.university);
   const [role, setRole] = useState(profile.role);
   const [learnerLevel, setLearnerLevel] = useState(profile.learnerLevel);
   const [learningPreference, setLearningPreference] = useState(profile.learningPreference);
   const [busy, setBusy] = useState("");
   useEffect(() => {
     setName(profile.displayName);
+    setUniversity(profile.university);
     setRole(profile.role);
     setLearnerLevel(profile.learnerLevel);
     setLearningPreference(profile.learningPreference);
-  }, [profile.displayName, profile.role, profile.learnerLevel, profile.learningPreference]);
+  }, [profile.displayName, profile.university, profile.role, profile.learnerLevel, profile.learningPreference]);
   const completion =
     ([name.trim(), role.trim(), profile.avatarUrl].filter(Boolean).length / 3) *
     100;
@@ -5143,7 +5168,7 @@ function ProfileSettings({
     event.preventDefault();
     setBusy("profile");
     try {
-      await onSave({ displayName: name.trim(), role: role.trim(), learnerLevel, learningPreference });
+      await onSave({ displayName: name.trim(), university, role: role.trim(), learnerLevel, learningPreference });
       setNotice("Profile saved.");
     } catch (error) {
       setNotice(
@@ -5236,6 +5261,13 @@ function ProfileSettings({
               {learnerLevels.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
             </select>
             <span className="field-hint">Save your profile to apply this level to the dashboard, learning tools and year-filtered Library.</span>
+          </label>
+          <label>University
+            <select value={university} onChange={(event) => setUniversity(event.target.value)}>
+              <option value="">Choose your university</option>
+              {KENYAN_UNIVERSITIES.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+            <span className="field-hint">This controls which school-only Library materials you can see.</span>
           </label>
           <label>How should study help be tailored?
             <select value={learningPreference} onChange={(event) => setLearningPreference(event.target.value as LearningPreference)}>

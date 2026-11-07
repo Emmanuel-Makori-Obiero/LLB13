@@ -20,6 +20,8 @@ export type Material = {
   url?: string;
   storage_path?: string;
   owner_id?: string | null;
+  sharing_scope?: "all" | "university" | "private" | string | null;
+  university?: string | null;
   file_sha256?: string | null;
   target_years?: string[] | null;
   archive_path?: string | null;
@@ -102,6 +104,7 @@ export type AdminAccount = {
   id: string;
   email: string;
   display_name: string;
+  university?: string | null;
   created_at: string;
   last_sign_in_at: string | null;
   is_admin: boolean;

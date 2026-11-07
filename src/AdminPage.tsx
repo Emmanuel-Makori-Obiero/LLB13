@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Play, ShieldCheck, ShieldOff, Trash2, UserPlus } from "lucide-react";
 import { repository, supabase } from "./data/repository";
 import type { AdminAccount, Member, Unit } from "./data/types";
@@ -74,6 +74,8 @@ export default function AdminPage({
   const [newName, setNewName] = useState("");
   const [newRole, setNewRole] = useState("Member");
   const [newSection, setNewSection] = useState<"A" | "B">("A");
+  const [accountSearch, setAccountSearch] = useState("");
+  const [accountUniversity, setAccountUniversity] = useState("all");
   const [unitName, setUnitName] = useState("");
   const [unitCode, setUnitCode] = useState("");
   const [organizerJob, setOrganizerJob] = useState<OrganizerJob | null>(null);
@@ -216,6 +218,15 @@ export default function AdminPage({
   useEffect(() => {
     void loadAccounts();
   }, [loadAccounts]);
+
+  const accountUniversities = useMemo(() => Array.from(new Set(accounts.map((account) => account.university).filter((value): value is string => Boolean(value)))).sort(), [accounts]);
+  const visibleAccounts = useMemo(() => {
+    const query = accountSearch.trim().toLowerCase();
+    return accounts.filter((account) => {
+      const haystack = `${account.display_name} ${account.email} ${account.university ?? ""}`.toLowerCase();
+      return (!query || haystack.includes(query)) && (accountUniversity === "all" || account.university === accountUniversity);
+    });
+  }, [accounts, accountSearch, accountUniversity]);
 
   const removeAccount = (account: AdminAccount) => {
     if (account.is_primary_admin || (account.is_admin && !canManageAdmins)) {
@@ -368,8 +379,15 @@ export default function AdminPage({
               ? "Only you, as the primary admin, can grant or revoke admin access. To promote someone, they need an existing verified account."
               : "Admin access is managed by the primary admin."}
           </p>
+          <div className="admin-account-filters">
+            <input value={accountSearch} onChange={(event) => setAccountSearch(event.target.value)} placeholder="Search by name, email, or university" aria-label="Search registered accounts" />
+            <select value={accountUniversity} onChange={(event) => setAccountUniversity(event.target.value)} aria-label="Filter accounts by university">
+              <option value="all">All universities</option>
+              {accountUniversities.map((university) => <option key={university} value={university}>{university}</option>)}
+            </select>
+          </div>
           <div className="row-list">
-            {accounts.map((account) => {
+            {visibleAccounts.map((account) => {
               const isSelf =
                 account.email.toLowerCase() === currentEmail.toLowerCase();
               return (
@@ -382,7 +400,7 @@ export default function AdminPage({
                       {account.display_name || account.email.split("@")[0]}
                     </div>
                     <div className="row-meta">
-                      {account.email} · joined {formatDate(account.created_at)}{" "}
+                      {account.email} · {account.university || "University not set"} · joined {formatDate(account.created_at)}{" "}
                       · last seen {formatDate(account.last_sign_in_at)}
                     </div>
                   </div>
