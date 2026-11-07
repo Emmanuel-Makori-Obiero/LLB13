@@ -668,6 +668,8 @@
 .rw-paper-page .md-h { color:#000; font-family:Arial,Helvetica,sans-serif; text-align:left; margin-top:30px; margin-bottom:12px; }
 .rw-paper-page .md-h:first-child { text-align:center; }
 .rw-paper-page .md-p, .rw-paper-page li { color:#000; font-family:Arial,Helvetica,sans-serif; font-size:12pt; line-height:1.5; }
+.rw-paper-page a, .rw-paper-page strong, .rw-paper-page em, .rw-paper-page code { color:#000; }
+.rw-paper-page a { text-decoration: underline; }
 .rw-paper-page .md-table-wrap { box-shadow:none; border-color:#000; }
 .rw-paper-page .md-table th { background:#fff; color:#000; }
 .rw-paper-empty { color:#555; text-align:center; margin-top:180px; }
