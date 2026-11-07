@@ -14,6 +14,7 @@ type Project = {
   kind: string;
   style: string;
   words: string;
+  pages: string;
 };
 const EMPTY: Project = {
   title: "",
@@ -21,6 +22,7 @@ const EMPTY: Project = {
   kind: "Research paper",
   style: "OSCOLA",
   words: "5000",
+  pages: "5",
 };
 const KINDS = [
   "Research paper",
@@ -32,6 +34,7 @@ const KINDS = [
   "Law reform proposal",
 ];
 const STYLES = ["OSCOLA", "Bluebook", "APA", "Harvard"];
+const PAGE_OPTIONS = ["1", "2", "3", "4", "5", "more"];
 const STORE = "g13-research-writer";
 
 type Tool = {
@@ -214,7 +217,7 @@ export function ResearchWriter({ userId }: { userId: string | null }) {
       accuracyInstruction,
       `Topic: ${project.topic || project.title}`,
       project.title && `Paper title: ${project.title}`,
-      `Paper type: ${project.kind}. Citation style: ${project.style}. Target length: ${project.words || "not set"} words.`,
+      `Paper type: ${project.kind}. Citation style: ${project.style}. Target length: ${project.words || "not set"} words. Target paper length: ${pageTarget}. Treat the page target as a real formatting constraint: use normal academic margins, 12-point text and double spacing, and keep the completed paper close to the selected number of pages without cutting essential analysis or the bibliography.`,
       usesDraft ? `Draft so far:\n"""\n${clip(draft)}\n"""` : "",
     ]
       .filter(Boolean)
@@ -302,6 +305,7 @@ export function ResearchWriter({ userId }: { userId: string | null }) {
 
   const words = count(draft);
   const target = Number(project.words) || 0;
+  const pageTarget = project.pages === "more" ? "more than 5 pages" : `${project.pages || "5"} page${project.pages === "1" ? "" : "s"}`;
 
   return (
     <div className="sa">
@@ -536,6 +540,13 @@ export function ResearchWriter({ userId }: { userId: string | null }) {
                 value={project.words}
                 onChange={set("words")}
               />
+            </label>
+            <label>
+              Target pages
+              <select value={project.pages} onChange={set("pages")}>
+                {PAGE_OPTIONS.map((pages) => <option key={pages} value={pages}>{pages === "more" ? "More than 5 pages" : `${pages} page${pages === "1" ? "" : "s"}`}</option>)}
+              </select>
+              <span className="field-hint">The writer aims for this length using normal academic spacing. Bibliography pages are included in the target.</span>
             </label>
           </div>
         </div>
