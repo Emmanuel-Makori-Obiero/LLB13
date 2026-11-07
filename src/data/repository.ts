@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import type {
   AdminAccount,
   ApprovedGroupLeader,
+  GroupLeaderRequest,
   Assignment,
   AssignmentStatus,
   GroupAttendance,
@@ -153,6 +154,10 @@ export type Group13Repository = {
   markGroupMaterialPublished: (shareId: string, libraryMaterialId: string) => Promise<void>;
   adminListGroupLeaders: () => Promise<ApprovedGroupLeader[]>;
   adminSetGroupLeaderEmail: (email: string, enabled: boolean) => Promise<void>;
+  getMyGroupLeaderRequest: () => Promise<GroupLeaderRequest | null>;
+  submitGroupLeaderRequest: (message?: string) => Promise<GroupLeaderRequest>;
+  adminListGroupLeaderRequests: () => Promise<GroupLeaderRequest[]>;
+  adminReviewGroupLeaderRequest: (id: string, decision: "approved" | "rejected") => Promise<void>;
   getActiveClubPosters: () => Promise<ClubPoster[]>;
   adminCreateClubPoster: (input: { title: string; file: File; linkUrl: string; aiAnalysis: string; onProgress?: (stage: "checking" | "uploading" | "saving") => void }) => Promise<ClubPoster>;
   adminDeleteClubPoster: (poster: ClubPoster) => Promise<void>;
@@ -1180,6 +1185,27 @@ const supabaseRepository: Group13Repository = {
     const { data, error } = await db().rpc("admin_list_group_leaders");
     if (error) throw new Error(`Could not load approved group leaders: ${error.message}`);
     return (data ?? []) as ApprovedGroupLeader[];
+  },
+  getMyGroupLeaderRequest: async () => {
+    const { data, error } = await db().rpc("get_my_group_leader_request");
+    if (error) throw new Error(`Could not load your group-leader request: ${error.message}`);
+    return (data?.[0] ?? null) as GroupLeaderRequest | null;
+  },
+  submitGroupLeaderRequest: async (message = "") => {
+    const { data, error } = await db().rpc("submit_group_leader_request", { p_message: message.trim() || null });
+    if (error) throw new Error(`Could not submit your group-leader request: ${error.message}`);
+    const request = data?.[0] as GroupLeaderRequest | undefined;
+    if (!request) throw new Error("The group-leader request was not saved. Please try again.");
+    return request;
+  },
+  adminListGroupLeaderRequests: async () => {
+    const { data, error } = await db().rpc("admin_list_group_leader_requests");
+    if (error) throw new Error(`Could not load group-leader requests: ${error.message}`);
+    return (data ?? []) as GroupLeaderRequest[];
+  },
+  adminReviewGroupLeaderRequest: async (id, decision) => {
+    const { error } = await db().rpc("admin_review_group_leader_request", { p_request_id: id, p_decision: decision });
+    if (error) throw new Error(error.message);
   },
   getActiveClubPosters: async () => {
     const { data, error } = await db().from("club_posters")

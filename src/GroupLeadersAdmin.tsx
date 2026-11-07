@@ -1,11 +1,12 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { ShieldCheck, ShieldOff, UserPlus } from "lucide-react";
+import { Check, ShieldCheck, ShieldOff, UserPlus, X } from "lucide-react";
 import { repository } from "./data/repository";
-import type { ApprovedGroupLeader } from "./data/types";
+import type { ApprovedGroupLeader, GroupLeaderRequest } from "./data/types";
 import "./groups.css";
 
 export default function GroupLeadersAdmin() {
   const [leaders, setLeaders] = useState<ApprovedGroupLeader[]>([]);
+  const [requests, setRequests] = useState<GroupLeaderRequest[]>([]);
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -15,7 +16,9 @@ export default function GroupLeadersAdmin() {
   const load = async () => {
     setLoading(true);
     try {
-      setLeaders(await repository.adminListGroupLeaders());
+      const [approved, incoming] = await Promise.all([repository.adminListGroupLeaders(), repository.adminListGroupLeaderRequests()]);
+      setLeaders(approved);
+      setRequests(incoming);
       setError("");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not load approved leaders.");
@@ -25,6 +28,21 @@ export default function GroupLeadersAdmin() {
   };
 
   useEffect(() => { void load(); }, []);
+
+  const reviewRequest = async (request: GroupLeaderRequest, decision: "approved" | "rejected") => {
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      await repository.adminReviewGroupLeaderRequest(request.id, decision);
+      setMessage(decision === "approved" ? `${request.email} can now create a study group.` : `${request.email}'s request was rejected.`);
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not review the group-leader request.");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const changeLeader = async (address: string, enabled: boolean) => {
     setBusy(true);
@@ -57,6 +75,16 @@ export default function GroupLeadersAdmin() {
       <p className="field-hint">Add a verified account here to let that student create one study group. Removing approval does not delete a group that already exists. Campus representatives and other authorized administrators can approve or remove group-leader access here.</p>
       {error && <div className="connection-error" role="alert">{error}</div>}
       {message && <p className="field-hint" role="status">{message}</p>}
+      <div className="groups-request-admin">
+        <div className="card-header"><span className="section-label">Incoming requests</span><span className="quiet">{requests.filter((request) => request.status === "pending").length} pending</span></div>
+        {!requests.some((request) => request.status === "pending") ? <p className="empty">No pending group-leader requests.</p> : <div className="row-list">
+          {requests.filter((request) => request.status === "pending").map((request) => <div className="row" key={request.id}>
+            <div className="type-mark"><UserPlus size={15} /></div>
+            <div className="row-main"><div className="row-title">{request.display_name || request.email?.split("@")[0] || "Student"}</div><div className="row-meta">{request.email} · {new Date(request.created_at).toLocaleString("en-KE", { dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Nairobi" })}</div>{request.message && <p className="groups-request-message">{request.message}</p>}</div>
+            <div className="row-end"><button className="primary-button" type="button" disabled={busy} onClick={() => void reviewRequest(request, "approved")}><Check size={12} /> Approve</button><button className="small-danger" type="button" disabled={busy} onClick={() => void reviewRequest(request, "rejected")}><X size={12} /> Reject</button></div>
+          </div>)}
+        </div>}
+      </div>
       <form className="groups-admin-form" onSubmit={submit}>
         <label className="groups-field">
           Account email

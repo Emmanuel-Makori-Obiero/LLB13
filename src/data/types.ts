@@ -195,6 +195,17 @@ export type ApprovedGroupLeader = {
   created_at: string;
 };
 
+export type GroupLeaderRequest = {
+  id: string;
+  user_id?: string;
+  email?: string;
+  display_name?: string;
+  message: string | null;
+  status: "pending" | "approved" | "rejected";
+  created_at: string;
+  reviewed_at?: string | null;
+};
+
 export type SavedExamAnalysis = {
   id: string;
   paper_title: string;
