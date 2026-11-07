@@ -110,8 +110,14 @@
 .groups-material-list .row { align-items: center; gap: 12px; }
 .groups-material-list .row-main { min-width: 0; }
 .groups-material-list .row-title { overflow-wrap: anywhere; }
+.groups-session-materials { margin-top: 14px; padding: 11px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.groups-session-material-list { display: grid; gap: 7px; margin-top: 8px; }
+.groups-session-material { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; background: var(--soft); }
+.groups-session-material-title { display: inline-flex; align-items: center; gap: 7px; min-width: 0; color: var(--ink); font-size: 12px; overflow-wrap: anywhere; }
+.groups-session-material .material-link { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 @media (max-width: 700px) {
   .groups-material-scope-row { grid-template-columns: 1fr; }
   .groups-material-list .row { align-items: flex-start; flex-wrap: wrap; }
   .groups-material-list .row-main { flex: 1 1 calc(100% - 48px); }
+  .groups-session-material { align-items: flex-start; flex-direction: column; }
 }

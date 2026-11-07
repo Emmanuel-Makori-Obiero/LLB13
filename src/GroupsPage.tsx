@@ -428,6 +428,7 @@ export default function GroupsPage() {
             {!sessions.length ? <p className="empty">No group sessions have been created yet.</p> : <div className="groups-session-list">
               {sessions.map((session) => {
                 const ownRecord = attendanceByKey.get(`${session.id}:${userId}`);
+                const sessionMaterials = groupMaterials.filter((share) => share.share_scope === "session" && share.session_id === session.id);
                 return <article className="groups-session" key={session.id}>
                   <div className="groups-session-head">
                     <div><div className="groups-session-meta"><span>{session.kind === "daily" ? "Daily session" : "Project session"}</span><span>{showDate(session.session_date)}</span><span className={`groups-status ${session.status}`}>{session.status}</span></div><h3>{session.title}</h3>{session.project_label && <p className="row-meta">{session.project_label}</p>}{session.check_in_cutoff && <p className="row-meta">Check-in cutoff · {session.check_in_cutoff.slice(0, 5)} Nairobi time</p>}</div>
@@ -439,6 +440,13 @@ export default function GroupsPage() {
                       {isLeader && <button className="small-danger" disabled={busy === `delete-session-${session.id}` || !online} onClick={() => { if (window.confirm("Delete this session and its attendance records?")) void act(`delete-session-${session.id}`, () => repository.deleteGroupSession(session.id), "Session deleted."); }}><Trash2 size={13} /> Delete</button>}
                     </div>
                   </div>
+                  {sessionMaterials.length > 0 && <div className="groups-session-materials">
+                    <div className="section-label">Materials for this session</div>
+                    <div className="groups-session-material-list">{sessionMaterials.map((share) => <div className="groups-session-material" key={share.id}>
+                      <span className="groups-session-material-title"><Library size={13} /> {share.title}</span>
+                      {share.url && <a className="material-link" href={share.url} target="_blank" rel="noreferrer">Open resource <ExternalLink size={12} /></a>}
+                    </div>)}</div>
+                  </div>}
                   {isLeader && <div className="groups-mark-grid">
                     {members.map((member) => {
                       const key = `${session.id}:${member.user_id}`;
