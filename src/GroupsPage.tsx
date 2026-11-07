@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { Check, Copy, DoorOpen, KeyRound, Plus, RotateCw, Trash2, UserRoundX } from "lucide-react";
+import { Check, Copy, DoorOpen, ExternalLink, FileUp, KeyRound, Library, Plus, RotateCw, Trash2, UserRoundX } from "lucide-react";
 import { repository, supabase } from "./data/repository";
-import type { GroupAttendance, GroupAttendanceStatus, GroupAttendanceSummary, GroupSession, StudyGroup, StudyGroupMember } from "./data/types";
+import type { GroupAttendance, GroupAttendanceStatus, GroupAttendanceSummary, GroupMaterialShare, GroupMaterialShareScope, GroupSession, Material, StudyGroup, StudyGroupMember, Unit } from "./data/types";
 import "./groups.css";
 
 const STATUS_OPTIONS: GroupAttendanceStatus[] = ["present", "late", "excused", "absent"];
@@ -27,6 +27,9 @@ export default function GroupsPage() {
   const [sessions, setSessions] = useState<GroupSession[]>([]);
   const [attendance, setAttendance] = useState<GroupAttendance[]>([]);
   const [summary, setSummary] = useState<GroupAttendanceSummary[]>([]);
+  const [groupMaterials, setGroupMaterials] = useState<GroupMaterialShare[]>([]);
+  const [libraryMaterials, setLibraryMaterials] = useState<Material[]>([]);
+  const [units, setUnits] = useState<Unit[]>([]);
   const [userId, setUserId] = useState("");
   const [isLeader, setIsLeader] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -43,6 +46,13 @@ export default function GroupsPage() {
   const [projectLabel, setProjectLabel] = useState("");
   const [sessionDate, setSessionDate] = useState(dateInNairobi());
   const [cutoff, setCutoff] = useState("");
+  const [shareTitle, setShareTitle] = useState("");
+  const [shareScope, setShareScope] = useState<GroupMaterialShareScope>("group");
+  const [shareSessionId, setShareSessionId] = useState("");
+  const [shareUnitName, setShareUnitName] = useState("");
+  const [shareLibraryId, setShareLibraryId] = useState("");
+  const [shareFile, setShareFile] = useState<File | null>(null);
+  const [shareSource, setShareSource] = useState<"library" | "upload">("library");
   const [fromDate, setFromDate] = useState(dateDaysAgo(29));
   const [toDate, setToDate] = useState(dateInNairobi());
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
@@ -75,7 +85,7 @@ export default function GroupsPage() {
         ? nextAdminGroups.find((item) => item.id === adminSelectedGroupId) ?? nextGroup?.group ?? null
         : nextGroup?.group ?? null;
       if (!selectedGroup) {
-        setGroup(null); setMembers([]); setSessions([]); setAttendance([]); setSummary([]); setInviteCode("");
+        setGroup(null); setMembers([]); setSessions([]); setAttendance([]); setSummary([]); setGroupMaterials([]); setLibraryMaterials([]); setUnits([]); setInviteCode("");
         return;
       }
       const selectedMembers = nextGroup?.group.id === selectedGroup.id
@@ -91,10 +101,19 @@ export default function GroupsPage() {
         leader ? repository.getGroupInviteCode(selectedGroup.id) : Promise.resolve(""),
       ]);
       const records = await repository.getGroupAttendanceForSessions(nextSessions.map((session) => session.id));
+      const nextGroupMaterials = await repository.getGroupMaterialShares(selectedGroup.id);
       setSessions(nextSessions);
       setSummary(nextSummary);
       setInviteCode(code);
       setAttendance(records);
+      setGroupMaterials(nextGroupMaterials);
+      if (leader) {
+        const [nextUnits, nextLibraryMaterials] = await Promise.all([repository.getUnits(), repository.getMaterials()]);
+        setUnits(nextUnits);
+        setLibraryMaterials(nextLibraryMaterials);
+      } else {
+        setUnits([]); setLibraryMaterials([]);
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not load study groups.");
     } finally {
@@ -119,6 +138,7 @@ export default function GroupsPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "study_groups", filter: `id=eq.${group.id}` }, () => { void load(false); })
       .on("postgres_changes", { event: "*", schema: "public", table: "study_group_members", filter: `group_id=eq.${group.id}` }, () => { void load(false); })
       .on("postgres_changes", { event: "*", schema: "public", table: "group_sessions", filter: `group_id=eq.${group.id}` }, () => { void load(false); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "group_material_shares", filter: `group_id=eq.${group.id}` }, () => { void load(false); })
       .on("postgres_changes", { event: "*", schema: "public", table: "group_attendance" }, () => { void load(false); })
       .subscribe();
     return () => { void client.removeChannel(channel); };
@@ -207,6 +227,51 @@ export default function GroupsPage() {
     const status = await repository.checkInGroupSession(sessionId);
     setNotice(`Your record is ${status}.`);
   });
+  const clearAttendance = (session: GroupSession) => {
+    if (!window.confirm(`Clear every attendance record for “${session.title}”? This can be used to correct a session before marking it again.`)) return;
+    void act(`clear-${session.id}`, async () => {
+      const removed = await repository.clearGroupSessionAttendance(session.id);
+      setNotice(`${removed} attendance record${removed === 1 ? "" : "s"} cleared.`);
+    });
+  };
+  const shareMaterial = (event: FormEvent) => {
+    event.preventDefault();
+    if (!group || !shareTitle.trim()) return;
+    if (shareSource === "library" && !shareLibraryId) { setError("Choose a Library material to share."); return; }
+    if (shareSource === "upload" && !shareFile) { setError("Choose a file to upload to the group."); return; }
+    void act("share-material", async () => {
+      await repository.createGroupMaterialShare({
+        group_id: group.id,
+        title: shareTitle.trim(),
+        share_scope: shareScope,
+        session_id: shareScope === "session" ? shareSessionId : null,
+        unit_name: shareScope === "unit" ? shareUnitName : null,
+        material_id: shareSource === "library" ? shareLibraryId : null,
+      }, shareSource === "upload" ? shareFile ?? undefined : undefined);
+      setShareTitle(""); setShareLibraryId(""); setShareFile(null); setShareSessionId(""); setShareUnitName("");
+    }, "Material shared with the group.");
+  };
+  const publishGroupMaterial = (share: GroupMaterialShare) => {
+    if (!share.url || !group) return;
+    void act(`publish-${share.id}`, async () => {
+      const response = await fetch(share.url!);
+      if (!response.ok) throw new Error("Could not download the group file for Library publishing.");
+      const blob = await response.blob();
+      const filename = share.title.replace(/[^a-zA-Z0-9._-]+/g, "-") || "group-resource";
+      const file = new File([blob], filename, { type: share.mime_type || blob.type || "application/octet-stream" });
+      const created = await repository.createMaterial({
+        title: share.title,
+        author: group.name,
+        type: "Group resource",
+        unit: share.unit_name || "Group shared",
+        topic: share.share_scope === "session" ? "Session resource" : "Group resource",
+        date: new Date().toISOString().slice(0, 10),
+        source: `Shared by ${group.name}`,
+        url: "",
+      }, file);
+      await repository.markGroupMaterialPublished(share.id, created.id);
+    }, "Material copied to the shared Library.");
+  };
 
   return (
     <div className="groups-page">
@@ -289,6 +354,32 @@ export default function GroupsPage() {
             </div>
           </section>
 
+          <section className="card card-pad groups-materials-section">
+            <div className="card-header"><span className="section-label">Group materials</span><span className="quiet">Shared resources for this group</span></div>
+            {isLeader && <form className="groups-material-share-form" onSubmit={shareMaterial}>
+              <div className="groups-session-form-head"><strong>Share a resource</strong><span className="field-hint">Choose a Library item or upload your own file, then decide who should see it.</span></div>
+              <div className="groups-material-source-tabs" role="tablist" aria-label="Material source">
+                <button type="button" className={shareSource === "library" ? "tab active" : "tab"} onClick={() => setShareSource("library")}><Library size={14} /> From Library</button>
+                <button type="button" className={shareSource === "upload" ? "tab active" : "tab"} onClick={() => setShareSource("upload")}><FileUp size={14} /> Upload file</button>
+              </div>
+              <label className="groups-field">Title<input required maxLength={180} value={shareTitle} onChange={(event) => setShareTitle(event.target.value)} placeholder="e.g. Consideration case brief" /></label>
+              {shareSource === "library" ? <label className="groups-field">Library material<select value={shareLibraryId} onChange={(event) => { setShareLibraryId(event.target.value); const material = libraryMaterials.find((item) => item.id === event.target.value); if (material && !shareTitle) setShareTitle(material.title); }}><option value="">Choose a material…</option>{libraryMaterials.map((material) => <option key={material.id} value={material.id}>{material.title} · {material.unit}</option>)}</select></label> : <label className="groups-field">File<input required type="file" onChange={(event) => setShareFile(event.target.files?.[0] ?? null)} /><span className="field-hint">The file stays group-only until a leader chooses “Push to Library”.</span></label>}
+              <div className="groups-material-scope-row">
+                <label className="groups-field">Share with<select value={shareScope} onChange={(event) => setShareScope(event.target.value as GroupMaterialShareScope)}><option value="group">Entire group</option><option value="session">One session</option><option value="unit">One unit</option></select></label>
+                {shareScope === "session" && <label className="groups-field">Session<select required value={shareSessionId} onChange={(event) => setShareSessionId(event.target.value)}><option value="">Choose a session…</option>{sessions.map((session) => <option key={session.id} value={session.id}>{showDate(session.session_date)} · {session.title}</option>)}</select></label>}
+                {shareScope === "unit" && <label className="groups-field">Unit<select required value={shareUnitName} onChange={(event) => setShareUnitName(event.target.value)}><option value="">Choose a unit…</option>{units.map((unit) => <option key={unit.id} value={unit.name}>{unit.name}</option>)}</select></label>}
+              </div>
+              <button className="primary-button" type="submit" disabled={busy === "share-material" || !online}><ExternalLink size={14} /> {busy === "share-material" ? "Sharing…" : "Share with group"}</button>
+            </form>}
+            {!groupMaterials.length ? <p className="empty">No materials have been shared with this group yet.</p> : <div className="row-list groups-material-list">{groupMaterials.map((share) => <div className="row" key={share.id}>
+              <div className="type-mark"><Library size={14} /></div>
+              <div className="row-main"><div className="row-title">{share.title}</div><div className="row-meta">{share.source_label} · {share.share_scope === "group" ? "Entire group" : share.share_scope === "session" ? `Session: ${sessions.find((session) => session.id === share.session_id)?.title ?? "Selected session"}` : `Unit: ${share.unit_name}`}</div></div>
+              {share.url && <a className="secondary-button" href={share.url} target="_blank" rel="noreferrer"><ExternalLink size={13} /> Open</a>}
+              {isLeader && !share.material_id && !share.library_material_id && <button className="secondary-button" disabled={busy === `publish-${share.id}` || !online} onClick={() => publishGroupMaterial(share)}><Library size={13} /> {busy === `publish-${share.id}` ? "Publishing…" : "Push to Library"}</button>}
+              {share.library_material_id && <span className="chip green">In Library</span>}
+            </div>)}</div>}
+          </section>
+
           <section className="card card-pad groups-attendance-section">
             <div className="card-header"><span className="section-label">Group sessions</span><span className="quiet">Accountability record · not marks</span></div>
             {isLeader && <form className="groups-session-form" onSubmit={createSession}>
@@ -310,6 +401,7 @@ export default function GroupsPage() {
                       {!isLeader && session.status === "open" && !ownRecord && <button className="primary-button" disabled={busy === `checkin-${session.id}` || !online} onClick={() => checkIn(session.id)}><Check size={14} /> {busy === `checkin-${session.id}` ? "Checking in…" : "Check in"}</button>}
                       {!isLeader && ownRecord && <span className="chip">Your record: {attendanceLabel(ownRecord.status)}</span>}
                       {isLeader && session.status === "open" && <button className="secondary-button" disabled={busy === `close-${session.id}` || !online} onClick={() => void act(`close-${session.id}`, () => repository.closeGroupSession(session.id), "Session closed.")}><Check size={14} /> Close session</button>}
+                      {isLeader && <button className="secondary-button" disabled={busy === `clear-${session.id}` || !online} onClick={() => clearAttendance(session)}>{busy === `clear-${session.id}` ? "Clearing…" : "Clear attendance"}</button>}
                       {isLeader && <button className="small-danger" disabled={busy === `delete-session-${session.id}` || !online} onClick={() => { if (window.confirm("Delete this session and its attendance records?")) void act(`delete-session-${session.id}`, () => repository.deleteGroupSession(session.id), "Session deleted."); }}><Trash2 size={13} /> Delete</button>}
                     </div>
                   </div>

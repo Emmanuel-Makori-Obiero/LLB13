@@ -146,6 +146,26 @@ export type GroupAttendance = {
   marked_at: string;
 };
 
+export type GroupMaterialShareScope = "group" | "session" | "unit";
+
+export type GroupMaterialShare = {
+  id: string;
+  group_id: string;
+  material_id: string | null;
+  title: string;
+  share_scope: GroupMaterialShareScope;
+  session_id: string | null;
+  unit_name: string | null;
+  storage_path: string | null;
+  mime_type: string | null;
+  file_size: number | null;
+  shared_by: string;
+  library_material_id: string | null;
+  created_at: string;
+  url: string | null;
+  source_label: string;
+};
+
 export type GroupAttendanceSummary = {
   group_id: string;
   group_name?: string;

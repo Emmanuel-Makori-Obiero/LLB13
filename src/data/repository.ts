@@ -9,6 +9,8 @@ import type {
   GroupAttendance,
   GroupAttendanceStatus,
   GroupAttendanceSummary,
+  GroupMaterialShare,
+  GroupMaterialShareScope,
   GroupSession,
   Discussion,
   ExamAnalysisDraft,
@@ -133,11 +135,22 @@ export type Group13Repository = {
   closeGroupSession: (sessionId: string) => Promise<void>;
   deleteGroupSession: (sessionId: string) => Promise<void>;
   markGroupAttendance: (sessionId: string, userId: string, status: GroupAttendanceStatus, note?: string) => Promise<void>;
+  clearGroupSessionAttendance: (sessionId: string) => Promise<number>;
   checkInGroupSession: (sessionId: string) => Promise<GroupAttendanceStatus>;
   getGroupAttendanceForSessions: (sessionIds: string[]) => Promise<GroupAttendance[]>;
   getGroupAttendanceSummary: (groupId: string, from: string, to: string) => Promise<GroupAttendanceSummary[]>;
   getAllStudyGroups: () => Promise<StudyGroup[]>;
   getLecturerAttendanceSummary: (from: string, to: string) => Promise<GroupAttendanceSummary[]>;
+  getGroupMaterialShares: (groupId: string) => Promise<GroupMaterialShare[]>;
+  createGroupMaterialShare: (input: {
+    group_id: string;
+    title: string;
+    share_scope: GroupMaterialShareScope;
+    session_id?: string | null;
+    unit_name?: string | null;
+    material_id?: string | null;
+  }, file?: File) => Promise<GroupMaterialShare>;
+  markGroupMaterialPublished: (shareId: string, libraryMaterialId: string) => Promise<void>;
   adminListGroupLeaders: () => Promise<ApprovedGroupLeader[]>;
   adminSetGroupLeaderEmail: (email: string, enabled: boolean) => Promise<void>;
   getActiveClubPosters: () => Promise<ClubPoster[]>;
@@ -1051,6 +1064,11 @@ const supabaseRepository: Group13Repository = {
     });
     if (error) throw new Error(error.message);
   },
+  clearGroupSessionAttendance: async (sessionId) => {
+    const { data, error } = await db().rpc("clear_group_session_attendance", { p_session_id: sessionId });
+    if (error) throw new Error(error.message);
+    return Number(data ?? 0);
+  },
   checkInGroupSession: async (sessionId) => {
     const { data, error } = await db().rpc("check_in", { p_session_id: sessionId });
     if (error) throw new Error(error.message);
@@ -1099,6 +1117,62 @@ const supabaseRepository: Group13Repository = {
       absent: Number(row.absent),
       attendance_percentage: Number(row.attendance_percentage),
     })) as GroupAttendanceSummary[];
+  },
+  getGroupMaterialShares: async (groupId) => {
+    const client = db();
+    const { data: rows, error } = await client.from("group_material_shares")
+      .select("id,group_id,material_id,title,share_scope,session_id,unit_name,storage_path,mime_type,file_size,shared_by,library_material_id,created_at")
+      .eq("group_id", groupId).order("created_at", { ascending: false });
+    if (error) throw new Error(`Could not load group materials: ${error.message}`);
+    const shares = (rows ?? []) as Array<Omit<GroupMaterialShare, "url" | "source_label">>;
+    const materialIds = shares.map((share) => share.material_id).filter((id): id is string => Boolean(id));
+    const materialsById = new Map<string, Material>();
+    if (materialIds.length) {
+      const { data: materials, error: materialsError } = await client.from("materials").select(MATERIAL_COLUMNS).in("id", materialIds);
+      if (materialsError) throw new Error(`Could not load linked Library materials: ${materialsError.message}`);
+      for (const material of (materials ?? []) as Material[]) materialsById.set(material.id, material);
+    }
+    return Promise.all(shares.map(async (share) => {
+      let url: string | null = share.material_id ? materialsById.get(share.material_id)?.url ?? null : null;
+      if (share.storage_path) {
+        const signed = await client.storage.from("group-materials").createSignedUrl(share.storage_path, 3600);
+        if (signed.error) throw new Error(`Could not open group material: ${signed.error.message}`);
+        url = signed.data.signedUrl;
+      }
+      return { ...share, url, source_label: share.material_id ? "Library" : "Uploaded by group leader" } as GroupMaterialShare;
+    }));
+  },
+  createGroupMaterialShare: async (input, file) => {
+    const client = db();
+    let storagePath: string | null = null;
+    if (file) {
+      const filename = file.name.replace(/[^a-zA-Z0-9._-]/g, "-") || "group-resource";
+      storagePath = `${input.group_id}/${makeId()}-${filename}`;
+      await uploadStorageObject("group-materials", storagePath, file);
+    }
+    const { data: id, error } = await client.rpc("create_group_material_share", {
+      p_group_id: input.group_id,
+      p_title: input.title,
+      p_share_scope: input.share_scope,
+      p_session_id: input.session_id ?? null,
+      p_unit_name: input.unit_name ?? null,
+      p_material_id: input.material_id ?? null,
+      p_storage_path: storagePath,
+      p_mime_type: file?.type || null,
+      p_file_size: file?.size ?? null,
+    });
+    if (error) {
+      if (storagePath) await client.storage.from("group-materials").remove([storagePath]);
+      throw new Error(error.message);
+    }
+    const shares = await supabaseRepository.getGroupMaterialShares(input.group_id);
+    const created = shares.find((share) => share.id === id);
+    if (!created) throw new Error("Material was shared, but could not be reloaded.");
+    return created;
+  },
+  markGroupMaterialPublished: async (shareId, libraryMaterialId) => {
+    const { error } = await db().rpc("mark_group_material_published", { p_share_id: shareId, p_library_material_id: libraryMaterialId });
+    if (error) throw new Error(error.message);
   },
   adminListGroupLeaders: async () => {
     const { data, error } = await db().rpc("admin_list_group_leaders");
