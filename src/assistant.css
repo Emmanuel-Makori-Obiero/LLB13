@@ -673,6 +673,7 @@
 .rw-paper-page .md-table-wrap { box-shadow:none; border-color:#000; }
 .rw-paper-page .md-table th { background:#fff; color:#000; }
 .rw-paper-empty { color:#555; text-align:center; margin-top:180px; }
+.rw-length-warning { padding:10px 12px; border:1px solid #b3261e; background:#fff7f5; color:#7a1c17; border-radius:8px; font-size:.82rem; line-height:1.45; }
 .rw-assist {
   min-height: 520px;
   max-height: none;

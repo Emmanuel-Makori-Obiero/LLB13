@@ -122,6 +122,7 @@ const clip = (text: string, max = 12000) =>
     ? text
     : `${text.slice(0, max / 2)}\n[... middle of draft omitted ...]\n${text.slice(-max / 2)}`;
 const count = (text: string) => text.trim().split(/\s+/).filter(Boolean).length;
+const academicWordsPerPage = 350;
 
 type StoredWriterState = { project?: Project; draft?: string; outputMode?: "write" | "teach"; turns?: Turn[] };
 function readWriterState(key: string): StoredWriterState {
@@ -207,7 +208,7 @@ export function ResearchWriter({ userId }: { userId: string | null }) {
     const usesDraft =
       tool.useDraft && draft.trim() && !(tool.feature === "rw_improve" && text);
     const accuracyInstruction = outputMode === "write"
-      ? `OUTPUT MODE: Write the requested work fully in ${project.style}. For Complete paper, write a coherent full ${project.kind} near ${project.words || "the requested"} words, with a clear thesis, ordered headings, analysis and conclusion, and finish with a heading exactly called "Bibliography". The bibliography must list every authority actually cited or relied on, grouped under sensible ${project.style} headings such as Cases, Legislation, and Secondary sources; do not add a source that is not used. Use footnote-style citations in the body where appropriate. For Citations, format only the authorities supplied in the input or selected source documents. Use no case, statute, quotation, pinpoint, date or bibliographic detail from memory. Use only facts visible in the selected source documents; where a citation detail or legal proposition is missing, mark [VERIFY SOURCE / PINPOINT] and explain what is missing. Never claim independent verification.`
+      ? `OUTPUT MODE: Write the requested work fully in ${project.style}. For Complete paper, write exactly ONE copy of one coherent ${project.kind} near ${project.words || "the requested"} words, with a clear thesis, ordered headings, analysis and conclusion, and finish with a heading exactly called "Bibliography". Do not repeat the title, body, conclusion, bibliography, footnotes or source note. The bibliography must list every authority actually cited or relied on, grouped under sensible ${project.style} headings such as Cases, Legislation, and Secondary sources; do not add a source that is not used. Use footnote-style citations in the body where appropriate. For Citations, format only the authorities supplied in the input or selected source documents. Use no case, statute, quotation, pinpoint, date or bibliographic detail from memory. Use only facts visible in the selected source documents; where a citation detail or legal proposition is missing, mark [VERIFY SOURCE / PINPOINT] and explain what is missing. Never claim independent verification.`
       : `OUTPUT MODE: Do not write the final paper or simply format the answer. Teach me step by step how to produce the requested ${tool.label.toLowerCase()} in ${project.style}: explain the structure, order of steps, citation placement and bibliography/footnote rules relevant to this task, common errors, and a short checklist. Use generic placeholders such as [Case Name] unless the exact authority is present in my selected sources. Distinguish style rules you can state confidently from details that must be checked against the official style guide.`;
     const requestedWork = outputMode === "teach" && tool.label === "Complete paper"
       ? `Teach me step by step how to prepare a complete ${project.kind} in ${project.style}. ${text}`.trim()
@@ -217,7 +218,7 @@ export function ResearchWriter({ userId }: { userId: string | null }) {
       accuracyInstruction,
       `Topic: ${project.topic || project.title}`,
       project.title && `Paper title: ${project.title}`,
-      `Paper type: ${project.kind}. Citation style: ${project.style}. Target length: ${project.words || "not set"} words. Target paper length: ${pageTarget}. Treat the page target as a real formatting constraint: use normal academic margins, 12-point text and double spacing, and keep the completed paper close to the selected number of pages without cutting essential analysis or the bibliography.`,
+      `Paper type: ${project.kind}. Citation style: ${project.style}. Target length: ${project.words || "not set"} words. Target paper length: ${pageTarget}. Treat the page target as a real formatting constraint: use normal academic margins, 12-point text and double spacing. ${lengthConflict ? `The requested ${requestedWords.toLocaleString()} words cannot fit honestly into ${pageTarget}; do not claim that both targets were met. Explain the conflict and ask whether to prioritise the word count or the page count.` : "Keep the completed paper close to the selected number of pages without cutting essential analysis or the bibliography."}`,
       usesDraft ? `Draft so far:\n"""\n${clip(draft)}\n"""` : "",
     ]
       .filter(Boolean)
@@ -306,6 +307,9 @@ export function ResearchWriter({ userId }: { userId: string | null }) {
   const words = count(draft);
   const target = Number(project.words) || 0;
   const pageTarget = project.pages === "more" ? "more than 5 pages" : `${project.pages || "5"} page${project.pages === "1" ? "" : "s"}`;
+  const requestedPages = project.pages === "more" ? null : Number(project.pages || 5);
+  const requestedWords = Number(project.words) || 0;
+  const lengthConflict = requestedPages !== null && requestedWords > requestedPages * academicWordsPerPage;
 
   return (
     <div className="sa">
@@ -548,6 +552,7 @@ export function ResearchWriter({ userId }: { userId: string | null }) {
               </select>
               <span className="field-hint">The writer aims for this length using normal academic spacing. Bibliography pages are included in the target.</span>
             </label>
+            {lengthConflict && <div className="rw-length-warning" role="alert"><strong>These targets conflict.</strong> {requestedWords.toLocaleString()} words would normally require about {Math.ceil(requestedWords / academicWordsPerPage)} academic pages, not {pageTarget}. Choose fewer words or select more than 5 pages.</div>}
           </div>
         </div>
 
