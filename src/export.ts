@@ -4,6 +4,7 @@ export type ExportOptions = {
   sources?: string[];
   footer?: string;
   plainBookReview?: boolean;
+  academicPaper?: boolean;
 };
 
 type TableRow = string[];
@@ -161,6 +162,40 @@ function plainBookReviewDocumentXml(text: string) {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${content.join("")}</w:body></w:document>`;
 }
 
+function academicWordParagraph(text: string, kind: "heading" | "subheading" | "body" | "quote") {
+  const settings = {
+    heading: '<w:jc w:val="center"/><w:keepNext/><w:spacing w:before="360" w:after="180"/>',
+    subheading: '<w:keepNext/><w:spacing w:before="240" w:after="100"/>',
+    body: '<w:spacing w:after="180" w:line="360" w:lineRule="auto"/>',
+    quote: '<w:ind w:left="360" w:right="360"/><w:spacing w:after="180" w:line="360" w:lineRule="auto"/>',
+  }[kind];
+  const run = kind === "heading"
+    ? '<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:sz w:val="28"/></w:rPr>'
+    : kind === "subheading"
+      ? '<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:sz w:val="24"/></w:rPr>'
+      : kind === "quote"
+        ? '<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:i/><w:sz w:val="24"/></w:rPr>'
+        : '<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val="24"/></w:rPr>';
+  return `<w:p><w:pPr>${settings}</w:pPr><w:r>${run}<w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p>`;
+}
+
+function academicPaperDocumentXml(title: string, text: string) {
+  const content: string[] = [plainWordParagraph(title || "Untitled paper", "title")];
+  for (const block of blocks(text)) {
+    if (block.kind === "heading") content.push(academicWordParagraph(block.text, "heading"));
+    else if (block.kind === "subheading") content.push(academicWordParagraph(block.text, "subheading"));
+    else if (block.kind === "bullet") content.push(academicWordParagraph(`•  ${block.text}`, "body"));
+    else if (block.kind === "number") content.push(academicWordParagraph(block.text, "body"));
+    else if (block.kind === "quote") content.push(academicWordParagraph(block.text, "quote"));
+    else if (block.kind === "table") for (const row of block.rows ?? []) content.push(academicWordParagraph(row.join("    "), "body"));
+    else content.push(academicWordParagraph(block.text, "body"));
+  }
+  content.push('<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>');
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${content.join("")}</w:body></w:document>`;
+}
+
+const ACADEMIC_WORD_STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val="24"/><w:color w:val="000000"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="180" w:line="360" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style></w:styles>`;
+
 const WORD_STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/><w:color w:val="1F2320"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="140" w:line="360" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style><w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:pPr><w:jc w:val="left"/><w:spacing w:before="40" w:after="180"/></w:pPr><w:rPr><w:rFonts w:ascii="Georgia" w:hAnsi="Georgia"/><w:sz w:val="48"/><w:color w:val="163A34"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Subtitle"><w:name w:val="Subtitle"/><w:pPr><w:spacing w:after="320"/></w:pPr><w:rPr><w:sz w:val="22"/><w:color w:val="52665E"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Eyebrow"><w:name w:val="Eyebrow"/><w:pPr><w:spacing w:before="100" w:after="70"/></w:pPr><w:rPr><w:b/><w:sz w:val="16"/><w:color w:val="8F3E32"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:before="420" w:after="160"/><w:pBdr><w:bottom w:val="single" w:sz="4" w:space="4" w:color="DEDBD1"/></w:pBdr></w:pPr><w:rPr><w:rFonts w:ascii="Georgia" w:hAnsi="Georgia"/><w:sz w:val="32"/><w:color w:val="163A34"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:before="300" w:after="100"/></w:pPr><w:rPr><w:b/><w:sz w:val="24"/><w:color w:val="8F3E32"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="ListParagraph"><w:name w:val="List Paragraph"/><w:basedOn w:val="Normal"/><w:pPr><w:ind w:left="360" w:hanging="180"/><w:spacing w:after="80"/></w:pPr></w:style><w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/><w:basedOn w:val="Normal"/><w:pPr><w:ind w:left="420" w:right="240"/><w:pBdr><w:left w:val="single" w:sz="18" w:space="8" w:color="C96E52"/></w:pBdr><w:spacing w:before="160" w:after="180"/></w:pPr><w:rPr><w:i/><w:color w:val="4E5049"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="FooterNote"><w:name w:val="Footer Note"/><w:pPr><w:pBdr><w:top w:val="single" w:sz="4" w:space="6" w:color="DEDBD1"/></w:pBdr><w:spacing w:before="300"/></w:pPr><w:rPr><w:sz w:val="17"/><w:color w:val="77776E"/></w:rPr></w:style></w:styles>`;
 
 export function normalizeWordFilename(filename: string) {
@@ -173,9 +208,9 @@ export async function buildWordDocument(title: string, text: string, options: Ex
   const zip = new JSZip();
   zip.file("[Content_Types].xml", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>');
   zip.file("_rels/.rels", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
-  zip.file("word/document.xml", options.plainBookReview ? plainBookReviewDocumentXml(text) : wordDocumentXml(title, text, options));
+  zip.file("word/document.xml", options.academicPaper ? academicPaperDocumentXml(title, text) : options.plainBookReview ? plainBookReviewDocumentXml(text) : wordDocumentXml(title, text, options));
   zip.file("word/_rels/document.xml.rels", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>');
-  zip.file("word/styles.xml", options.plainBookReview ? PLAIN_WORD_STYLES_XML : WORD_STYLES_XML);
+  zip.file("word/styles.xml", options.academicPaper ? ACADEMIC_WORD_STYLES_XML : options.plainBookReview ? PLAIN_WORD_STYLES_XML : WORD_STYLES_XML);
   return await zip.generateAsync({ type: "arraybuffer", compression: "DEFLATE" });
 }
 
@@ -240,7 +275,55 @@ function buildPlainBookReviewPdf(text: string): string {
   let pdf = "%PDF-1.4\n% Plain book review\n"; const offsets = [0]; objects.forEach((object, index) => { offsets[index + 1] = pdf.length; pdf += `${index + 1} 0 obj\n${object}\nendobj\n`; }); const xref = pdf.length; pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`; for (let index = 1; index < offsets.length; index += 1) pdf += `${String(offsets[index]).padStart(10, "0")} 00000 n \n`; pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`; return pdf;
 }
 
+function buildAcademicPaperPdf(title: string, text: string): string {
+  const pages: PdfPage[] = [];
+  const addPage = () => { const page: PdfPage = { commands: [], y: 744 }; pages.push(page); return page; };
+  let page = addPage();
+  const draw = (value: string, x: number, y: number, size: number, font: "F1" | "F2", centered = false) => {
+    const width = value.length * size * 0.48;
+    const start = centered ? Math.max(54, (612 - width) / 2) : x;
+    page.commands.push("0 0 0 rg", `BT /${font} ${size} Tf 1 0 0 1 ${start.toFixed(2)} ${y.toFixed(2)} Tm (${pdfText(value)}) Tj ET`);
+  };
+  const paragraph = (value: string, font: "F1" | "F2" = "F1", indent = 0) => {
+    const lines = wrapPdf(value, 91);
+    if (page.y - lines.length * 14 - 16 < 48) page = addPage();
+    lines.forEach((line, index) => draw(line, 54 + indent, page.y - index * 14, 11, font));
+    page.y -= lines.length * 14 + 16;
+  };
+  draw(title || "Untitled paper", 54, page.y, 15, "F2", true);
+  page.y -= 36;
+  for (const block of blocks(text)) {
+    if (block.kind === "heading") { if (page.y < 90) page = addPage(); page.y -= 8; draw(block.text.toUpperCase(), 54, page.y, 12, "F2", true); page.y -= 24; }
+    else if (block.kind === "subheading") { page.y -= 5; paragraph(block.text, "F2"); }
+    else if (block.kind === "bullet") paragraph(`•  ${block.text}`, "F1", 12);
+    else if (block.kind === "number") paragraph(block.text, "F1", 12);
+    else if (block.kind === "quote") paragraph(block.text, "F1", 24);
+    else if (block.kind === "table") for (const row of block.rows ?? []) paragraph(row.join("    "));
+    else if (block.kind !== "rule") paragraph(block.text);
+  }
+  const objects: string[] = ["<< /Type /Catalog /Pages 2 0 R >>", "", "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>", "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>"];
+  const pageIds: number[] = [];
+  pages.forEach((pdfPage, pageIndex) => {
+    pdfPage.commands.push("0 0 0 rg", `BT /F1 8 Tf 1 0 0 1 54 27 Tm (${pdfText(`${pageIndex + 1}/${pages.length}`)}) Tj ET`);
+    const stream = pdfPage.commands.join("\n");
+    const contentId = objects.length + 1;
+    objects.push(`<< /Length ${new TextEncoder().encode(stream).length} >>\nstream\n${stream}\nendstream`);
+    const pageId = objects.length + 1;
+    pageIds.push(pageId);
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${contentId} 0 R >>`);
+  });
+  objects[1] = `<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pageIds.length} >>`;
+  let pdf = "%PDF-1.4\n% Academic paper\n";
+  const offsets = [0];
+  objects.forEach((object, index) => { offsets[index + 1] = pdf.length; pdf += `${index + 1} 0 obj\n${object}\nendobj\n`; });
+  const xref = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (let index = 1; index < offsets.length; index += 1) pdf += `${String(offsets[index]).padStart(10, "0")} 00000 n \n`;
+  return `${pdf}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+}
+
 export function buildPdfDocument(title: string, text: string, options: ExportOptions = {}): string {
+  if (options.academicPaper) return buildAcademicPaperPdf(title, text);
   if (options.plainBookReview) return buildPlainBookReviewPdf(text);
   const pages: PdfPage[] = [];
   const drawText = (page: PdfPage, value: string, x: number, y: number, size: number, font: "F1" | "F2" | "F3", color = "0.12 0.14 0.13") => {

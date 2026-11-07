@@ -3,6 +3,7 @@ import { FileText, Library, Loader2, Send, Trash2, Upload } from "lucide-react";
 import { isSupabaseConfigured } from "./data/repository";
 import { AI_MODES, askAI, type AIFeature, type AIMode } from "./lib/ai";
 import { Answer, type Turn } from "./StudyAssistant";
+import { Markdown } from "./Markdown";
 import { useDocuments } from "./useDocuments";
 import "./assistant.css";
 import { downloadPdf, downloadWord } from "./export";
@@ -142,6 +143,7 @@ export function ResearchWriter({ userId }: { userId: string | null }) {
   const [tool, setTool] = useState<Tool>(TOOLS[0]);
   const [input, setInput] = useState("");
   const [turns, setTurns] = useState<Turn[]>(() => initial.turns ?? []);
+  const [paperView, setPaperView] = useState<"edit" | "page">("edit");
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
   const nextId = useRef(Math.max(0, ...(initial.turns ?? []).map((turn) => turn.id)) + 1);
@@ -202,7 +204,7 @@ export function ResearchWriter({ userId }: { userId: string | null }) {
     const usesDraft =
       tool.useDraft && draft.trim() && !(tool.feature === "rw_improve" && text);
     const accuracyInstruction = outputMode === "write"
-      ? `OUTPUT MODE: Write the requested work fully in ${project.style}. For Complete paper, write a coherent full ${project.kind} near ${project.words || "the requested"} words, with a clear thesis, ordered headings, analysis and conclusion. For Citations, format only the authorities supplied in the input or selected source documents. Use no case, statute, quotation, pinpoint, date or bibliographic detail from memory. Use only facts visible in the selected source documents; where a citation detail or legal proposition is missing, mark [VERIFY SOURCE / PINPOINT] and explain what is missing. Never claim independent verification.`
+      ? `OUTPUT MODE: Write the requested work fully in ${project.style}. For Complete paper, write a coherent full ${project.kind} near ${project.words || "the requested"} words, with a clear thesis, ordered headings, analysis and conclusion, and finish with a heading exactly called "Bibliography". The bibliography must list every authority actually cited or relied on, grouped under sensible ${project.style} headings such as Cases, Legislation, and Secondary sources; do not add a source that is not used. Use footnote-style citations in the body where appropriate. For Citations, format only the authorities supplied in the input or selected source documents. Use no case, statute, quotation, pinpoint, date or bibliographic detail from memory. Use only facts visible in the selected source documents; where a citation detail or legal proposition is missing, mark [VERIFY SOURCE / PINPOINT] and explain what is missing. Never claim independent verification.`
       : `OUTPUT MODE: Do not write the final paper or simply format the answer. Teach me step by step how to produce the requested ${tool.label.toLowerCase()} in ${project.style}: explain the structure, order of steps, citation placement and bibliography/footnote rules relevant to this task, common errors, and a short checklist. Use generic placeholders such as [Case Name] unless the exact authority is present in my selected sources. Distinguish style rules you can state confidently from details that must be checked against the official style guide.`;
     const requestedWork = outputMode === "teach" && tool.label === "Complete paper"
       ? `Teach me step by step how to prepare a complete ${project.kind} in ${project.style}. ${text}`.trim()
@@ -278,12 +280,14 @@ export function ResearchWriter({ userId }: { userId: string | null }) {
       project.title || "Untitled paper",
       draft,
       `${(project.title || "paper").replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "paper"}.pdf`,
+      { academicPaper: true },
     );
   const downloadDraftWord = () =>
     downloadWord(
       project.title || "Untitled paper",
       draft,
       `${(project.title || "paper").replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "paper"}.docx`,
+      { academicPaper: true },
     );
 
   if (!isSupabaseConfigured)
@@ -305,10 +309,12 @@ export function ResearchWriter({ userId }: { userId: string | null }) {
         <div className="card card-pad rw-draft">
           <div className="sa-docs-head">
             <div className="section-label">Your draft</div>
-            <span className="quiet">
-              {words.toLocaleString()} words
-              {target ? ` of ${target.toLocaleString()}` : ""}
-            </span>
+            <div className="rw-draft-tools">
+              <span className="quiet">{words.toLocaleString()} words{target ? ` of ${target.toLocaleString()}` : ""}</span>
+              <button type="button" className="secondary-button small-action" onClick={() => setPaperView((current) => current === "edit" ? "page" : "edit")}>
+                {paperView === "edit" ? "View as paper" : "Edit draft"}
+              </button>
+            </div>
           </div>
           {target > 0 && (
             <div className="progress" style={{ margin: "8px 0 12px" }}>
@@ -317,12 +323,18 @@ export function ResearchWriter({ userId }: { userId: string | null }) {
               />
             </div>
           )}
-          <textarea
-            className="rw-editor"
-            value={draft}
-            placeholder="Write or paste your paper here. Use the tools below to plan, draft, critique and add results straight into it."
-            onChange={(e) => setDraft(e.target.value)}
-          />
+          {paperView === "edit" ? (
+            <textarea
+              className="rw-editor"
+              value={draft}
+              placeholder="Write or paste your paper here. Use the tools below to plan, draft, critique and add results straight into it."
+              onChange={(e) => setDraft(e.target.value)}
+            />
+          ) : (
+            <article className="rw-paper-page" aria-label="Academic paper preview">
+              {draft.trim() ? <><h1>{project.title || "Untitled paper"}</h1><Markdown text={draft} /></> : <p className="rw-paper-empty">Your paper preview will appear here.</p>}
+            </article>
+          )}
           <div className="ta-after">
             <button
               type="button"
