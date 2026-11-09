@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { FileText, Library, Loader2, Send, Trash2, Upload } from "lucide-react";
 import { isSupabaseConfigured } from "./data/repository";
-import { AI_MODES, askAI, type AIFeature, type AIMode } from "./lib/ai";
+import { AI_MODES, askAI, type AIFeature, type AIMode, type AIResult } from "./lib/ai";
 import { Answer, type Turn } from "./StudyAssistant";
+import { Markdown } from "./Markdown";
 import { useDocuments } from "./useDocuments";
 import "./assistant.css";
 import { downloadPdf, downloadWord } from "./export";
@@ -13,6 +14,7 @@ type Project = {
   kind: string;
   style: string;
   words: string;
+  pages: string;
 };
 const EMPTY: Project = {
   title: "",
@@ -20,6 +22,7 @@ const EMPTY: Project = {
   kind: "Research paper",
   style: "OSCOLA",
   words: "5000",
+  pages: "5",
 };
 const KINDS = [
   "Research paper",
@@ -31,6 +34,7 @@ const KINDS = [
   "Law reform proposal",
 ];
 const STYLES = ["OSCOLA", "Bluebook", "APA", "Harvard"];
+const PAGE_OPTIONS = ["1", "2", "3", "4", "5", "more"];
 const STORE = "g13-research-writer";
 
 type Tool = {
@@ -118,6 +122,7 @@ const clip = (text: string, max = 12000) =>
     ? text
     : `${text.slice(0, max / 2)}\n[... middle of draft omitted ...]\n${text.slice(-max / 2)}`;
 const count = (text: string) => text.trim().split(/\s+/).filter(Boolean).length;
+const academicWordsPerPage = 350;
 
 type StoredWriterState = { project?: Project; draft?: string; outputMode?: "write" | "teach"; turns?: Turn[] };
 function readWriterState(key: string): StoredWriterState {
@@ -142,6 +147,7 @@ export function ResearchWriter({ userId }: { userId: string | null }) {
   const [tool, setTool] = useState<Tool>(TOOLS[0]);
   const [input, setInput] = useState("");
   const [turns, setTurns] = useState<Turn[]>(() => initial.turns ?? []);
+  const [paperView, setPaperView] = useState<"edit" | "page">("edit");
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
   const nextId = useRef(Math.max(0, ...(initial.turns ?? []).map((turn) => turn.id)) + 1);
@@ -202,7 +208,7 @@ export function ResearchWriter({ userId }: { userId: string | null }) {
     const usesDraft =
       tool.useDraft && draft.trim() && !(tool.feature === "rw_improve" && text);
     const accuracyInstruction = outputMode === "write"
-      ? `OUTPUT MODE: Write the requested work fully in ${project.style}. For Complete paper, write a coherent full ${project.kind} near ${project.words || "the requested"} words, with a clear thesis, ordered headings, analysis and conclusion. For Citations, format only the authorities supplied in the input or selected source documents. Use no case, statute, quotation, pinpoint, date or bibliographic detail from memory. Use only facts visible in the selected source documents; where a citation detail or legal proposition is missing, mark [VERIFY SOURCE / PINPOINT] and explain what is missing. Never claim independent verification.`
+      ? `OUTPUT MODE: Write the requested work fully in ${project.style}. For Complete paper, write exactly ONE copy of one coherent ${project.kind} near ${project.words || "the requested"} words, with a clear thesis, ordered headings, analysis and conclusion, and finish with a heading exactly called "Bibliography". Do not repeat the title, body, conclusion, bibliography, footnotes or source note. The bibliography must list every authority actually cited or relied on, grouped under sensible ${project.style} headings such as Cases, Legislation, and Secondary sources; do not add a source that is not used. Use footnote-style citations in the body where appropriate. For Citations, format only the authorities supplied in the input or selected source documents. Use no case, statute, quotation, pinpoint, date or bibliographic detail from memory. Use only facts visible in the selected source documents; where a citation detail or legal proposition is missing, mark [VERIFY SOURCE / PINPOINT] and explain what is missing. Never claim independent verification.`
       : `OUTPUT MODE: Do not write the final paper or simply format the answer. Teach me step by step how to produce the requested ${tool.label.toLowerCase()} in ${project.style}: explain the structure, order of steps, citation placement and bibliography/footnote rules relevant to this task, common errors, and a short checklist. Use generic placeholders such as [Case Name] unless the exact authority is present in my selected sources. Distinguish style rules you can state confidently from details that must be checked against the official style guide.`;
     const requestedWork = outputMode === "teach" && tool.label === "Complete paper"
       ? `Teach me step by step how to prepare a complete ${project.kind} in ${project.style}. ${text}`.trim()
@@ -212,7 +218,7 @@ export function ResearchWriter({ userId }: { userId: string | null }) {
       accuracyInstruction,
       `Topic: ${project.topic || project.title}`,
       project.title && `Paper title: ${project.title}`,
-      `Paper type: ${project.kind}. Citation style: ${project.style}. Target length: ${project.words || "not set"} words.`,
+      `Paper type: ${project.kind}. Citation style: ${project.style}. Target length: ${project.words || "not set"} words. Target paper length: ${pageTarget}. Treat the page target as a real formatting constraint: use normal academic margins, 12-point text and double spacing. ${lengthConflict ? `The requested ${requestedWords.toLocaleString()} words cannot fit honestly into ${pageTarget}; do not claim that both targets were met. Explain the conflict and ask whether to prioritise the word count or the page count.` : "Keep the completed paper close to the selected number of pages without cutting essential analysis or the bibliography."}`,
       usesDraft ? `Draft so far:\n"""\n${clip(draft)}\n"""` : "",
     ]
       .filter(Boolean)
@@ -230,13 +236,43 @@ export function ResearchWriter({ userId }: { userId: string | null }) {
     setTurns((t) => [...t, turn].slice(-40));
     setInput("");
     setBusy(true);
+    const isLongPaper = tool.label === "Complete paper" && outputMode === "write" && requestedWords > 2500 && !lengthConflict;
     try {
-      const result = await askAI({
-        feature: tool.feature,
-        mode,
-        messages: [...priorMessages, { role: "user", content: message }],
-        docIds: d.selected.length ? d.selected : undefined,
-      });
+      let result: AIResult;
+      if (isLongPaper) {
+        const sectionCount = Math.min(10, Math.max(2, Math.ceil(requestedWords / 1600)));
+        const defaultSections = ["Introduction and thesis", "Legal and conceptual framework", "Relevant authorities and existing scholarship", "Main analysis", "Counterarguments and practical implications", "Conclusion and bibliography"];
+        const sections = Array.from({ length: sectionCount }, (_, index) => defaultSections[index] ?? `Main analysis — Part ${index - 3}`);
+        const pieces: string[] = [];
+        const responses: AIResult[] = [];
+        for (const [index, section] of sections.entries()) {
+          setNote(`Writing section ${index + 1} of ${sections.length}: ${section}…`);
+          const finalSection = index === sections.length - 1;
+          const sectionPrompt = `${requestedWork}\n\nWrite ONLY section ${index + 1} of ${sections.length}: ${section}. This is a staged paper-generation job. Produce about ${Math.ceil(requestedWords / sections.length)} words for this section, continue the argument from the earlier sections, and do not repeat material. ${finalSection ? `This is the final section: provide the conclusion followed by exactly one heading called “Bibliography”, listing only authorities actually supported by the selected sources.` : "Do not write a bibliography or final conclusion yet; reserve those for the final section."}\n\nSOURCE RULE: Use only the selected source documents. Do not invent authorities, quotations, facts, citations, page numbers, or legal propositions. Mark missing details as [VERIFY SOURCE / PINPOINT].\n\nEarlier section excerpts for continuity:\n${clip(pieces.join("\n\n"), 6000)}`;
+          const response = await askAI({
+            feature: "rw_draft",
+            mode,
+            messages: [{ role: "user", content: sectionPrompt }],
+            docIds: d.selected,
+          });
+          responses.push(response);
+          pieces.push(response.answer.trim());
+        }
+        const first = responses[0];
+        result = { ...first, answer: pieces.join("\n\n"), sources: Array.from(new Map(responses.flatMap((item) => item.sources).map((source) => [source.ref ?? source.title, source])).values()), warnings: Array.from(new Set(responses.flatMap((item) => item.warnings))) };
+        setNote(`Complete paper assembled from ${sections.length} checked sections (${count(result.answer).toLocaleString()} words).`);
+      } else {
+        result = await askAI({
+          feature: tool.feature,
+          mode,
+          messages: [...priorMessages, { role: "user", content: message }],
+          docIds: d.selected.length ? d.selected : undefined,
+        });
+      }
+      if (isLongPaper) {
+        setDraft(result.answer);
+        setPaperView("page");
+      }
       setTurns((all) =>
         all.map((t) => (t.id === turn.id ? { ...t, result } : t)),
       );
@@ -278,12 +314,14 @@ export function ResearchWriter({ userId }: { userId: string | null }) {
       project.title || "Untitled paper",
       draft,
       `${(project.title || "paper").replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "paper"}.pdf`,
+      { academicPaper: true },
     );
   const downloadDraftWord = () =>
     downloadWord(
       project.title || "Untitled paper",
       draft,
       `${(project.title || "paper").replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "paper"}.docx`,
+      { academicPaper: true },
     );
 
   if (!isSupabaseConfigured)
@@ -298,6 +336,10 @@ export function ResearchWriter({ userId }: { userId: string | null }) {
 
   const words = count(draft);
   const target = Number(project.words) || 0;
+  const pageTarget = project.pages === "more" ? "more than 5 pages" : `${project.pages || "5"} page${project.pages === "1" ? "" : "s"}`;
+  const requestedPages = project.pages === "more" ? null : Number(project.pages || 5);
+  const requestedWords = Number(project.words) || 0;
+  const lengthConflict = requestedPages !== null && requestedWords > requestedPages * academicWordsPerPage;
 
   return (
     <div className="sa">
@@ -305,10 +347,12 @@ export function ResearchWriter({ userId }: { userId: string | null }) {
         <div className="card card-pad rw-draft">
           <div className="sa-docs-head">
             <div className="section-label">Your draft</div>
-            <span className="quiet">
-              {words.toLocaleString()} words
-              {target ? ` of ${target.toLocaleString()}` : ""}
-            </span>
+            <div className="rw-draft-tools">
+              <span className="quiet">{words.toLocaleString()} words{target ? ` of ${target.toLocaleString()}` : ""}</span>
+              <button type="button" className="secondary-button small-action" onClick={() => setPaperView((current) => current === "edit" ? "page" : "edit")}>
+                {paperView === "edit" ? "View as paper" : "Edit draft"}
+              </button>
+            </div>
           </div>
           {target > 0 && (
             <div className="progress" style={{ margin: "8px 0 12px" }}>
@@ -317,12 +361,18 @@ export function ResearchWriter({ userId }: { userId: string | null }) {
               />
             </div>
           )}
-          <textarea
-            className="rw-editor"
-            value={draft}
-            placeholder="Write or paste your paper here. Use the tools below to plan, draft, critique and add results straight into it."
-            onChange={(e) => setDraft(e.target.value)}
-          />
+          {paperView === "edit" ? (
+            <textarea
+              className="rw-editor"
+              value={draft}
+              placeholder="Write or paste your paper here. Use the tools below to plan, draft, critique and add results straight into it."
+              onChange={(e) => setDraft(e.target.value)}
+            />
+          ) : (
+            <article className="rw-paper-page" aria-label="Academic paper preview">
+              {draft.trim() ? <><h1>{project.title || "Untitled paper"}</h1><Markdown text={draft} /></> : <p className="rw-paper-empty">Your paper preview will appear here.</p>}
+            </article>
+          )}
           <div className="ta-after">
             <button
               type="button"
@@ -525,6 +575,14 @@ export function ResearchWriter({ userId }: { userId: string | null }) {
                 onChange={set("words")}
               />
             </label>
+            <label>
+              Target pages
+              <select value={project.pages} onChange={set("pages")}>
+                {PAGE_OPTIONS.map((pages) => <option key={pages} value={pages}>{pages === "more" ? "More than 5 pages" : `${pages} page${pages === "1" ? "" : "s"}`}</option>)}
+              </select>
+              <span className="field-hint">The writer aims for this length using normal academic spacing. Bibliography pages are included in the target.</span>
+            </label>
+            {lengthConflict && <div className="rw-length-warning" role="alert"><strong>These targets conflict.</strong> {requestedWords.toLocaleString()} words would normally require about {Math.ceil(requestedWords / academicWordsPerPage)} academic pages, not {pageTarget}. Choose fewer words or select more than 5 pages.</div>}
           </div>
         </div>
 

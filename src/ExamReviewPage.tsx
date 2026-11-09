@@ -24,6 +24,8 @@ export default function ExamReviewPage({ userId, materials, units, onAddToLibrar
   const [paper, setPaper] = useState<Paper | null>(null);
   const [sourceFile, setSourceFile] = useState<File | null>(null);
   const [libraryPaperId, setLibraryPaperId] = useState("");
+  const [librarySearch, setLibrarySearch] = useState("");
+  const [libraryType, setLibraryType] = useState("all");
   const [libraryUnit, setLibraryUnit] = useState("");
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState("");
@@ -44,7 +46,14 @@ export default function ExamReviewPage({ userId, materials, units, onAddToLibrar
   const [analysisSaveError, setAnalysisSaveError] = useState("");
   const [analysisSaveDraft, setAnalysisSaveDraft] = useState<ExamAnalysisDraft | null>(null);
   const [savingAnalysis, setSavingAnalysis] = useState(false);
-  const libraryPapers = materials.filter((material) => Boolean(material.url) && /paper|exam/i.test(`${material.title} ${material.type} ${material.topic}`));
+  const libraryPaperPool = materials.filter((material) => Boolean(material.url) && /paper|exam/i.test(`${material.title} ${material.type} ${material.topic}`));
+  const libraryTypes = [...new Set(libraryPaperPool.map((material) => material.type).filter(Boolean))].sort();
+  const normalizedLibrarySearch = librarySearch.trim().toLowerCase();
+  const libraryPapers = libraryPaperPool.filter((material) => {
+    const matchesSearch = !normalizedLibrarySearch || `${material.title} ${material.type} ${material.unit} ${material.topic} ${material.author ?? ""}`.toLowerCase().includes(normalizedLibrarySearch);
+    const matchesType = libraryType === "all" || material.type === libraryType;
+    return matchesSearch && matchesType;
+  });
   const practiceAnswerChars = responses.reduce((total, answer) => total + answer.length, 0);
   const practiceAssessment = generated.map((question, index) => `QUESTION ${index + 1} (${question.marks} marks): ${question.question}\nSuggested answer and rubric: ${question.modelAnswer}\nKey points: ${question.keyPoints.join("; ")}\nYour answer: ${responses[index]?.trim() || "[Not answered]"}`).join("\n\n");
   const practiceGradeMessage = `Grade this student's written revision answers fairly using the question-specific suggested answers, key points and uploaded source. For each question, give an indicative score out of 100, what was strong, what was missing or inaccurate, why it matters, and one concrete improvement. End with an overall indicative score and three revision priorities. Accept legally defensible alternative reasoning. Do not invent authorities. This is formative feedback, not an official grade.\n\n${practiceAssessment}`;
@@ -341,7 +350,12 @@ export default function ExamReviewPage({ userId, materials, units, onAddToLibrar
     </section>
     <section className="card card-pad exam-review-library-picker">
       <div><span className="section-label"><BookOpen size={14} /> FROM YOUR LIBRARY</span><h3>Revise from a shared paper</h3><p>Open an existing Library paper for analysis; the review copy and your answers stay private.</p></div>
-      <div className="exam-review-library-picker-controls"><select aria-label="Select an exam or past paper from the Library" value={libraryPaperId} onChange={(event) => setLibraryPaperId(event.target.value)} disabled={busy || !libraryPapers.length}><option value="">{libraryPapers.length ? "Choose a Library paper…" : "No Library papers found"}</option>{libraryPapers.map((item) => <option key={item.id} value={item.id}>{item.title} · {item.unit}</option>)}</select><button type="button" className="secondary-button" disabled={busy || !libraryPaperId} onClick={() => void useLibraryPaper()}>{busy ? <Loader2 size={14} className="exam-review-spin" /> : <FileSearch size={14} />} Use selected paper</button></div>
+      <div className="exam-review-library-picker-controls">
+        <input aria-label="Search exam papers and materials" placeholder="Search papers, units, topics or authors…" value={librarySearch} onChange={(event) => setLibrarySearch(event.target.value)} disabled={busy} />
+        <select aria-label="Filter exam papers by type" value={libraryType} onChange={(event) => setLibraryType(event.target.value)} disabled={busy || !libraryPaperPool.length}><option value="all">All paper types</option>{libraryTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select>
+        <select aria-label="Select an exam or past paper from the Library" value={libraryPaperId} onChange={(event) => setLibraryPaperId(event.target.value)} disabled={busy || !libraryPapers.length}><option value="">{libraryPapers.length ? `Choose a Library paper… (${libraryPapers.length})` : "No matching papers found"}</option>{libraryPapers.map((item) => <option key={item.id} value={item.id}>{item.title} · {item.unit}</option>)}</select>
+        <button type="button" className="secondary-button" disabled={busy || !libraryPaperId} onClick={() => void useLibraryPaper()}>{busy ? <Loader2 size={14} className="exam-review-spin" /> : <FileSearch size={14} />} Use selected paper</button>
+      </div>
     </section>
     {(progress || error) && <div className={`exam-review-status ${error ? "error" : ""}`}>{busy && <Loader2 size={14} className="exam-review-spin" />}{error || progress}</div>}
     {!paper ? <section className="card card-pad exam-review-empty"><FileSearch size={30} /><h3>Start with any exam paper</h3><p>It can be your own paper or a past paper you are using to revise. On upload, readable text is saved as a private AI source so the review can refer back to it.</p></section> : <>

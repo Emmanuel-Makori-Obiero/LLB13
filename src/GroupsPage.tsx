@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { Check, Copy, Download, DoorOpen, ExternalLink, FileUp, KeyRound, Library, Plus, RotateCw, Trash2, UserRoundX } from "lucide-react";
+import { Check, Copy, Download, DoorOpen, ExternalLink, FileUp, KeyRound, Library, Plus, RotateCw, Send, Trash2, UserRoundX } from "lucide-react";
 import { repository, supabase } from "./data/repository";
-import { studyGroupDisplayName, type GroupAttendance, type GroupAttendanceStatus, type GroupAttendanceSummary, type GroupMaterialShare, type GroupMaterialShareScope, type GroupSession, type Material, type StudyGroup, type StudyGroupMember, type Unit } from "./data/types";
+import { studyGroupDisplayName, type GroupAttendance, type GroupAttendanceStatus, type GroupAttendanceSummary, type GroupLeaderRequest, type GroupMaterialShare, type GroupMaterialShareScope, type GroupSession, type Material, type StudyGroup, type StudyGroupMember, type Unit } from "./data/types";
 import "./groups.css";
 
 const STATUS_OPTIONS: GroupAttendanceStatus[] = ["present", "late", "excused", "absent"];
@@ -37,6 +37,8 @@ export default function GroupsPage() {
   const [memberLimit, setMemberLimit] = useState(0);
   const [adminSelectedGroupId, setAdminSelectedGroupId] = useState("");
   const [canCreate, setCanCreate] = useState(false);
+  const [leaderRequest, setLeaderRequest] = useState<GroupLeaderRequest | null>(null);
+  const [leaderRequestMessage, setLeaderRequestMessage] = useState("");
   const [inviteCode, setInviteCode] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [newGroupName, setNewGroupName] = useState("");
@@ -68,17 +70,19 @@ export default function GroupsPage() {
     setError("");
     try {
       if (!supabase) throw new Error("Supabase is not configured. Connect to the workspace before using study groups.");
-      const [{ data: { user }, error: authError }, nextGroup, allowedToCreate, admin, configuredMemberLimit] = await Promise.all([
+      const [{ data: { user }, error: authError }, nextGroup, allowedToCreate, admin, configuredMemberLimit, nextLeaderRequest] = await Promise.all([
         supabase.auth.getUser(),
         repository.getMyStudyGroup(),
         repository.canCreateStudyGroup(),
         repository.isSuperAdmin(),
         repository.getGroupMemberLimit(),
+        repository.getMyGroupLeaderRequest(),
       ]);
       if (authError || !user) throw new Error("Sign in again to load your study group.");
       setUserId(user.id);
       setUserEmail(user.email ?? "");
       setCanCreate(allowedToCreate);
+      setLeaderRequest(nextLeaderRequest);
       setIsAdmin(admin);
       setMemberLimit(configuredMemberLimit);
       const nextAdminGroups = admin ? await repository.getAllStudyGroups() : [];
@@ -274,14 +278,13 @@ export default function GroupsPage() {
       await repository.markGroupMaterialPublished(share.id, created.id);
     }, "Material copied to the shared Library.");
   };
-  const copyApprovalRequest = async () => {
-    try {
-      await navigator.clipboard.writeText(userEmail);
-      setNotice("Your email is copied. Send it to the primary admin and ask for group-leader approval.");
-      setError("");
-    } catch {
-      setError(`Ask the primary admin to approve this account: ${userEmail}`);
-    }
+  const submitLeaderRequest = (event: FormEvent) => {
+    event.preventDefault();
+    void act("leader-request", async () => {
+      const request = await repository.submitGroupLeaderRequest(leaderRequestMessage);
+      setLeaderRequest(request);
+      setLeaderRequestMessage("");
+    }, "Your group-leader request was sent to the platform admin.");
   };
   const exportAttendance = () => {
     if (!group || !summary.length) return;
@@ -332,9 +335,13 @@ export default function GroupsPage() {
           </section>
           <section className="card card-pad groups-approval-card">
             <div className="card-header"><span className="section-label">2 · Become a group leader</span><span className="quiet">No invite code needed</span></div>
-            <p className="field-hint">You cannot create a group until the primary admin approves your account. Copy your account email and send it to the admin with a request for approval.</p>
-            <div className="groups-approval-email"><strong>{userEmail || "Your signed-in email"}</strong><button className="secondary-button" type="button" onClick={() => void copyApprovalRequest()}><Copy size={14} /> Copy email</button></div>
-            <p className="field-hint">After approval, return here and the “Create a group” form will appear automatically.</p>
+            <p className="field-hint">Ask the platform admin to approve your account. Your request and optional note will appear in the admin dashboard.</p>
+            {leaderRequest?.status === "pending" ? <div className="groups-request-status pending"><strong>Request pending</strong><span>Sent {showDate(leaderRequest.created_at.slice(0, 10))}. The admin will review it.</span></div> : leaderRequest?.status === "approved" || canCreate ? <div className="groups-request-status approved"><strong>Leader access approved</strong><span>You can create a study group below.</span></div> : leaderRequest?.status === "rejected" ? <div className="groups-request-status rejected"><strong>Request was not approved</strong><span>You may send a new request with more context.</span></div> : null}
+            {(!leaderRequest || leaderRequest.status === "rejected") && !canCreate && <form className="groups-request-form" onSubmit={submitLeaderRequest}>
+              <label className="groups-field">Optional note<textarea rows={3} maxLength={500} value={leaderRequestMessage} onChange={(event) => setLeaderRequestMessage(event.target.value)} placeholder="Tell the admin why you would like to organize a study group…" /></label>
+              <button className="primary-button" type="submit" disabled={busy === "leader-request" || !online}><Send size={14} /> {busy === "leader-request" ? "Sending…" : "Send request to admin"}</button>
+            </form>}
+            <p className="field-hint">After approval, the “Create a group” form will appear automatically when you refresh or revisit Groups.</p>
           </section>
           {canCreate && <section className="card card-pad">
             <div className="card-header"><span className="section-label">3 · Create a group</span><span className="quiet">Maximum {memberLimit} members</span></div>

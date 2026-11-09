@@ -17,6 +17,7 @@ const AUTH_APP_ORIGIN = (() => {
     ? window.location.origin
     : "https://llb-13.vercel.app";
 })();
+const CURRENT_POLICY_VERSION = "2026-11-09";
 
 function friendlyError(message: string): string {
   const m = message.toLowerCase();
@@ -111,6 +112,7 @@ export default function LoginPage({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [acceptedPolicies, setAcceptedPolicies] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
   const [pendingEmail, setPendingEmail] = useState<string | null>(null); // set once we are waiting for email confirmation
@@ -229,6 +231,10 @@ export default function LoginPage({
       setNotice({ tone: "error", text: "Passwords do not match." });
       return;
     }
+    if (mode === "sign-up" && !acceptedPolicies) {
+      setNotice({ tone: "error", text: "Please read and accept the Privacy Policy and Terms of Use before creating an account." });
+      return;
+    }
 
     const savedCooldown =
       mode === "sign-up" ? readEmailCooldown(cleanEmail) : 0;
@@ -270,7 +276,7 @@ export default function LoginPage({
         password,
         options: {
           emailRedirectTo: AUTH_APP_ORIGIN,
-          data: { ...(name.trim() ? { display_name: name.trim() } : {}), university },
+          data: { ...(name.trim() ? { display_name: name.trim() } : {}), university, privacy_policy_version: CURRENT_POLICY_VERSION, terms_version: CURRENT_POLICY_VERSION, policy_accepted_at: new Date().toISOString() },
         },
       });
       if (error) {
@@ -503,6 +509,12 @@ export default function LoginPage({
                     autoComplete="new-password"
                     placeholder="Repeat your password"
                   />
+                )}
+                {isSignUp && (
+                  <label className="auth-consent">
+                    <input type="checkbox" checked={acceptedPolicies} onChange={(event) => setAcceptedPolicies(event.target.checked)} />
+                    <span>I have read and agree to the <a href="/privacy" target="_blank" rel="noreferrer">Privacy Policy</a> and <a href="/terms" target="_blank" rel="noreferrer">Terms of Use</a>. I understand that my account details and learning activity are processed to provide the platform.</span>
+                  </label>
                 )}
 
                 {notice && (

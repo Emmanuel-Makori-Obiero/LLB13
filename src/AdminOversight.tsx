@@ -93,9 +93,9 @@ export default function AdminOversight() {
         <div className="row-list admin-activity-list">{selectedEvents.map((event) => <div className="row" key={event.id}><div className="row-main"><div className="row-title">{nameFor(event.user_id)} · {eventLabel[event.event_type] ?? event.event_type}</div><div className="row-meta">{event.page ? `${event.page} · ` : ""}{when(event.created_at)}</div></div></div>)}</div>
       </> : <p className="quiet">No activity events recorded yet.</p>}
     </div>
-    <div className="card card-pad">
+    <div className="card card-pad admin-provider-events-card">
       <div className="card-header"><span className="section-label"><BarChart3 size={15}/> Provider event detail</span><span className="quiet">Latest 2,000</span></div>
-      {!loading && usage.length ? <div className="row-list">{usage.slice(0, 80).map((item, index) => <div className="row" key={`${item.created_at}:${item.user_id}:${index}`}><div className="row-main"><div className="row-title">{nameFor(item.user_id)} · {title(item.category)} · {item.provider}</div><div className="row-meta">{item.model ?? "model not reported"} · {item.status} · {item.request_units} request unit{item.request_units === 1 ? "" : "s"} · {when(item.created_at)}</div></div></div>)}</div> : <p className="quiet">No provider events yet.</p>}
+      {!loading && usage.length ? <div className="row-list admin-provider-events-list">{usage.slice(0, 80).map((item, index) => <div className="row" key={`${item.created_at}:${item.user_id}:${index}`}><div className="row-main"><div className="row-title">{nameFor(item.user_id)} · {title(item.category)} · {item.provider}</div><div className="row-meta">{item.model ?? "model not reported"} · {item.status} · {item.request_units} request unit{item.request_units === 1 ? "" : "s"} · {when(item.created_at)}</div></div></div>)}</div> : <p className="quiet">No provider events yet.</p>}
     </div>
     <div className="card card-pad">
       <div className="card-header"><span className="section-label"><CalendarCheck size={15}/> Student class check-ins</span><span className="quiet">Latest 300</span></div>

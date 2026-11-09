@@ -10,7 +10,8 @@ type AdvisorChat = { id: string; title: string; createdAt: string; messages: Adv
 const advisorStorageKey = "group13-admin-advisor-chats";
 const dayMs = 24 * 60 * 60 * 1000;
 const since = (days: number) => new Date(Date.now() - days * dayMs);
-const uniqueUsers = (rows: EventRow[], from: Date) => new Set(rows.filter((row) => new Date(row.created_at) >= from).map((row) => row.user_id)).size;
+const isActivityEvent = (event: EventRow) => event.event_type === "page_view" || event.event_type.startsWith("podcast_");
+const uniqueActiveUsers = (rows: EventRow[], from: Date) => new Set(rows.filter((row) => isActivityEvent(row) && new Date(row.created_at) >= from).map((row) => row.user_id)).size;
 const percent = (value: number, total: number) => total ? `${Math.round(value / total * 100)}%` : "—";
 const label = (value: string) => value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 
@@ -48,9 +49,12 @@ export default function AdminEngagement() {
   }, [refreshKey]);
 
   const metrics = useMemo(() => {
-    const activeDay = uniqueUsers(events, since(1));
-    const activeWeek = uniqueUsers(events, since(7));
-    const activeMonth = uniqueUsers(events, since(30));
+    // Active users are the union of people who visited any page and people
+    // who completed a tracked feature action during the window. A visit is
+    // activity even when the student never submits an AI prompt.
+    const activeDay = uniqueActiveUsers(events, since(1));
+    const activeWeek = uniqueActiveUsers(events, since(7));
+    const activeMonth = uniqueActiveUsers(events, since(30));
     const meaningful = events.filter((event) => event.event_type !== "page_view");
     const now = Date.now();
     const eligible7 = accounts.filter((account) => now - new Date(account.created_at).getTime() >= 7 * dayMs);
@@ -60,7 +64,7 @@ export default function AdminEngagement() {
       const end = new Date(start.getTime() + 7 * dayMs);
       return events.some((event) => event.user_id === account.id && new Date(event.created_at) >= start && new Date(event.created_at) < end);
     };
-    const activated = accounts.filter((account) => events.some((event) => event.user_id === account.id && new Date(event.created_at) >= new Date(account.created_at) && new Date(event.created_at).getTime() <= new Date(account.created_at).getTime() + 7 * dayMs)).length;
+    const activated = accounts.filter((account) => events.some((event) => isActivityEvent(event) && event.user_id === account.id && new Date(event.created_at) >= new Date(account.created_at) && new Date(event.created_at).getTime() <= new Date(account.created_at).getTime() + 7 * dayMs)).length;
     const pageViewsByPage = new Map<string, number>();
     for (const event of events.filter((item) => item.event_type === "page_view")) pageViewsByPage.set(event.page || "unknown", (pageViewsByPage.get(event.page || "unknown") ?? 0) + 1);
     const featureEvents = new Map<string, number>();
@@ -112,14 +116,14 @@ PLATFORM METRICS:
 
   return <section className="card card-pad admin-engagement-card">
     <div className="card-header"><span className="section-label"><BarChart3 size={15} /> Engagement dashboard</span><button className="icon-button" onClick={() => setRefreshKey((key) => key + 1)} disabled={loading} aria-label="Refresh engagement metrics"><RefreshCw size={14} /></button></div>
-    <p className="field-hint">A privacy-safe view of registrations, active students, retention and tracked study actions. Activity is based on recorded page views and feature events; it does not expose prompts or private document content.</p>
+    <p className="field-hint">A privacy-safe view of registrations, active students, retention and tracked study actions. Active users include page visits as well as feature events; prompts and private document content are not exposed.</p>
     {loading ? <p className="quiet">Loading engagement metrics…</p> : error ? <div className="connection-error">{error}</div> : <>
       <div className="admin-metric-grid">
         <div className="admin-metric"><Users size={16} /><span>Registered users</span><strong>{accounts.length}</strong><small>All approved accounts</small></div>
-        <div className="admin-metric"><Activity size={16} /><span>DAU</span><strong>{metrics.activeDay}</strong><small>Active in the last 24 hours</small></div>
-        <div className="admin-metric"><Activity size={16} /><span>WAU</span><strong>{metrics.activeWeek}</strong><small>Active in the last 7 days</small></div>
-        <div className="admin-metric"><Activity size={16} /><span>MAU</span><strong>{metrics.activeMonth}</strong><small>Active in the last 30 days</small></div>
-        <div className="admin-metric"><Target size={16} /><span>Activation</span><strong>{metrics.activationRate}</strong><small>{metrics.activated} users completed a tracked first action</small></div>
+        <div className="admin-metric"><Activity size={16} /><span>DAU</span><strong>{metrics.activeDay}</strong><small>Visited or used a feature in the last 24 hours</small></div>
+        <div className="admin-metric"><Activity size={16} /><span>WAU</span><strong>{metrics.activeWeek}</strong><small>Visited or used a feature in the last 7 days</small></div>
+        <div className="admin-metric"><Activity size={16} /><span>MAU</span><strong>{metrics.activeMonth}</strong><small>Visited or used a feature in the last 30 days</small></div>
+        <div className="admin-metric"><Target size={16} /><span>Activation</span><strong>{metrics.activationRate}</strong><small>{metrics.activated} users made a first visit or tracked action</small></div>
         <div className="admin-metric"><Target size={16} /><span>Meaningful actions</span><strong>{metrics.meaningful}</strong><small>Non-page-view actions recorded</small></div>
       </div>
       <div className="admin-analytics-columns">

@@ -109,3 +109,15 @@
   .home-daily-case > button::before { display: none; }
   .home-daily-case > button:hover { background: transparent; color: var(--forest); }
 }
+
+/* Editorial dashboard treatment: useful content first, no promotional gradient. */
+.home-daily-case{min-height:0;margin:0;border:1px solid var(--line);border-left:3px solid var(--oxblood);background:var(--paper);color:var(--ink)}
+.home-daily-case::before{display:none}
+.home-daily-case>div{padding:24px 26px}
+.home-daily-case .home-groups-label{color:var(--muted);font-size:9px;letter-spacing:.1em}
+.home-daily-case h2{max-width:680px;margin:10px 0 9px;color:var(--ink);font:500 clamp(25px,3vw,38px)/1.08 Fraunces,Georgia,serif;letter-spacing:-.025em}
+.home-daily-case p{max-width:680px;color:var(--muted);font-size:12px;line-height:1.6}
+.home-daily-case>button{align-items:center;padding:24px 22px;border-left:1px solid var(--line);background:var(--white);color:var(--forest);font-size:11px}
+.home-daily-case>button::before{top:24px;left:22px;color:var(--muted);font-size:8px}
+.home-daily-case>button:hover{background:var(--soft);color:var(--oxblood)}
+@media(max-width:700px){.home-daily-case{margin:0;background:transparent;border-width:1px 0}.home-daily-case>div{padding:18px 0 14px}.home-daily-case h2{font-size:23px}.home-daily-case>button{padding:14px 0 16px;border-left:0;border-top:1px solid var(--line);background:transparent}.home-daily-case>button::before{display:none}}

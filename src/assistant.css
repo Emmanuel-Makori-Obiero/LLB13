@@ -3,7 +3,11 @@
   grid-template-columns: minmax(0, 1fr) 300px;
   gap: 18px;
   align-items: start;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
+.sa *, .sa *::before, .sa *::after { box-sizing: border-box; min-width: 0; }
 .sa-main {
   display: flex;
   flex-direction: column;
@@ -530,16 +534,24 @@
   }
 }
 @media (max-width: 560px) {
+  .sa { gap: 12px; overflow-x: hidden; }
   .sa-thread {
     padding: 16px;
   }
+  .sa-compose { padding: 12px; }
+  .sa-docs-head { align-items: flex-start; flex-wrap: wrap; }
+  .sa-docs-head .sa-upload { margin-left: auto; }
+  .sa-task { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
   .sa-inputrow {
     flex-direction: column;
   }
   .sa-send {
     align-self: stretch;
     justify-content: center;
+    width: 100%;
   }
+  .ta-after { width: 100%; }
+  .ta-after .secondary-button { max-width: 100%; overflow-wrap: anywhere; }
 }
 /* transcript study tools */
 .ta {
@@ -624,7 +636,10 @@
   min-width: 0;
 }
 .rw-editor {
+  display: block;
   width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   min-height: 300px;
   resize: vertical;
   padding: 16px 18px;
@@ -635,6 +650,30 @@
   font-size: 15px;
   line-height: 1.75;
 }
+.rw-draft-tools { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.rw-paper-page {
+  min-height: 720px;
+  box-sizing: border-box;
+  padding: 72px 78px;
+  background: #fff;
+  color: #000;
+  border: 1px solid #d7d7d7;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 8%);
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12pt;
+  line-height: 1.5;
+}
+.rw-paper-page h1 { margin:0 0 36px; color:#000; text-align:center; font-family:Arial,Helvetica,sans-serif; font-size:18pt; line-height:1.25; }
+.rw-paper-page .md { max-width: 100%; color:#000; }
+.rw-paper-page .md-h { color:#000; font-family:Arial,Helvetica,sans-serif; text-align:left; margin-top:30px; margin-bottom:12px; }
+.rw-paper-page .md-h:first-child { text-align:center; }
+.rw-paper-page .md-p, .rw-paper-page li { color:#000; font-family:Arial,Helvetica,sans-serif; font-size:12pt; line-height:1.5; }
+.rw-paper-page a, .rw-paper-page strong, .rw-paper-page em, .rw-paper-page code { color:#000; }
+.rw-paper-page a { text-decoration: underline; }
+.rw-paper-page .md-table-wrap { box-shadow:none; border-color:#000; }
+.rw-paper-page .md-table th { background:#fff; color:#000; }
+.rw-paper-empty { color:#555; text-align:center; margin-top:180px; }
+.rw-length-warning { padding:10px 12px; border:1px solid #b3261e; background:#fff7f5; color:#7a1c17; border-radius:8px; font-size:.82rem; line-height:1.45; }
 .rw-assist {
   min-height: 520px;
   max-height: none;
@@ -642,6 +681,7 @@
 .rw-assist .sa-thread {
   max-height: 68vh;
 }
+.rw-draft, .rw-assist, .sa-side > .card { width: 100%; max-width: 100%; }
 .sa-side .data-form {
   margin-top: 12px;
 }

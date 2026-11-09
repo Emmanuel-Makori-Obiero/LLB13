@@ -89,7 +89,7 @@ import LandingPage, { HelpButton } from "./LandingPage";
 import { downloadInfo, readerUrl, safeUrl, toEmbedUrl, youtubeVideoId } from "./links";
 import AdminPage from "./AdminPage";
 import InstallButton from "./InstallButton";
-import { DeleteAccountCard } from "./AccountPage";
+import { DataRightsCard, DeleteAccountCard } from "./AccountPage";
 import Home from "./Home";
 import TimetablePage from "./TimetablePage";
 const TranscribePage = lazy(() => import("./TranscribePage"));
@@ -124,6 +124,7 @@ import { readDebateInviteCode } from "./lib/debate-links";
 import DailyQuizPage from "./DailyQuizPage";
 import LeaderboardPage from "./LeaderboardPage";
 import RewardWelcomePopup from "./RewardWelcomePopup";
+import { LegalFooter, LegalPage, PolicyAcceptanceModal, type LegalPageKind } from "./LegalPages";
 import {
   analyzeImage,
   createFilmProject,
@@ -203,7 +204,12 @@ const validViews = new Set([
   "login",
   "signup",
   "public-playlist",
+  "privacy",
+  "terms",
+  "contact",
 ]);
+const CURRENT_PRIVACY_VERSION = "2026-11-09";
+const CURRENT_TERMS_VERSION = "2026-11-09";
 const viewFromPath = () => {
   const path = window.location.pathname.replace(/^\/+|\/+$/g, "");
   if (path.startsWith("meetings/")) return "meeting";
@@ -293,6 +299,8 @@ function App() {
   );
   const [canManageAdmins, setCanManageAdmins] = useState(false);
   const [recovering, setRecovering] = useState(false);
+  const [policyRequired, setPolicyRequired] = useState(false);
+  const [policyBusy, setPolicyBusy] = useState(false);
   const [surveyOpen, setSurveyOpen] = useState(false);
   const [surveyLevel, setSurveyLevel] = useState<LearnerLevel | "">("");
   const [surveyPreference, setSurveyPreference] = useState<LearningPreference | "">("");
@@ -423,6 +431,7 @@ function App() {
       const metadata = session?.user?.user_metadata ?? {};
       setUserEmail(session?.user?.email ?? null);
       setUserId(session?.user?.id ?? null);
+      setPolicyRequired(Boolean(session?.user && (metadata.privacy_policy_version !== CURRENT_PRIVACY_VERSION || metadata.terms_version !== CURRENT_TERMS_VERSION)));
       const level = typeof metadata.learner_level === "string" && learnerLevels.some((item) => item.id === metadata.learner_level) ? metadata.learner_level as LearnerLevel : "";
       const preference = typeof metadata.learning_preference === "string" && learningPreferences.some((item) => item.id === metadata.learning_preference) ? metadata.learning_preference as LearningPreference : "";
       const appearanceThemeUserSelected = hasPersonalThemeSelection(
@@ -938,6 +947,14 @@ function App() {
       kind === "avatar" ? { avatarUrl: url } : { wallpaperUrl: url },
     );
   };
+  const acceptCurrentPolicies = async () => {
+    if (!supabase) return;
+    setPolicyBusy(true);
+    const { error } = await supabase.auth.updateUser({ data: { privacy_policy_version: CURRENT_PRIVACY_VERSION, terms_version: CURRENT_TERMS_VERSION, policy_accepted_at: new Date().toISOString() } });
+    if (error) setNotice(`Could not save your policy acknowledgement: ${error.message}`);
+    else setPolicyRequired(false);
+    setPolicyBusy(false);
+  };
 
   if (view === "features")
     return (
@@ -969,6 +986,7 @@ function App() {
       </>
     );
   if (view === "public-playlist") return <PublicPlaylistPage />;
+  if (view === "privacy" || view === "terms" || view === "contact") return <LegalPage kind={view as LegalPageKind} onBack={() => setPage("dashboard")} />;
   if (authLoading)
     return (
       <div className="auth-page">
@@ -1031,6 +1049,7 @@ function App() {
   return (
     <div className="app-shell">
       <RewardWelcomePopup userId={userId} name={profile.displayName || userEmail?.split("@")[0] || "learner"} onNavigate={setPage} />
+      {policyRequired && <PolicyAcceptanceModal busy={policyBusy} onAccept={() => void acceptCurrentPolicies()} />}
       <HelpButton floating onNavigate={setPage} />
       <FloatingLawyerAgent historyKey={userEmail ?? "workspace"} currentPage={currentPageLabel} onOpenDictionary={() => setPage("dictionary")} />
       <aside className="sidebar">
@@ -1628,6 +1647,7 @@ function App() {
                 onUpload={uploadProfileAssetAndSave}
                 setNotice={setNotice}
               />
+              <DataRightsCard email={userEmail ?? ""} setNotice={setNotice} />
               <DeleteAccountCard
                 email={userEmail ?? ""}
                 isAdmin={isAdmin}
@@ -1677,6 +1697,7 @@ function App() {
               />
             </div>
           )}
+          <LegalFooter onNavigate={setPage} />
         </div>
       </main>
       {musicQueue.length > 0 && <GlobalMusicPlayer queue={musicQueue} index={musicIndex} playing={musicPlaying} onPlaying={setMusicPlaying} onToggle={() => setMusicPlaying((current) => !current)} onStep={stepMusic} onSelect={(nextIndex) => { setMusicIndex(nextIndex); setMusicPlaying(true); }} onAddQueue={addMusicToQueue} onEnded={() => stepMusic(1)} />}

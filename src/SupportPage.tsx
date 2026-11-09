@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { AlertCircle, Bell, CheckCircle2, Inbox, Loader2, Mail, MessageSquare, Send } from "lucide-react";
 import { supabase } from "./data/repository";
 import type { SupportTicket } from "./data/types";
-const labels: Record<SupportTicket["category"], string> = { complaint: "Complaint", technical: "Technical problem", suggestion: "Suggestion", account: "Account help", other: "Other" };
+const labels: Record<SupportTicket["category"], string> = { complaint: "Complaint", technical: "Technical problem", suggestion: "Suggestion", account: "Account help", safety: "Safety or copyright report", other: "Other" };
 const columns = "id,user_id,subject,category,message,status,admin_note,created_at,updated_at";
 export default function SupportPage({ isAdmin }: { isAdmin: boolean }) {
   const [subject, setSubject] = useState(""); const [category, setCategory] = useState<SupportTicket["category"]>("complaint"); const [message, setMessage] = useState("");
