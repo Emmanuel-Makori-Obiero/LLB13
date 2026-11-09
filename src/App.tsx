@@ -155,6 +155,7 @@ const CareerResearchPage = lazy(() => import("./CareerResearchPage"));
 const CourseOutlinePage = lazy(() => import("./CourseOutlinePage"));
 const SupportPage = lazy(() => import("./SupportPage"));
 const MessagesPage = lazy(() => import("./MessagesPage"));
+const ConstitutionPage = lazy(() => import("./ConstitutionPage"));
 
 const nav = [
   { id: "dashboard", label: "Home", icon: LayoutDashboard },
@@ -187,6 +188,7 @@ const nav = [
   { id: "growth", label: "Growth studio", icon: Sparkles },
   { id: "opportunities", label: "Career research", icon: GraduationCap },
   { id: "cases", label: "Case law", icon: BookOpen },
+  { id: "constitution", label: "Constitution", icon: BookOpen },
   { id: "daily-case", label: "Daily Case", icon: Sparkles },
   { id: "scheduled-cases", label: "Scheduled cases", icon: CalendarDays },
   { id: "counsellor", label: "Counsellor", icon: Users },
@@ -1362,6 +1364,11 @@ function App() {
           {view === "daily-case" && (
             <Suspense fallback={<div className="subheading">Opening today's case…</div>}>
               <DailyCasePage learnerLevel={profile.learnerLevel} userId={userId} />
+            </Suspense>
+          )}
+          {view === "constitution" && (
+            <Suspense fallback={<div className="subheading">Opening the Constitution study feature…</div>}>
+              <ConstitutionPage />
             </Suspense>
           )}
           {view === "growth" && (
