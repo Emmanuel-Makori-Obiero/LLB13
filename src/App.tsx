@@ -96,6 +96,7 @@ import TimetablePage from "./TimetablePage";
 const TranscribePage = lazy(() => import("./TranscribePage"));
 const NotesReviewPage = lazy(() => import("./NotesReviewPage"));
 import { CounsellorChat } from "./CounsellorChat";
+import "./username-prompt.css";
 import { StudyAssistant } from "./StudyAssistant";
 import ExamReviewPage from "./ExamReviewPage";
 import LegalDictionaryPage from "./LegalDictionaryPage";
@@ -177,7 +178,6 @@ const nav = [
   { id: "assignment-helper", label: "AI assignment helper", icon: Sparkles },
   { id: "units", label: "Units", icon: BookOpen },
   { id: "discussions", label: "Discussions", icon: MessageSquare },
-  { id: "members", label: "Members", icon: Users },
   { id: "groups", label: "Groups", icon: Users },
   { id: "group-attendance", label: "Group attendance", icon: ClipboardCheck },
   { id: "transcribe", label: "Transcribe", icon: Mic },
@@ -262,6 +262,7 @@ const learnerLevels: { id: LearnerLevel; label: string }[] = [
   { id: "prefer-not-to-say", label: "Prefer not to say" },
 ];
 type UserProfile = {
+  username: string;
   learnerLevel: LearnerLevel | "";
   learningPreference: LearningPreference | "";
   displayName: string;
@@ -310,6 +311,7 @@ function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [pathKey, setPathKey] = useState(() => window.location.pathname);
   const [profile, setProfile] = useState<UserProfile>({
+    username: "",
     learnerLevel: "",
     learningPreference: "",
     displayName: "",
@@ -320,6 +322,8 @@ function App() {
     appearanceTheme: themeId,
     appearanceThemeUserSelected: false,
   });
+  const [usernamePromptOpen, setUsernamePromptOpen] = useState(false);
+  const [usernameChecked, setUsernameChecked] = useState(false);
   const [view, setView] = useState(viewFromPath);
   const [units, setUnits] = useState<Unit[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
@@ -449,6 +453,7 @@ function App() {
       setSurveyPreference(defaultLearningPreference(preference));
       setSurveyOpen(Boolean(session?.user && (!level || !preference)));
       setProfile({
+        username: typeof metadata.username === "string" ? metadata.username : "",
         learnerLevel: level,
         learningPreference: preference,
         displayName:
@@ -512,6 +517,24 @@ function App() {
       listener.subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (!userId || !supabase) {
+      setUsernameChecked(!userId);
+      setUsernamePromptOpen(false);
+      return;
+    }
+    let active = true;
+    setUsernameChecked(false);
+    void supabase.rpc("get_my_username").then(({ data, error }) => {
+      if (!active) return;
+      const value = !error && typeof data === "string" ? data.trim() : "";
+      setProfile((current) => ({ ...current, username: value }));
+      setUsernamePromptOpen(!value);
+      setUsernameChecked(true);
+    });
+    return () => { active = false; };
+  }, [userId]);
 
   useEffect(() => {
     if (!showLandingPreview) return;
@@ -908,6 +931,7 @@ function App() {
     const { error } = await supabase.auth.updateUser({ data: metadata });
     if (error) throw new Error(error.message);
     setProfile({
+      username: profile.username,
       learnerLevel: metadata.learner_level as LearnerLevel | "",
       learningPreference: metadata.learning_preference as LearningPreference | "",
       displayName: metadata.display_name,
@@ -923,6 +947,16 @@ function App() {
     setSurveyLevel(metadata.learner_level as LearnerLevel | "");
     setSurveyPreference(defaultLearningPreference(metadata.learning_preference as LearningPreference | ""));
     setSurveyOpen(Boolean(userId && (!metadata.learner_level || !metadata.learning_preference)));
+  };
+  const saveUsername = async (value: string) => {
+    if (!supabase) return;
+    const normalized = value.trim().toLowerCase();
+    const { data, error } = await supabase.rpc("set_my_username", { p_username: normalized });
+    if (error) throw new Error(error.message);
+    const saved = typeof data === "object" && data && "username" in data ? String((data as { username?: string }).username ?? normalized) : normalized;
+    setProfile((current) => ({ ...current, username: saved }));
+    setUsernamePromptOpen(false);
+    setNotice("Username saved. Messaging is now ready.");
   };
   const toggleSavedTheme = () => {
     const next: ThemeId = theme === "dark" ? "light" : "dark";
@@ -998,7 +1032,7 @@ function App() {
     );
   if (recovering && userEmail)
     return <ResetPasswordPage onDone={() => setRecovering(false)} />;
-  if (userEmail && showLandingPreview && window.location.pathname === "/")
+  if (userEmail && usernameChecked && !usernamePromptOpen && showLandingPreview && window.location.pathname === "/")
     return (
       <LandingPage
         configured={isSupabaseConfigured}
@@ -1053,6 +1087,7 @@ function App() {
     <div className="app-shell">
       <RewardWelcomePopup userId={userId} name={profile.displayName || userEmail?.split("@")[0] || "learner"} onNavigate={setPage} />
       {policyRequired && <PolicyAcceptanceModal busy={policyBusy} onAccept={() => void acceptCurrentPolicies()} />}
+      {usernamePromptOpen && usernameChecked && <UsernamePrompt onSave={saveUsername} />}
       <HelpButton floating onNavigate={setPage} />
       <FloatingLawyerAgent historyKey={userEmail ?? "workspace"} currentPage={currentPageLabel} onOpenDictionary={() => setPage("dictionary")} />
       <aside className="sidebar">
@@ -1505,7 +1540,6 @@ function App() {
           {view === "arena" && <GamesHub materials={visibleMaterials} userId={userId} displayName={profile.displayName || userEmail?.split("@")[0] || "Player"} learnerLevel={profile.learnerLevel} learningPreference={profile.learningPreference} isAdmin={isAdmin} inviteCode={readDebateInviteCode(window.location.search)} />}
           {view === "daily-quiz" && <DailyQuizPage userId={userId} displayName={profile.displayName || userEmail?.split("@")[0] || "Learner"} learnerLevel={profile.learnerLevel} />}
           {view === "leaderboard" && <LeaderboardPage userId={userId} displayName={profile.displayName || userEmail?.split("@")[0] || "Learner"} onNavigate={setPage} />}
-          {view === "members" && <SectionedMembersPage members={members} />}
           {view === "dictionary" && <LegalDictionaryPage />}
           {view === "legal-process" && (
             <>
@@ -5166,6 +5200,34 @@ function AssignmentForm({
     </FormShell>
   );
 }
+function UsernamePrompt({ onSave }: { onSave: (username: string) => Promise<void> }) {
+  const [value, setValue] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const normalized = value.trim().toLowerCase();
+    if (!/^[a-z0-9_]{3,30}$/.test(normalized)) {
+      setError("Use 3–30 letters, numbers, or underscores.");
+      return;
+    }
+    setBusy(true); setError("");
+    try { await onSave(normalized); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "That username could not be saved."); }
+    finally { setBusy(false); }
+  };
+  return <div className="username-required-overlay" role="dialog" aria-modal="true" aria-labelledby="username-required-title">
+    <form className="card card-pad username-required-card" onSubmit={submit}>
+      <div className="section-label">One last step</div>
+      <h2 id="username-required-title">Choose your username.</h2>
+      <p className="field-hint">Your username identifies you in messages and group discussions. It is separate from your private email address.</p>
+      <label className="data-form">Username<input autoFocus required value={value} onChange={(event) => setValue(event.target.value.replace(/\s/g, ""))} placeholder="e.g. makori_13" autoComplete="username" maxLength={30} /></label>
+      {error && <div className="connection-error" role="alert">{error}</div>}
+      <button className="primary-button" type="submit" disabled={busy}>{busy ? "Saving…" : "Save username"}</button>
+    </form>
+  </div>;
+}
+
 function ProfileSettings({
   profile,
   onSave,
