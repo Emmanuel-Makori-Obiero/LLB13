@@ -194,6 +194,12 @@ export type DirectMessage = {
   delivered_at: string | null;
   read_at: string | null;
 };
+export type DirectMessageContact = {
+  user: DirectoryUser;
+  unread: number;
+  last_message_at: string;
+  last_body: string;
+};
 
 export type GroupAttendanceSummary = {
   group_id: string;

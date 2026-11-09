@@ -15,6 +15,7 @@ import type {
   GroupAnnouncement,
   DirectoryUser,
   DirectMessage,
+  DirectMessageContact,
   GroupMaterialShareScope,
   GroupSession,
   Discussion,
@@ -174,6 +175,7 @@ export type Group13Repository = {
   setMyUsername: (username: string) => Promise<DirectoryUser>;
   searchDirectoryUsers: (query: string) => Promise<DirectoryUser[]>;
   getDirectMessages: (otherUserId: string) => Promise<DirectMessage[]>;
+  getDirectMessageContacts: () => Promise<DirectMessageContact[]>;
   sendDirectMessage: (recipientId: string, body: string) => Promise<DirectMessage>;
   markDirectMessagesDelivered: (senderId: string) => Promise<void>;
   markDirectMessagesRead: (senderId: string) => Promise<void>;
@@ -1304,6 +1306,34 @@ const supabaseRepository: Group13Repository = {
       .order("created_at", { ascending: true }).limit(200);
     if (error) throw new Error(`Could not load messages: ${error.message}`);
     return (data ?? []) as DirectMessage[];
+  },
+  getDirectMessageContacts: async () => {
+    const { data: { user } } = await db().auth.getUser();
+    if (!user) return [];
+    const { data, error } = await db().from("direct_messages")
+      .select("sender_id,recipient_id,body,created_at,read_at")
+      .or(`sender_id.eq.${user.id},recipient_id.eq.${user.id}`)
+      .order("created_at", { ascending: false }).limit(500);
+    if (error) throw new Error(`Could not load message contacts: ${error.message}`);
+    const summaries = new Map<string, { unread: number; last_message_at: string; last_body: string }>();
+    for (const row of (data ?? []) as Array<{ sender_id: string; recipient_id: string; body: string; created_at: string; read_at: string | null }>) {
+      const otherId = row.sender_id === user.id ? row.recipient_id : row.sender_id;
+      const current = summaries.get(otherId);
+      summaries.set(otherId, {
+        unread: (current?.unread ?? 0) + (row.recipient_id === user.id && !row.read_at ? 1 : 0),
+        last_message_at: current?.last_message_at ?? row.created_at,
+        last_body: current?.last_body ?? row.body,
+      });
+    }
+    const contacts = await Promise.all(Array.from(summaries.entries()).map(async ([userId, summary]) => {
+      const directoryUser = await (async () => {
+        const { data: profile, error: profileError } = await db().rpc("get_directory_user", { p_user_id: userId });
+        if (profileError) return null;
+        return profile as DirectoryUser | null;
+      })();
+      return directoryUser ? { user: directoryUser, ...summary } : null;
+    }));
+    return contacts.filter((contact): contact is DirectMessageContact => Boolean(contact)).sort((a, b) => b.last_message_at.localeCompare(a.last_message_at));
   },
   sendDirectMessage: async (recipientId, body) => {
     const { data: { user } } = await db().auth.getUser();

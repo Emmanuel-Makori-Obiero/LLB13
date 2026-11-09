@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Loader2, MessageCircle, Search, Send, UserRound } from "lucide-react";
 import { repository, supabase } from "./data/repository";
-import type { DirectMessage, DirectoryUser } from "./data/types";
+import type { DirectMessage, DirectMessageContact, DirectoryUser } from "./data/types";
 import "./messages.css";
 
 export default function MessagesPage() {
@@ -9,6 +9,7 @@ export default function MessagesPage() {
   const [username, setUsername] = useState("");
   const [query, setQuery] = useState("");
   const [users, setUsers] = useState<DirectoryUser[]>([]);
+  const [contacts, setContacts] = useState<DirectMessageContact[]>([]);
   const [selected, setSelected] = useState<DirectoryUser | null>(null);
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [draft, setDraft] = useState("");
@@ -23,6 +24,7 @@ export default function MessagesPage() {
       try {
         const [{ data: auth }, nextProfile] = await Promise.all([supabase?.auth.getUser() ?? Promise.resolve({ data: { user: null } }), repository.getMyDirectoryProfile()]);
         setUserId(auth.user?.id ?? ""); setProfile(nextProfile); setUsername(nextProfile?.username ?? "");
+        setContacts(await repository.getDirectMessageContacts());
       } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not load your messaging profile."); }
     })();
   }, []);
@@ -41,6 +43,7 @@ export default function MessagesPage() {
           } else {
             setNotice("You have a new message. Search for the sender to open it.");
           }
+          void repository.getDirectMessageContacts().then(setContacts);
         }).catch(() => {
           if (active) setNotice("You have a new message. Search for the sender to open it.");
         });
@@ -50,7 +53,7 @@ export default function MessagesPage() {
   }, [userId]);
   useEffect(() => {
     if (!selected) return;
-    const load = async () => { try { setMessages(await repository.getDirectMessages(selected.user_id)); await repository.markDirectMessagesDelivered(selected.user_id); await repository.markDirectMessagesRead(selected.user_id); } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not load this conversation."); } };
+    const load = async () => { try { setMessages(await repository.getDirectMessages(selected.user_id)); await repository.markDirectMessagesDelivered(selected.user_id); await repository.markDirectMessagesRead(selected.user_id); setContacts(await repository.getDirectMessageContacts()); } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not load this conversation."); } };
     void load();
   }, [selected?.user_id]);
   const saveUsername = async (event: FormEvent) => {
@@ -77,6 +80,8 @@ export default function MessagesPage() {
         <div className="section-label"><UserRound size={14} /> Your username</div>
         <form className="messages-username-form" onSubmit={(event) => void saveUsername(event)}><input value={username} onChange={(event) => setUsername(event.target.value.toLowerCase())} minLength={3} maxLength={30} pattern="[a-z0-9._]+" placeholder="e.g. em.makori_" /><button className="primary-button" disabled={busy || username.length < 3}>{busy ? <Loader2 size={14} className="messages-spin" /> : <Send size={14} />} Save</button></form>
         <p className="field-hint">Use 3–30 lowercase letters, numbers, periods, or underscores.</p>
+        <div className="section-label messages-inbox-label"><MessageCircle size={14} /> People who messaged you</div>
+        <div className="messages-contact-list">{contacts.map((contact) => <button type="button" className={`messages-user messages-contact ${selected?.user_id === contact.user.user_id ? "active" : ""}`} key={contact.user.user_id} onClick={() => setSelected(contact.user)}><span className="messages-avatar">{contact.user.display_name.slice(0, 1).toUpperCase()}</span><span><strong>{contact.user.display_name}{contact.unread > 0 && <b className="messages-unread-badge">{contact.unread > 9 ? "9+" : contact.unread}</b>}</strong><small>@{contact.user.username} · {contact.unread > 0 ? `${contact.unread} unread` : "No unread messages"}</small></span></button>)}{!contacts.length && <p className="empty">No one has messaged you yet.</p>}</div>
         <div className="section-label messages-search-label"><Search size={14} /> Find a learner</div>
         <form className="messages-search-form" onSubmit={(event) => void search(event)}><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search username or name" /><button type="submit" aria-label="Search" disabled={searching}>{searching ? <Loader2 size={14} className="messages-spin" /> : <Search size={14} />}</button></form>
         <div className="messages-user-list">{users.map((user) => <button type="button" className={`messages-user ${selected?.user_id === user.user_id ? "active" : ""}`} key={user.user_id} onClick={() => setSelected(user)}><span className="messages-avatar">{user.display_name.slice(0, 1).toUpperCase()}</span><span><strong>{user.display_name}</strong><small>@{user.username}</small></span></button>)}{!users.length && <p className="empty">Search for a username to start a conversation.</p>}</div>

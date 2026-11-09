@@ -7,10 +7,14 @@
 .messages-search-form button { display: grid; place-items: center; width: 38px; border: 1px solid var(--line); background: var(--soft); color: var(--forest); }
 .messages-search-label { margin-top: 18px; }
 .messages-user-list { display: grid; gap: 4px; margin-top: 6px; }
+.messages-contact-list { display: grid; gap: 4px; margin-top: 6px; max-height: 230px; overflow: auto; }
+.messages-inbox-label { margin-top: 18px; }
 .messages-user { display: flex; align-items: center; gap: 9px; width: 100%; padding: 9px 7px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--ink); text-align: left; cursor: pointer; }
 .messages-user.active, .messages-user:hover { background: var(--soft); }
 .messages-user > span:last-child, .messages-thread-head > div:last-child { display: grid; gap: 3px; min-width: 0; }
 .messages-user strong, .messages-thread-head strong { font-size: 12px; }
+.messages-contact strong { display: flex; align-items: center; gap: 6px; }
+.messages-unread-badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--clay); color: #fff; font-size: 9px; line-height: 1; }
 .messages-user small, .messages-thread-head small { color: var(--muted); font-size: 10px; }
 .messages-avatar { display: grid; place-items: center; width: 32px; height: 32px; flex: 0 0 32px; border: 1px solid var(--line); border-radius: 50%; background: var(--moss); color: var(--forest); font-family: Fraunces, serif; font-weight: 600; }
 .messages-thread { display: grid; grid-template-rows: auto 1fr auto; padding: 0; overflow: hidden; }
