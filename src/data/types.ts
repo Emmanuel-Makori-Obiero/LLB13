@@ -284,7 +284,7 @@ export type SupportTicket = {
   id: string;
   user_id: string;
   subject: string;
-  category: "complaint" | "technical" | "suggestion" | "account" | "other";
+  category: "complaint" | "technical" | "suggestion" | "account" | "safety" | "other";
   message: string;
   status: "open" | "in_progress" | "resolved" | "closed";
   admin_note?: string | null;

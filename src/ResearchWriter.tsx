@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { FileText, Library, Loader2, Send, Trash2, Upload } from "lucide-react";
 import { isSupabaseConfigured } from "./data/repository";
-import { AI_MODES, askAI, type AIFeature, type AIMode } from "./lib/ai";
+import { AI_MODES, askAI, type AIFeature, type AIMode, type AIResult } from "./lib/ai";
 import { Answer, type Turn } from "./StudyAssistant";
 import { Markdown } from "./Markdown";
 import { useDocuments } from "./useDocuments";
@@ -236,13 +236,43 @@ export function ResearchWriter({ userId }: { userId: string | null }) {
     setTurns((t) => [...t, turn].slice(-40));
     setInput("");
     setBusy(true);
+    const isLongPaper = tool.label === "Complete paper" && outputMode === "write" && requestedWords > 2500 && !lengthConflict;
     try {
-      const result = await askAI({
-        feature: tool.feature,
-        mode,
-        messages: [...priorMessages, { role: "user", content: message }],
-        docIds: d.selected.length ? d.selected : undefined,
-      });
+      let result: AIResult;
+      if (isLongPaper) {
+        const sectionCount = Math.min(10, Math.max(2, Math.ceil(requestedWords / 1600)));
+        const defaultSections = ["Introduction and thesis", "Legal and conceptual framework", "Relevant authorities and existing scholarship", "Main analysis", "Counterarguments and practical implications", "Conclusion and bibliography"];
+        const sections = Array.from({ length: sectionCount }, (_, index) => defaultSections[index] ?? `Main analysis — Part ${index - 3}`);
+        const pieces: string[] = [];
+        const responses: AIResult[] = [];
+        for (const [index, section] of sections.entries()) {
+          setNote(`Writing section ${index + 1} of ${sections.length}: ${section}…`);
+          const finalSection = index === sections.length - 1;
+          const sectionPrompt = `${requestedWork}\n\nWrite ONLY section ${index + 1} of ${sections.length}: ${section}. This is a staged paper-generation job. Produce about ${Math.ceil(requestedWords / sections.length)} words for this section, continue the argument from the earlier sections, and do not repeat material. ${finalSection ? `This is the final section: provide the conclusion followed by exactly one heading called “Bibliography”, listing only authorities actually supported by the selected sources.` : "Do not write a bibliography or final conclusion yet; reserve those for the final section."}\n\nSOURCE RULE: Use only the selected source documents. Do not invent authorities, quotations, facts, citations, page numbers, or legal propositions. Mark missing details as [VERIFY SOURCE / PINPOINT].\n\nEarlier section excerpts for continuity:\n${clip(pieces.join("\n\n"), 6000)}`;
+          const response = await askAI({
+            feature: "rw_draft",
+            mode,
+            messages: [{ role: "user", content: sectionPrompt }],
+            docIds: d.selected,
+          });
+          responses.push(response);
+          pieces.push(response.answer.trim());
+        }
+        const first = responses[0];
+        result = { ...first, answer: pieces.join("\n\n"), sources: Array.from(new Map(responses.flatMap((item) => item.sources).map((source) => [source.ref ?? source.title, source])).values()), warnings: Array.from(new Set(responses.flatMap((item) => item.warnings))) };
+        setNote(`Complete paper assembled from ${sections.length} checked sections (${count(result.answer).toLocaleString()} words).`);
+      } else {
+        result = await askAI({
+          feature: tool.feature,
+          mode,
+          messages: [...priorMessages, { role: "user", content: message }],
+          docIds: d.selected.length ? d.selected : undefined,
+        });
+      }
+      if (isLongPaper) {
+        setDraft(result.answer);
+        setPaperView("page");
+      }
       setTurns((all) =>
         all.map((t) => (t.id === turn.id ? { ...t, result } : t)),
       );
