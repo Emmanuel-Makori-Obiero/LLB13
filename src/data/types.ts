@@ -155,12 +155,13 @@ export type GroupAttendance = {
 };
 
 export type GroupMaterialShareScope = "group" | "session" | "unit";
-
+export type GroupMaterialContentKind = "resource" | "class_recording" | "discussion_recording";
 export type GroupMaterialShare = {
   id: string;
   group_id: string;
   material_id: string | null;
   title: string;
+  content_kind: GroupMaterialContentKind;
   share_scope: GroupMaterialShareScope;
   session_id: string | null;
   unit_name: string | null;
@@ -172,6 +173,25 @@ export type GroupMaterialShare = {
   created_at: string;
   url: string | null;
   source_label: string;
+};
+export type GroupAnnouncement = {
+  id: string;
+  group_id: string;
+  title: string;
+  body: string;
+  created_by: string;
+  pinned: boolean;
+  created_at: string;
+  updated_at: string;
+};
+export type DirectoryUser = { user_id: string; username: string; display_name: string };
+export type DirectMessage = {
+  id: string;
+  sender_id: string;
+  recipient_id: string;
+  body: string;
+  created_at: string;
+  read_at: string | null;
 };
 
 export type GroupAttendanceSummary = {

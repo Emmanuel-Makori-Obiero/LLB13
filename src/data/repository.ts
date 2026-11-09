@@ -11,6 +11,10 @@ import type {
   GroupAttendanceStatus,
   GroupAttendanceSummary,
   GroupMaterialShare,
+  GroupMaterialContentKind,
+  GroupAnnouncement,
+  DirectoryUser,
+  DirectMessage,
   GroupMaterialShareScope,
   GroupSession,
   Discussion,
@@ -140,6 +144,8 @@ export type Group13Repository = {
   checkInGroupSession: (sessionId: string) => Promise<GroupAttendanceStatus>;
   getGroupAttendanceForSessions: (sessionIds: string[]) => Promise<GroupAttendance[]>;
   getGroupAttendanceSummary: (groupId: string, from: string, to: string) => Promise<GroupAttendanceSummary[]>;
+  getGroupAnnouncements: (groupId: string) => Promise<GroupAnnouncement[]>;
+  createGroupAnnouncement: (groupId: string, title: string, body: string, pinned?: boolean) => Promise<GroupAnnouncement>;
   getAllStudyGroups: () => Promise<StudyGroup[]>;
   getLecturerAttendanceSummary: (from: string, to: string) => Promise<GroupAttendanceSummary[]>;
   getGroupMaterialShares: (groupId: string) => Promise<GroupMaterialShare[]>;
@@ -150,6 +156,7 @@ export type Group13Repository = {
     session_id?: string | null;
     unit_name?: string | null;
     material_id?: string | null;
+    content_kind?: GroupMaterialContentKind;
   }, file?: File) => Promise<GroupMaterialShare>;
   markGroupMaterialPublished: (shareId: string, libraryMaterialId: string) => Promise<void>;
   adminListGroupLeaders: () => Promise<ApprovedGroupLeader[]>;
@@ -162,6 +169,12 @@ export type Group13Repository = {
   adminCreateClubPoster: (input: { title: string; file: File; linkUrl: string; aiAnalysis: string; onProgress?: (stage: "checking" | "uploading" | "saving") => void }) => Promise<ClubPoster>;
   adminDeleteClubPoster: (poster: ClubPoster) => Promise<void>;
   getDailyCase: () => Promise<DailyCase | null>;
+  getMyDirectoryProfile: () => Promise<DirectoryUser | null>;
+  setMyUsername: (username: string) => Promise<DirectoryUser>;
+  searchDirectoryUsers: (query: string) => Promise<DirectoryUser[]>;
+  getDirectMessages: (otherUserId: string) => Promise<DirectMessage[]>;
+  sendDirectMessage: (recipientId: string, body: string) => Promise<DirectMessage>;
+  markDirectMessagesRead: (senderId: string) => Promise<void>;
 };
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
@@ -1104,6 +1117,18 @@ const supabaseRepository: Group13Repository = {
       attendance_percentage: Number(row.attendance_percentage),
     })) as GroupAttendanceSummary[];
   },
+  getGroupAnnouncements: async (groupId) => {
+    const { data, error } = await db().from("group_announcements")
+      .select("id,group_id,title,body,message,created_by,pinned,created_at,updated_at")
+      .eq("group_id", groupId).order("pinned", { ascending: false }).order("created_at", { ascending: false });
+    if (error) throw new Error(`Could not load group announcements: ${error.message}`);
+    return (data ?? []).map((row) => ({ ...row, body: row.body ?? row.message ?? "" })) as GroupAnnouncement[];
+  },
+  createGroupAnnouncement: async (groupId, title, body, pinned = false) => {
+    const { data, error } = await db().rpc("create_group_announcement", { p_group_id: groupId, p_title: title, p_body: body, p_pinned: pinned });
+    if (error) throw new Error(error.message);
+    return { ...(data as GroupAnnouncement), body: (data as GroupAnnouncement).body ?? (data as { message?: string }).message ?? body };
+  },
   getAllStudyGroups: async () => {
     const { data, error } = await db().from("study_groups")
       .select("id,name,leader_id,created_at").order("name");
@@ -1128,7 +1153,7 @@ const supabaseRepository: Group13Repository = {
   getGroupMaterialShares: async (groupId) => {
     const client = db();
     const { data: rows, error } = await client.from("group_material_shares")
-      .select("id,group_id,material_id,title,share_scope,session_id,unit_name,storage_path,mime_type,file_size,shared_by,library_material_id,created_at")
+      .select("id,group_id,material_id,title,content_kind,share_scope,session_id,unit_name,storage_path,mime_type,file_size,shared_by,library_material_id,created_at")
       .eq("group_id", groupId).order("created_at", { ascending: false });
     if (error) throw new Error(`Could not load group materials: ${error.message}`);
     const shares = (rows ?? []) as Array<Omit<GroupMaterialShare, "url" | "source_label">>;
@@ -1167,6 +1192,7 @@ const supabaseRepository: Group13Repository = {
       p_storage_path: storagePath,
       p_mime_type: file?.type || null,
       p_file_size: file?.size ?? null,
+      p_content_kind: input.content_kind ?? "resource",
     });
     if (error) {
       if (storagePath) await client.storage.from("group-materials").remove([storagePath]);
@@ -1245,6 +1271,46 @@ const supabaseRepository: Group13Repository = {
     if (storageError) throw new Error(`Could not delete poster file: ${storageError.message}`);
     const { error } = await client.from("club_posters").delete().eq("id", poster.id);
     if (error) throw new Error(`Could not delete poster: ${error.message}`);
+  },
+  getMyDirectoryProfile: async () => {
+    const { data: { user } } = await db().auth.getUser();
+    if (!user) return null;
+    const { data, error } = await db().from("user_directory").select("user_id,username,display_name").eq("user_id", user.id).maybeSingle();
+    if (error) throw new Error(`Could not load your username: ${error.message}`);
+    return (data ?? null) as DirectoryUser | null;
+  },
+  setMyUsername: async (username) => {
+    const { data, error } = await db().rpc("set_my_username", { p_username: username });
+    if (error) throw new Error(error.message);
+    return data as DirectoryUser;
+  },
+  searchDirectoryUsers: async (query) => {
+    const { data, error } = await db().rpc("search_user_directory", { p_query: query });
+    if (error) throw new Error(`Could not search users: ${error.message}`);
+    return (data ?? []) as DirectoryUser[];
+  },
+  getDirectMessages: async (otherUserId) => {
+    const { data: { user } } = await db().auth.getUser();
+    if (!user) throw new Error("Sign in to view messages.");
+    const { data, error } = await db().from("direct_messages").select("id,sender_id,recipient_id,body,created_at,read_at")
+      .or(`and(sender_id.eq.${user.id},recipient_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},recipient_id.eq.${user.id})`)
+      .order("created_at", { ascending: true }).limit(200);
+    if (error) throw new Error(`Could not load messages: ${error.message}`);
+    return (data ?? []) as DirectMessage[];
+  },
+  sendDirectMessage: async (recipientId, body) => {
+    const { data: { user } } = await db().auth.getUser();
+    if (!user) throw new Error("Sign in to send messages.");
+    const { data, error } = await db().from("direct_messages").insert({ sender_id: user.id, recipient_id: recipientId, body: body.trim() })
+      .select("id,sender_id,recipient_id,body,created_at,read_at").single();
+    if (error) throw new Error(`Could not send message: ${error.message}`);
+    return data as DirectMessage;
+  },
+  markDirectMessagesRead: async (senderId) => {
+    const { data: { user } } = await db().auth.getUser();
+    if (!user) return;
+    const { error } = await db().from("direct_messages").update({ read_at: new Date().toISOString() }).eq("sender_id", senderId).eq("recipient_id", user.id).is("read_at", null);
+    if (error) throw new Error(`Could not mark messages read: ${error.message}`);
   },
   adminSetGroupLeaderEmail: async (email, enabled) => {
     const { error } = await db().rpc("admin_set_group_leader_email", {

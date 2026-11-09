@@ -35,6 +35,7 @@ import {
   LogOut,
   Maximize2,
   Menu,
+  MessageCircle,
   MessageSquare,
   Mic,
   Minimize2,
@@ -152,6 +153,7 @@ const GroupAttendancePage = lazy(() => import("./GroupAttendancePage"));
 const CareerResearchPage = lazy(() => import("./CareerResearchPage"));
 const CourseOutlinePage = lazy(() => import("./CourseOutlinePage"));
 const SupportPage = lazy(() => import("./SupportPage"));
+const MessagesPage = lazy(() => import("./MessagesPage"));
 
 const nav = [
   { id: "dashboard", label: "Home", icon: LayoutDashboard },
@@ -163,6 +165,7 @@ const nav = [
   { id: "leaderboard", label: "Leaderboard", icon: Trophy },
   { id: "course-outline", label: "Course planner", icon: ClipboardList },
   { id: "support", label: "Support & complaints", icon: MessageSquare },
+  { id: "messages", label: "Messages", icon: MessageCircle },
   { id: "library", label: "Library", icon: Library },
   { id: "dictionary", label: "Law dictionary", icon: BookOpen },
   { id: "legal-process", label: "Legal what-ifs", icon: Workflow },
@@ -1442,6 +1445,11 @@ function App() {
           {view === "support" && (
             <Suspense fallback={<div className="subheading">Opening support…</div>}>
               <SupportPage isAdmin={isAdmin} />
+            </Suspense>
+          )}
+          {view === "messages" && (
+            <Suspense fallback={<div className="subheading">Opening messages…</div>}>
+              <MessagesPage />
             </Suspense>
           )}
           {view === "todos" && (
