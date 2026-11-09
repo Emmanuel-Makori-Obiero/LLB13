@@ -45,6 +45,13 @@ test("all six schedules are present and include their complete section text", ()
   assert.ok(constitution.schedules.every((schedule) => schedule.text.startsWith(`${schedule.number} SCHEDULE`) && schedule.text.length > 500));
 });
 
+test("Constitution reading text uses dark ink on a paper surface in every app theme", () => {
+  const styles = readFileSync(new URL("../src/constitution.css", import.meta.url), "utf8");
+  assert.ok(styles.includes(".constitution-page{--ink:#17211a;--card:#fffefa;"));
+  assert.ok(styles.includes(".constitution-verbatim{color:#17211a;font-size:17px;"));
+  assert.ok(styles.includes("@media(max-width:820px){.constitution-page .constitution-verbatim{font-size:16px;"));
+});
+
 test("source edition, attribution, feature route and unchanged PDF download are declared", () => {
   assert.equal(constitution.edition, "2010-09-03");
   assert.match(constitution.attribution, /Kenya Law and Laws\.Africa/);
