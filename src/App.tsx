@@ -5207,8 +5207,8 @@ function UsernamePrompt({ onSave }: { onSave: (username: string) => Promise<void
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     const normalized = value.trim().toLowerCase();
-    if (!/^[a-z0-9_]{3,30}$/.test(normalized)) {
-      setError("Use 3–30 letters, numbers, or underscores.");
+    if (!/^[a-z0-9._]{3,30}$/.test(normalized)) {
+      setError("Use 3–30 letters, numbers, periods, or underscores.");
       return;
     }
     setBusy(true); setError("");
@@ -5220,7 +5220,7 @@ function UsernamePrompt({ onSave }: { onSave: (username: string) => Promise<void
     <form className="card card-pad username-required-card" onSubmit={submit}>
       <div className="section-label">One last step</div>
       <h2 id="username-required-title">Choose your username.</h2>
-      <p className="field-hint">Your username identifies you in messages and group discussions. It is separate from your private email address. Numbers-only usernames, such as 123456, are allowed.</p>
+      <p className="field-hint">Your username identifies you in messages and group discussions. It is separate from your private email address. Letters, numbers, periods, and underscores are allowed.</p>
       <label className="data-form">Username<input autoFocus required value={value} onChange={(event) => setValue(event.target.value.replace(/\s/g, ""))} placeholder="e.g. makori_13" autoComplete="username" maxLength={30} /></label>
       {error && <div className="connection-error" role="alert">{error}</div>}
       <button className="primary-button" type="submit" disabled={busy}>{busy ? "Saving…" : "Save username"}</button>
