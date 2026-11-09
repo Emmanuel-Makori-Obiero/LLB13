@@ -89,7 +89,7 @@ import LandingPage, { HelpButton } from "./LandingPage";
 import { downloadInfo, readerUrl, safeUrl, toEmbedUrl, youtubeVideoId } from "./links";
 import AdminPage from "./AdminPage";
 import InstallButton from "./InstallButton";
-import { DeleteAccountCard } from "./AccountPage";
+import { DataRightsCard, DeleteAccountCard } from "./AccountPage";
 import Home from "./Home";
 import TimetablePage from "./TimetablePage";
 const TranscribePage = lazy(() => import("./TranscribePage"));
@@ -124,6 +124,7 @@ import { readDebateInviteCode } from "./lib/debate-links";
 import DailyQuizPage from "./DailyQuizPage";
 import LeaderboardPage from "./LeaderboardPage";
 import RewardWelcomePopup from "./RewardWelcomePopup";
+import { LegalFooter, LegalPage, type LegalPageKind } from "./LegalPages";
 import {
   analyzeImage,
   createFilmProject,
@@ -203,6 +204,9 @@ const validViews = new Set([
   "login",
   "signup",
   "public-playlist",
+  "privacy",
+  "terms",
+  "contact",
 ]);
 const viewFromPath = () => {
   const path = window.location.pathname.replace(/^\/+|\/+$/g, "");
@@ -969,6 +973,7 @@ function App() {
       </>
     );
   if (view === "public-playlist") return <PublicPlaylistPage />;
+  if (view === "privacy" || view === "terms" || view === "contact") return <LegalPage kind={view as LegalPageKind} onBack={() => setPage("dashboard")} />;
   if (authLoading)
     return (
       <div className="auth-page">
@@ -1628,6 +1633,7 @@ function App() {
                 onUpload={uploadProfileAssetAndSave}
                 setNotice={setNotice}
               />
+              <DataRightsCard email={userEmail ?? ""} setNotice={setNotice} />
               <DeleteAccountCard
                 email={userEmail ?? ""}
                 isAdmin={isAdmin}
@@ -1677,6 +1683,7 @@ function App() {
               />
             </div>
           )}
+          <LegalFooter onNavigate={setPage} />
         </div>
       </main>
       {musicQueue.length > 0 && <GlobalMusicPlayer queue={musicQueue} index={musicIndex} playing={musicPlaying} onPlaying={setMusicPlaying} onToggle={() => setMusicPlaying((current) => !current)} onStep={stepMusic} onSelect={(nextIndex) => { setMusicIndex(nextIndex); setMusicPlaying(true); }} onAddQueue={addMusicToQueue} onEnded={() => stepMusic(1)} />}

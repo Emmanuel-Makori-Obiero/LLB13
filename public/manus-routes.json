@@ -17,6 +17,18 @@
       "title": "Create account"
     },
     {
+      "path": "/privacy",
+      "title": "Privacy Policy"
+    },
+    {
+      "path": "/terms",
+      "title": "Terms of Use"
+    },
+    {
+      "path": "/contact",
+      "title": "Contact and support"
+    },
+    {
       "path": "/timetable",
       "title": "Timetable"
     },

@@ -111,6 +111,7 @@ export default function LoginPage({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [acceptedPolicies, setAcceptedPolicies] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
   const [pendingEmail, setPendingEmail] = useState<string | null>(null); // set once we are waiting for email confirmation
@@ -227,6 +228,10 @@ export default function LoginPage({
     }
     if (mode === "sign-up" && password !== confirmPassword) {
       setNotice({ tone: "error", text: "Passwords do not match." });
+      return;
+    }
+    if (mode === "sign-up" && !acceptedPolicies) {
+      setNotice({ tone: "error", text: "Please read and accept the Privacy Policy and Terms of Use before creating an account." });
       return;
     }
 
@@ -503,6 +508,12 @@ export default function LoginPage({
                     autoComplete="new-password"
                     placeholder="Repeat your password"
                   />
+                )}
+                {isSignUp && (
+                  <label className="auth-consent">
+                    <input type="checkbox" checked={acceptedPolicies} onChange={(event) => setAcceptedPolicies(event.target.checked)} />
+                    <span>I have read and agree to the <a href="/privacy" target="_blank" rel="noreferrer">Privacy Policy</a> and <a href="/terms" target="_blank" rel="noreferrer">Terms of Use</a>. I understand that my account details and learning activity are processed to provide the platform.</span>
+                  </label>
                 )}
 
                 {notice && (
