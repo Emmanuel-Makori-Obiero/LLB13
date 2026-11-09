@@ -22,3 +22,5 @@
 .constitution-chapter-number,.constitution-count,.constitution-results-note,.constitution-article-card small,.constitution-reading-footer,.constitution-attribution,.constitution-index-toolbar{color:#536156}
 .constitution-search{color:#536156}
 @media(max-width:820px){.constitution-page .constitution-verbatim{font-size:16px;line-height:1.82}}
+:root[data-theme="dark"] .constitution-page .constitution-search input{background:#17211c;color:#edf4ef;caret-color:#edf4ef}
+:root[data-theme="dark"] .constitution-page .constitution-search input::placeholder{color:#aab8ae;opacity:1}
