@@ -17,6 +17,7 @@ const AUTH_APP_ORIGIN = (() => {
     ? window.location.origin
     : "https://llb-13.vercel.app";
 })();
+const CURRENT_POLICY_VERSION = "2026-11-09";
 
 function friendlyError(message: string): string {
   const m = message.toLowerCase();
@@ -275,7 +276,7 @@ export default function LoginPage({
         password,
         options: {
           emailRedirectTo: AUTH_APP_ORIGIN,
-          data: { ...(name.trim() ? { display_name: name.trim() } : {}), university },
+          data: { ...(name.trim() ? { display_name: name.trim() } : {}), university, privacy_policy_version: CURRENT_POLICY_VERSION, terms_version: CURRENT_POLICY_VERSION, policy_accepted_at: new Date().toISOString() },
         },
       });
       if (error) {

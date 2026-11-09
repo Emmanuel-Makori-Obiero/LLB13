@@ -61,18 +61,16 @@ function TermsContent() {
 function ContactContent() {
   return <>
     <p>Need help, want to report a problem, or want to exercise a data right? Law Hub members can send a private message to the platform administrator through Support & complaints.</p>
-    <div className="legal-contact-card">
-      <Mail size={20} />
-      <div><strong>Member support</strong><span>Sign in, open Support & complaints, and choose Technical problem, Account help, Complaint, or Other.</span></div>
-      <a className="primary-button" href="/login">Sign in to contact support</a>
-    </div>
-    <h2>Data requests</h2>
-    <p>For access, correction, export, or deletion, choose Account help and write what you need. Do not include passwords, payment details, or confidential client information in a support message.</p>
-    <h2>Before contacting us</h2>
-    <p>Include the email address on your Law Hub account, a short description of the issue, and the page or feature involved. Never send your password.</p>
+    <div className="legal-contact-card"><Mail size={20} /><div><strong>Member support</strong><span>Sign in, open Support & complaints, and choose Technical problem, Account help, Complaint, or Other.</span></div><a className="primary-button" href="/login">Sign in to contact support</a></div>
+    <h2>Data requests</h2><p>For access, correction, export, or deletion, choose Account help and write what you need. Do not include passwords, payment details, or confidential client information in a support message.</p>
+    <h2>Before contacting us</h2><p>Include the email address on your Law Hub account, a short description of the issue, and the page or feature involved. Never send your password.</p>
   </>;
 }
 
 export function LegalFooter({ onNavigate }: { onNavigate: (page: string) => void }) {
   return <footer className="legal-footer"><span>LAW HUB · Study tools for law students</span><nav aria-label="Legal"><button onClick={() => onNavigate("privacy")}>Privacy Policy</button><button onClick={() => onNavigate("terms")}>Terms of Use</button><button onClick={() => onNavigate("contact")}>Contact & support</button><button onClick={() => onNavigate("account")}>Data controls</button></nav></footer>;
+}
+
+export function PolicyAcceptanceModal({ busy, onAccept }: { busy: boolean; onAccept: () => void }) {
+  return <div className="policy-modal-backdrop" role="presentation"><section className="policy-modal" role="dialog" aria-modal="true" aria-labelledby="policy-modal-title"><div className="legal-eyebrow"><ShieldCheck size={15} /> LAW HUB POLICY UPDATE</div><h2 id="policy-modal-title">Please review our updated policies</h2><p>We have updated the Privacy Policy and Terms of Use so you can clearly understand how Law Hub handles account information, learning activity, uploaded materials, and support requests.</p><div className="policy-modal-links"><a href="/privacy" target="_blank" rel="noreferrer">Read the Privacy Policy</a><a href="/terms" target="_blank" rel="noreferrer">Read the Terms of Use</a></div><p className="field-hint">You must acknowledge these documents before continuing to the learning workspace. You can change your mind later by contacting Support & complaints or deleting your account.</p><button type="button" className="primary-button" disabled={busy} onClick={onAccept}>{busy ? "Saving acknowledgement…" : "I have read and agree — continue"}</button></section></div>;
 }
