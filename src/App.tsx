@@ -5208,7 +5208,7 @@ function UsernamePrompt({ onSave }: { onSave: (username: string) => Promise<void
     event.preventDefault();
     const normalized = value.trim().toLowerCase();
     if (!/^[a-z0-9_]{3,30}$/.test(normalized)) {
-      setError("Use 3–30 letters, numbers, or underscores. Numbers-only usernames are allowed.");
+      setError("Use 3–30 letters, numbers, or underscores.");
       return;
     }
     setBusy(true); setError("");
