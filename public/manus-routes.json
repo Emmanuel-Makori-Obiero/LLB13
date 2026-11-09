@@ -29,6 +29,10 @@
       "title": "Contact and support"
     },
     {
+      "path": "/messages",
+      "title": "Messages"
+    },
+    {
       "path": "/timetable",
       "title": "Timetable"
     },

@@ -1,10 +1,10 @@
-import { ArrowRight, BookOpen, CalendarDays, CheckSquare, FileText, Gavel, Library, Sparkles, Users } from "lucide-react";
+import { ArrowRight, BookOpen, CalendarDays, CheckSquare, FileText, Gavel, Library, MessageCircle, Sparkles, Users } from "lucide-react";
 import type { Assignment, Lesson, Todo } from "./data/types";
 import LearningLoop from "./LearningLoop";
 import ClubPosterCarousel from "./ClubPosterCarousel";
 import "./home-groups.css";
 import "./daily-case-home.css";
-type Props = { name: string; learnerLevel: string; learningPreference: string; lessons: Lesson[]; todos: Todo[]; assignments: Assignment[]; userId: string | null; setPage: (id: string) => void };
+type Props = { name: string; learnerLevel: string; learningPreference: string; lessons: Lesson[]; todos: Todo[]; assignments: Assignment[]; userId: string | null; unreadMessages: number; setPage: (id: string) => void };
 const today = () => new Date().toISOString().slice(0, 10);
 const hm = (t?: string | null) => (t ? t.slice(0, 5) : "");
 const levelCopy: Record<string, { label: string; focus: string; next: string }> = {
@@ -21,7 +21,7 @@ const homeFeatureGroups = [
   { label: "Practise", items: [{ id: "arena", title: "Games Hub", icon: Gavel }, { id: "exam-review", title: "Exam review", icon: FileText }, { id: "research", title: "Research writer", icon: Sparkles }, { id: "legal-process", title: "Legal what-ifs", icon: BookOpen }] },
   { label: "Community", items: [{ id: "groups", title: "Study groups", icon: Users }, { id: "discussions", title: "Discussions", icon: Users }, { id: "opportunities", title: "Career research", icon: ArrowRight }, { id: "leaderboard", title: "Leaderboard", icon: Gavel }] },
 ];
-export default function Home({ name, learnerLevel, learningPreference, lessons, todos, assignments, userId, setPage }: Props) {
+export default function Home({ name, learnerLevel, learningPreference, lessons, todos, assignments, userId, unreadMessages, setPage }: Props) {
   const t = today();
   const todayLessons = lessons.filter((l) => l.lesson_date === t);
   const next = lessons.filter((l) => l.lesson_date > t).slice(0, 3);
@@ -33,6 +33,7 @@ export default function Home({ name, learnerLevel, learningPreference, lessons, 
   const preferenceLabel = learningPreference === "guided" ? "Step-by-step support" : learningPreference === "challenge" ? "Challenge mode" : "Balanced support";
   return <div className="home-dashboard">
     <section className="home-welcome"><div className="home-welcome-copy"><span className="home-kicker">LAW HUB / STUDY DASHBOARD</span><h1>{greet}, {name}.</h1><p>{level.next}</p><div className="home-welcome-actions"><button className="home-primary" onClick={() => setPage("library")}><Library size={16} /> Open library <ArrowRight size={15} /></button><span className="home-level-badge">Level: {level.label}</span><span className="home-level-badge">Support: {preferenceLabel}</span></div></div></section>
+    {unreadMessages > 0 && <button type="button" className="home-unread-message" onClick={() => setPage("messages")} aria-label={`Open ${unreadMessages} unread message${unreadMessages === 1 ? "" : "s"}`}><span className="home-unread-icon"><MessageCircle size={18} /></span><span><strong>{unreadMessages} unread message{unreadMessages === 1 ? "" : "s"}</strong><small>Someone sent you a private message. Open Messages to read it.</small></span><ArrowRight size={18} /></button>}
     <ClubPosterCarousel />
     <section className="home-feature-index" aria-labelledby="home-feature-index-title">
       <div className="home-feature-index-head"><div><span className="home-section-eyebrow">YOUR STUDY CLASSES</span><h2 id="home-feature-index-title">Where do you want to go?</h2></div></div>

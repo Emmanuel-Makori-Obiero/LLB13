@@ -296,6 +296,7 @@ function App() {
   const [authCallbackNotice, setAuthCallbackNotice] = useState("");
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [unreadDirectMessages, setUnreadDirectMessages] = useState(0);
   const [platformDefaultTheme, setPlatformDefaultTheme] = useState<ThemeId | null>(null);
   const [platformDefaultLoaded, setPlatformDefaultLoaded] = useState(false);
   const [adminState, setAdminState] = useState<"unknown" | "yes" | "no">(
@@ -353,6 +354,20 @@ function App() {
   const isAdmin = adminState === "yes";
   const visibleMaterials = useMemo(() => materials.filter((material) => isAdmin || materialVisibleToLevel(material.target_years, profile.learnerLevel)), [materials, isAdmin, profile.learnerLevel]);
   const visibleAssignments = useMemo(() => assignments.filter((assignment) => isAdmin || materialVisibleToLevel(assignment.target_years, profile.learnerLevel)), [assignments, isAdmin, profile.learnerLevel]);
+  useEffect(() => {
+    if (!supabase || !userId) { setUnreadDirectMessages(0); return; }
+    let active = true;
+    const client = supabase;
+    const load = async () => {
+      const { count } = await client.from("direct_messages").select("id", { count: "exact", head: true }).eq("recipient_id", userId).is("read_at", null);
+      if (active) setUnreadDirectMessages(count ?? 0);
+    };
+    void load();
+    const channel = client.channel(`direct-message-count-${userId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "direct_messages", filter: `recipient_id=eq.${userId}` }, () => void load())
+      .subscribe();
+    return () => { active = false; void client.removeChannel(channel); };
+  }, [userId]);
   useEffect(() => {
     let active = true;
     void repository.getDefaultWallpaperTheme().then((themeId) => {
@@ -1098,6 +1113,7 @@ function App() {
             <NavItem
               key={item.id}
               {...item}
+              badge={item.id === "messages" ? unreadDirectMessages : 0}
               active={view === item.id}
               onClick={() => setPage(item.id)}
             />
@@ -1107,6 +1123,7 @@ function App() {
             <NavItem
               key={item.id}
               {...item}
+              badge={item.id === "messages" ? unreadDirectMessages : 0}
               active={view === item.id}
               onClick={() => setPage(item.id)}
             />
@@ -1202,6 +1219,7 @@ function App() {
               <NavItem
                 key={item.id}
                 {...item}
+                badge={item.id === "messages" ? unreadDirectMessages : 0}
                 active={view === item.id}
                 onClick={() => setPage(item.id)}
               />
@@ -1211,6 +1229,7 @@ function App() {
               <NavItem
                 key={item.id}
                 {...item}
+                badge={item.id === "messages" ? unreadDirectMessages : 0}
                 active={view === item.id}
                 onClick={() => setPage(item.id)}
               />
@@ -1330,6 +1349,7 @@ function App() {
               todos={visibleTodos}
               assignments={visibleAssignments}
               userId={userId}
+              unreadMessages={unreadDirectMessages}
               setPage={setPage}
             />
           )}
@@ -1900,19 +1920,22 @@ function Avatar({
 function NavItem({
   label,
   icon: Icon,
+  badge = 0,
   active,
   onClick,
 }: {
   id: string;
   label: string;
   icon: typeof BookOpen;
+  badge?: number;
   active: boolean;
   onClick: () => void;
 }) {
   return (
     <button className={`nav-item ${active ? "active" : ""}`} onClick={onClick}>
       <Icon />
-      {label}
+      <span>{label}</span>
+      {badge > 0 && <b className="nav-unread-badge" aria-label={`${badge} unread`}>{badge > 9 ? "9+" : badge}</b>}
     </button>
   );
 }
