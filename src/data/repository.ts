@@ -175,6 +175,7 @@ export type Group13Repository = {
   searchDirectoryUsers: (query: string) => Promise<DirectoryUser[]>;
   getDirectMessages: (otherUserId: string) => Promise<DirectMessage[]>;
   sendDirectMessage: (recipientId: string, body: string) => Promise<DirectMessage>;
+  markDirectMessagesDelivered: (senderId: string) => Promise<void>;
   markDirectMessagesRead: (senderId: string) => Promise<void>;
 };
 
@@ -1298,7 +1299,7 @@ const supabaseRepository: Group13Repository = {
   getDirectMessages: async (otherUserId) => {
     const { data: { user } } = await db().auth.getUser();
     if (!user) throw new Error("Sign in to view messages.");
-    const { data, error } = await db().from("direct_messages").select("id,sender_id,recipient_id,body,created_at,read_at")
+    const { data, error } = await db().from("direct_messages").select("id,sender_id,recipient_id,body,created_at,delivered_at,read_at")
       .or(`and(sender_id.eq.${user.id},recipient_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},recipient_id.eq.${user.id})`)
       .order("created_at", { ascending: true }).limit(200);
     if (error) throw new Error(`Could not load messages: ${error.message}`);
@@ -1308,9 +1309,15 @@ const supabaseRepository: Group13Repository = {
     const { data: { user } } = await db().auth.getUser();
     if (!user) throw new Error("Sign in to send messages.");
     const { data, error } = await db().from("direct_messages").insert({ sender_id: user.id, recipient_id: recipientId, body: body.trim() })
-      .select("id,sender_id,recipient_id,body,created_at,read_at").single();
+      .select("id,sender_id,recipient_id,body,created_at,delivered_at,read_at").single();
     if (error) throw new Error(`Could not send message: ${error.message}`);
     return data as DirectMessage;
+  },
+  markDirectMessagesDelivered: async (senderId) => {
+    const { data: { user } } = await db().auth.getUser();
+    if (!user) return;
+    const { error } = await db().from("direct_messages").update({ delivered_at: new Date().toISOString() }).eq("sender_id", senderId).eq("recipient_id", user.id).is("delivered_at", null);
+    if (error) throw new Error(`Could not mark messages delivered: ${error.message}`);
   },
   markDirectMessagesRead: async (senderId) => {
     const { data: { user } } = await db().auth.getUser();

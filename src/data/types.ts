@@ -191,6 +191,7 @@ export type DirectMessage = {
   recipient_id: string;
   body: string;
   created_at: string;
+  delivered_at: string | null;
   read_at: string | null;
 };
 

@@ -364,7 +364,13 @@ function App() {
     };
     void load();
     const channel = client.channel(`direct-message-count-${userId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "direct_messages", filter: `recipient_id=eq.${userId}` }, () => void load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "direct_messages", filter: `recipient_id=eq.${userId}` }, (payload) => {
+        if (payload.eventType === "INSERT") {
+          const senderId = (payload.new as { sender_id?: string }).sender_id;
+          if (senderId) void repository.markDirectMessagesDelivered(senderId);
+        }
+        void load();
+      })
       .subscribe();
     return () => { active = false; void client.removeChannel(channel); };
   }, [userId]);
