@@ -27,13 +27,31 @@ export default function MessagesPage() {
     })();
   }, []);
   useEffect(() => {
+    if (!userId || !supabase) return;
+    let active = true;
+    const client = supabase;
+    const channel = client.channel(`direct-message-inbox-${userId}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "direct_messages", filter: `recipient_id=eq.${userId}` }, (payload) => {
+        const incoming = payload.new as DirectMessage;
+        void repository.getDirectoryUser(incoming.sender_id).then((sender) => {
+          if (!active) return;
+          if (sender) {
+            setSelected(sender);
+            setNotice(`New message from @${sender.username}.`);
+          } else {
+            setNotice("You have a new message. Search for the sender to open it.");
+          }
+        }).catch(() => {
+          if (active) setNotice("You have a new message. Search for the sender to open it.");
+        });
+      })
+      .subscribe();
+    return () => { active = false; void client.removeChannel(channel); };
+  }, [userId]);
+  useEffect(() => {
     if (!selected) return;
     const load = async () => { try { setMessages(await repository.getDirectMessages(selected.user_id)); await repository.markDirectMessagesRead(selected.user_id); } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not load this conversation."); } };
     void load();
-    const client = supabase;
-    if (!client) return;
-    const channel = client.channel(`direct-messages-${selected.user_id}`).on("postgres_changes", { event: "*", schema: "public", table: "direct_messages" }, () => { void load(); }).subscribe();
-    return () => { void client.removeChannel(channel); };
   }, [selected?.user_id]);
   const saveUsername = async (event: FormEvent) => {
     event.preventDefault(); setBusy(true); setError(""); setNotice("");

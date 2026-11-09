@@ -170,6 +170,7 @@ export type Group13Repository = {
   adminDeleteClubPoster: (poster: ClubPoster) => Promise<void>;
   getDailyCase: () => Promise<DailyCase | null>;
   getMyDirectoryProfile: () => Promise<DirectoryUser | null>;
+  getDirectoryUser: (userId: string) => Promise<DirectoryUser | null>;
   setMyUsername: (username: string) => Promise<DirectoryUser>;
   searchDirectoryUsers: (query: string) => Promise<DirectoryUser[]>;
   getDirectMessages: (otherUserId: string) => Promise<DirectMessage[]>;
@@ -1277,6 +1278,11 @@ const supabaseRepository: Group13Repository = {
     if (!user) return null;
     const { data, error } = await db().from("user_directory").select("user_id,username,display_name").eq("user_id", user.id).maybeSingle();
     if (error) throw new Error(`Could not load your username: ${error.message}`);
+    return (data ?? null) as DirectoryUser | null;
+  },
+  getDirectoryUser: async (userId) => {
+    const { data, error } = await db().rpc("get_directory_user", { p_user_id: userId });
+    if (error) throw new Error(`Could not load the message sender: ${error.message}`);
     return (data ?? null) as DirectoryUser | null;
   },
   setMyUsername: async (username) => {
