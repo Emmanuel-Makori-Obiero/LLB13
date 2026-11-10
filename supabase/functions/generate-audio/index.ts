@@ -405,12 +405,13 @@ Deno.serve(async (req) => {
   const adminMayUsePremiumVoice = isAdmin === true;
   const admin = createClient(url, service);
 
-  let body: { text?: string; title?: string; language?: "en" | "sw" | "mix" | "sheng"; presenter_gender?: VoiceGender; guide_gender?: VoiceGender };
+  let body: { text?: string; title?: string; language?: "en" | "sw" | "mix" | "sheng"; presenter_gender?: VoiceGender; guide_gender?: VoiceGender; provider?: "google" | "default" };
   try { body = await req.json(); } catch { return json({ error: "Invalid JSON body." }, 400); }
   const text = String(body.text || "").trim();
   const language: "en" | "sw" | "mix" | "sheng" = body.language === "sw" ? "sw" : body.language === "mix" ? "mix" : body.language === "sheng" ? "sheng" : "en";
   const hostGender: VoiceGender = body.presenter_gender === "female" ? "female" : "male";
   const tutorGender: VoiceGender = body.guide_gender === "male" ? "male" : "female";
+  const requestedProvider = body.provider === "google" ? "google" : "default";
   const providerLanguage: "en" | "sw" = language === "sw" ? "sw" : "en";
   if (text.length < 20) return json({ error: "The lesson or podcast script is too short." }, 400);
   if (text.length > 100000) return json({ error: "This script is over the supported limit of about 70 minutes. Shorten it or generate it as separate episodes." }, 400);
@@ -443,7 +444,11 @@ Deno.serve(async (req) => {
   const failures: string[] = [];
   let audio: AudioResult | null = null;
 
-  if (adminMayUsePremiumVoice && elevenLabsKeys.length) {
+  if (requestedProvider === "google" && geminiEnabled && geminiKeys.length) {
+    try { audio = await generateGeminiAudio(text, geminiKeys, geminiModel, hostGender, tutorGender); }
+    catch (error) { failures.push(error instanceof Error ? error.message : String(error)); }
+  }
+  if (!audio && requestedProvider === "default" && adminMayUsePremiumVoice && elevenLabsKeys.length) {
     try { audio = await generateElevenLabsAudio(text, elevenLabsKeys, providerLanguage, elevenLabsModel, hostVoiceId, tutorVoiceId, hostGender, tutorGender); }
     catch (error) { failures.push(error instanceof Error ? error.message : String(error)); }
   }

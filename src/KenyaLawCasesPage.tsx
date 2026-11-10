@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ArrowLeft, ArrowUpRight, BookOpen, Loader2, Moon, Search, Sun } from "lucide-react";
 import { askAI } from "./lib/ai";
-import { fetchKenyaLawCase, searchKenyaLaw, suggestCaseQueries, type KenyaLawCaseResult } from "./lib/kenyaLaw";
+import { fetchKenyaLawCase, MAX_CASE_QUERY_LENGTH, normalizeCaseQuery, searchKenyaLaw, suggestCaseQueries, type KenyaLawCaseResult } from "./lib/kenyaLaw";
 import { Markdown } from "./Markdown";
 import { useTheme } from "./theme";
 import "./kenya-law.css";
@@ -31,8 +31,9 @@ export default function KenyaLawCasesPage() {
 
   const searchOfficialCases = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const term = query.trim();
+    const term = normalizeCaseQuery(query);
     if (!term) return;
+    setQuery(term);
     setBusy(true);
     setError("");
     setResults([]);
@@ -98,13 +99,14 @@ export default function KenyaLawCasesPage() {
           <form className="kl-search" onSubmit={(event) => void searchOfficialCases(event)} role="search">
             <Search size={19} aria-hidden="true" />
             <label className="kl-sr-only" htmlFor="kl-case-query">Search Kenyan judgments</label>
-            <input id="kl-case-query" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Case name, citation, or legal issue" required />
+            <input id="kl-case-query" type="search" value={query} maxLength={MAX_CASE_QUERY_LENGTH} onChange={(event) => setQuery(normalizeCaseQuery(event.target.value))} placeholder="Case name, citation, or legal issue" required />
             <button type="submit" disabled={busy}>{busy ? <><Loader2 className="kl-spin" size={16} /> Searching</> : <>Find cases <Search size={16} /></>}</button>
           </form>
+          <p className="kl-search-count" aria-live="polite">{query.length}/{MAX_CASE_QUERY_LENGTH} characters</p>
           <p className="kl-search-note">Search requests go through the app’s authenticated server-side worker and public search indexes. It returns only official Kenya Law judgment links. If no verified match is found, it shows no result instead of substituting a hardcoded case. The preview summarizes only readable official judgment text.</p>
           {error && <p className="kl-error" role="alert">{error}</p>}
           {results.length > 0 && <section className="kl-results" aria-live="polite" aria-labelledby="kl-results-title"><div className="kl-results-head"><div><p className="kl-eyebrow">RESEARCH OUTPUT</p><h2 id="kl-results-title">Relevant judgments.</h2></div><span>{results.length} result{results.length === 1 ? "" : "s"}</span></div><div className="kl-result-list">{results.map((result) => <button type="button" className={`kl-result-button${selectedCase?.url === result.url ? " active" : ""}`} key={result.url} onClick={() => void summarizeCase(result)} disabled={summaryBusy}><span><strong>{result.title}</strong>{result.citation && <small>{result.citation}</small>}<em>{selectedCase?.url === result.url && summaryBusy ? "Preparing structured brief…" : "Select case and summarize"}</em></span><ArrowUpRight size={17} aria-hidden="true" /></button>)}</div></section>}
-          {results.length === 0 && !busy && !error && query.trim().length >= 3 && <div className="kl-no-results"><p>No verified official judgment link was found for that query. Try a case name, citation, or legal issue, or search Kenya Law directly.</p><p><a className="kl-advanced" href={`https://new.kenyalaw.org/search/?show-advanced-tab=1&nature=Judgment&q=${encodeURIComponent(query.trim())}`} target="_blank" rel="noopener noreferrer">Open Kenya Law advanced search for this query <ArrowUpRight size={14} /></a></p>{suggestions.length > 0 && <div className="kl-suggestions"><strong>Try a related search:</strong>{suggestions.map((suggestion) => <button type="button" key={suggestion} onClick={() => { setQuery(suggestion); void searchKenyaLaw(suggestion).then((found) => { setResults(found); setSuggestions(found.length ? [] : suggestCaseQueries(suggestion)); }).catch((cause) => setError(cause instanceof Error ? cause.message : "The case search is unavailable right now.")); }}>{suggestion}</button>)}</div>}</div>}
+          {results.length === 0 && !busy && !error && query.trim().length >= 3 && <div className="kl-no-results"><p>No verified official judgment link was found for that query. Try a case name, citation, or legal issue, or search Kenya Law directly.</p><p><a className="kl-advanced" href={`https://new.kenyalaw.org/search/?show-advanced-tab=1&nature=Judgment&q=${encodeURIComponent(normalizeCaseQuery(query))}`} target="_blank" rel="noopener noreferrer">Open Kenya Law advanced search for this query <ArrowUpRight size={14} /></a></p>{suggestions.length > 0 && <div className="kl-suggestions"><strong>Try a related search:</strong>{suggestions.map((suggestion) => <button type="button" key={suggestion} onClick={() => { setQuery(suggestion); void searchKenyaLaw(suggestion).then((found) => { setResults(found); setSuggestions(found.length ? [] : suggestCaseQueries(suggestion)); }).catch((cause) => setError(cause instanceof Error ? cause.message : "The case search is unavailable right now.")); }}>{suggestion}</button>)}</div>}</div>}
           {selectedCase && <section className="kl-brief" aria-live="polite" aria-labelledby="kl-brief-title"><div className="kl-results-head"><div><p className="kl-eyebrow">STRUCTURED CASE BRIEF</p><h2 id="kl-brief-title">{selectedCase.title}</h2></div><a href={selectedCase.url} target="_blank" rel="noopener noreferrer">Open official judgment <ArrowUpRight size={15} /></a></div>{summaryBusy && <div className="kl-brief-loading"><Loader2 className="kl-spin" size={18} /> Reading the official judgment and preparing the brief…</div>}{summaryError && <p className="kl-error" role="alert">{summaryError}</p>}{summary && <div className="kl-brief-body"><Markdown text={summary} /></div>}</section>}
         </section>
 

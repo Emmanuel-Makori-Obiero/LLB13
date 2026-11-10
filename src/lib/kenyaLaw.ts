@@ -20,6 +20,14 @@ export type KenyaCauseListResult = {
   source: "Kenya Law cause-list archive";
 };
 
+export const MAX_CASE_QUERY_LENGTH = 179;
+export function normalizeCaseQuery(query: string) {
+  const compact = query.trim().replace(/\s+/g, " ");
+  if (compact.length <= MAX_CASE_QUERY_LENGTH) return compact;
+  const clipped = compact.slice(0, MAX_CASE_QUERY_LENGTH + 1).replace(/\s+\S*$/, "").trim();
+  return (clipped || compact.slice(0, MAX_CASE_QUERY_LENGTH)).slice(0, MAX_CASE_QUERY_LENGTH).trim();
+}
+
 const COMMON_LEGAL_TERMS = [
   "contract", "negligence", "defamation", "constitutional", "employment",
   "land", "succession", "judicial review", "criminal appeal", "tort",
@@ -77,11 +85,12 @@ export function suggestCaseQueries(query: string): string[] {
 
 export async function searchKenyaLaw(query: string): Promise<KenyaLawCaseResult[]> {
   if (!supabase) throw new Error("Supabase is not configured.");
+  const safeQuery = normalizeCaseQuery(query);
   try {
     const localResponse = await fetch("/kenya-law-index.json", { cache: "no-store" });
     if (localResponse.ok) {
       const localData = await localResponse.json() as { results?: unknown };
-      const term = query.trim().toLowerCase();
+      const term = safeQuery.toLowerCase();
       const localResults = Array.isArray(localData.results)
         ? (localData.results as KenyaLawCaseResult[]).filter((item) => `${item.title} ${item.citation ?? ""}`.toLowerCase().includes(term))
         : [];
@@ -93,7 +102,7 @@ export async function searchKenyaLaw(query: string): Promise<KenyaLawCaseResult[
   let data: { results?: unknown } | null = null;
   let error: unknown = null;
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    const response = await supabase.functions.invoke("kenya-law-search", { body: { query } });
+    const response = await supabase.functions.invoke("kenya-law-search", { body: { query: safeQuery } });
     data = response.data;
     error = response.error;
     if (!error) break;
@@ -124,7 +133,7 @@ export async function searchKenyaCauseLists(query: string, dates?: { fromDate?: 
   caveat: string;
 }> {
   if (!supabase) throw new Error("Supabase is not configured.");
-  const { data, error } = await supabase.functions.invoke("kenya-law-search", { body: { query, ...dates } });
+  const { data, error } = await supabase.functions.invoke("kenya-law-search", { body: { query: normalizeCaseQuery(query), ...dates } });
   if (error) {
     let message = "The official cause-list search is unavailable right now.";
     try {
