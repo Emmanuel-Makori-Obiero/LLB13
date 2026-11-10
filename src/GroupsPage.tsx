@@ -512,7 +512,7 @@ export default function GroupsPage() {
                       return <div className="groups-mark-row" key={member.user_id}>
                         <div className="groups-mark-person"><strong>{member.display_name}</strong>{record && <span className={`groups-mark-current ${record.status}`}>{attendanceLabel(record.status)}</span>}</div>
                         <div className="groups-mark-controls">
-                          <label className="groups-note-field"><span className="sr-only">Optional attendance note for {member.display_name}</span><input maxLength={200} value={noteDrafts[key] ?? record?.note ?? ""} onChange={(event) => setNoteDrafts((current) => ({ ...current, [key]: event.target.value }))} placeholder="Optional note" /></label>
+                          <label className="groups-note-field"><span>Attendance note <em>optional</em></span><input maxLength={200} value={noteDrafts[key] ?? record?.note ?? ""} onChange={(event) => setNoteDrafts((current) => ({ ...current, [key]: event.target.value }))} placeholder={`Add a note for ${member.display_name}`} /></label>
                           <div className="groups-status-buttons">{STATUS_OPTIONS.map((status) => <button type="button" key={status} className={`groups-status-button ${record?.status === status ? "selected" : ""}`} disabled={busy === `mark-${key}` || !online} onClick={() => markStatus(session, member, status)}>{attendanceLabel(status)}</button>)}</div>
                         </div>
                       </div>;
