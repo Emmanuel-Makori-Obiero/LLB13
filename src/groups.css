@@ -138,6 +138,9 @@
 .groups-mark-current.late { background: #fff1d7; color: #8a6324; }
 .groups-mark-current.excused { background: #e8edf4; color: #53667c; }
 .groups-mark-current.absent { background: #f9e5e1; color: #9c4637; }
+.groups-mark-feedback { display: inline-flex; align-items: center; padding: 4px 7px; border-radius: 999px; font-size: 10px; font-weight: 700; white-space: nowrap; }
+.groups-mark-feedback.saving { background: #fff1d7; color: #8a6324; }
+.groups-mark-feedback.updated { background: #dcefe2; color: #237044; }
 .groups-mark-controls { display: grid; gap: 9px; min-width: 0; }
 .groups-note-field { display: grid; gap: 5px; min-width: 0; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .04em; }
 .groups-note-field em { color: var(--muted); font-size: 10px; font-style: normal; font-weight: 400; letter-spacing: 0; }

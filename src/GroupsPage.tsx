@@ -61,6 +61,8 @@ export default function GroupsPage() {
   const [fromDate, setFromDate] = useState(dateDaysAgo(29));
   const [toDate, setToDate] = useState(dateInNairobi());
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
+  const [attendanceStatusDrafts, setAttendanceStatusDrafts] = useState<Record<string, GroupAttendanceStatus>>({});
+  const [attendanceFeedback, setAttendanceFeedback] = useState<Record<string, "saving" | "updated">>({});
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
@@ -236,7 +238,21 @@ export default function GroupsPage() {
   const markStatus = (session: GroupSession, member: StudyGroupMember, status: GroupAttendanceStatus) => {
     const key = `${session.id}:${member.user_id}`;
     const note = noteDrafts[key] ?? attendanceByKey.get(key)?.note ?? "";
-    void act(`mark-${key}`, () => repository.markGroupAttendance(session.id, member.user_id, status, note), `${member.display_name}: ${attendanceLabel(status).toLowerCase()} record saved.`);
+    if (busy === `mark-${key}`) return;
+    setAttendanceStatusDrafts((current) => ({ ...current, [key]: status }));
+    setAttendanceFeedback((current) => ({ ...current, [key]: "saving" }));
+    setBusy(`mark-${key}`); setError(""); setNotice("");
+    void repository.markGroupAttendance(session.id, member.user_id, status, note).then(async () => {
+      await load(false);
+      setAttendanceStatusDrafts((current) => { const next = { ...current }; delete next[key]; return next; });
+      setAttendanceFeedback((current) => ({ ...current, [key]: "updated" }));
+      setNotice(`${member.display_name}: ${attendanceLabel(status)} updated.`);
+      window.setTimeout(() => setAttendanceFeedback((current) => { const next = { ...current }; delete next[key]; return next; }), 2200);
+    }).catch((caught) => {
+      setAttendanceStatusDrafts((current) => { const next = { ...current }; delete next[key]; return next; });
+      setAttendanceFeedback((current) => { const next = { ...current }; delete next[key]; return next; });
+      setError(caught instanceof Error ? caught.message : "The attendance update could not be saved.");
+    }).finally(() => setBusy(""));
   };
   const checkIn = (sessionId: string) => void act(`checkin-${sessionId}`, async () => {
     const status = await repository.checkInGroupSession(sessionId);
@@ -509,11 +525,13 @@ export default function GroupsPage() {
                     {members.map((member) => {
                       const key = `${session.id}:${member.user_id}`;
                       const record = attendanceByKey.get(key);
+                      const visibleStatus = attendanceStatusDrafts[key] ?? record?.status;
+                      const feedback = attendanceFeedback[key];
                       return <div className="groups-mark-row" key={member.user_id}>
-                        <div className="groups-mark-person"><strong>{member.display_name}</strong>{record && <span className={`groups-mark-current ${record.status}`}>{attendanceLabel(record.status)}</span>}</div>
+                        <div className="groups-mark-person"><strong>{member.display_name}</strong>{visibleStatus && <span className={`groups-mark-current ${visibleStatus}`}>{attendanceLabel(visibleStatus)}</span>}{feedback && <span className={`groups-mark-feedback ${feedback}`}>{feedback === "saving" ? "Saving…" : "Updated"}</span>}</div>
                         <div className="groups-mark-controls">
                           <label className="groups-note-field"><span>Attendance note <em>optional</em></span><input maxLength={200} value={noteDrafts[key] ?? record?.note ?? ""} onChange={(event) => setNoteDrafts((current) => ({ ...current, [key]: event.target.value }))} placeholder={`Add a note for ${member.display_name}`} /></label>
-                          <div className="groups-status-buttons">{STATUS_OPTIONS.map((status) => <button type="button" key={status} className={`groups-status-button ${record?.status === status ? "selected" : ""}`} disabled={busy === `mark-${key}` || !online} onClick={() => markStatus(session, member, status)}>{attendanceLabel(status)}</button>)}</div>
+                          <div className="groups-status-buttons">{STATUS_OPTIONS.map((status) => <button type="button" key={status} className={`groups-status-button ${visibleStatus === status ? "selected" : ""}`} disabled={busy === `mark-${key}` || !online} onClick={() => markStatus(session, member, status)}>{attendanceLabel(status)}</button>)}</div>
                         </div>
                       </div>;
                     })}
