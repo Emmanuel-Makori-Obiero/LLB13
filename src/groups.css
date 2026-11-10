@@ -1,14 +1,126 @@
+.groups-announcements-section,
+.groups-change-request { display: grid; gap: 14px; min-width: 0; }
 
-.groups-announcements-section, .groups-change-request { display: grid; gap: 14px; }
-.groups-announcement-form { display: grid; gap: 10px; padding: 15px; border: 1px solid var(--line); background: var(--soft); }
-.groups-announcement-form textarea, .groups-change-request textarea { min-width: 0; width: 100%; padding: 10px 11px; border: 1px solid var(--line); border-radius: 0; background: var(--paper); color: var(--ink); font: inherit; font-size: 12px; resize: vertical; }
-.groups-check { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; }
-.groups-check input { width: auto; }
-.groups-announcement-list { display: grid; gap: 10px; }
-.groups-announcement { padding: 13px 15px; border-left: 3px solid var(--forest); background: var(--soft); }
-.groups-announcement-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.groups-announcement-head strong { display: block; color: var(--ink); font-size: 14px; }
+/* Labels must be block layouts: without this, the label text and its select/input sit inline. */
+.groups-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.groups-field input,
+.groups-field select,
+.groups-field textarea {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.groups-field input[type="file"] { padding: 8px; }
+.groups-field textarea { min-height: 110px; resize: vertical; }
+.groups-field .field-hint { margin-top: 0; }
+
+.groups-material-share-form,
+.groups-session-form,
+.groups-announcement-form,
+.groups-request-form {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  margin-top: 14px;
+  padding: 15px;
+  border: 1px solid var(--line);
+  background: var(--soft);
+}
+.groups-session-form-head { display: grid; gap: 5px; min-width: 0; }
+.groups-session-form-head strong { color: var(--ink); font-size: 15px; line-height: 1.35; overflow-wrap: anywhere; }
+.groups-session-form-head .field-hint { margin: 0; }
+.groups-session-form-head .field-hint { display: block; }
+.groups-field-label { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.groups-date-range { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; min-width: 0; }
+.groups-date-range > .groups-field { min-width: 0; }
+.groups-summary-section .card-header > div:first-child { display: grid; gap: 6px; min-width: 0; }
+.groups-summary-section .card-header > div:first-child > * { overflow-wrap: anywhere; }
+.groups-material-source-tabs { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; border-bottom: 1px solid var(--line); }
+.groups-material-source-tabs .tab { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 42px; max-width: 100%; padding: 8px 10px; white-space: normal; }
+.groups-material-source-tabs .tab svg { flex: 0 0 auto; }
+.groups-material-scope-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; gap: 10px; min-width: 0; }
+.groups-material-share-form > .primary-button,
+.groups-session-form > .primary-button,
+.groups-announcement-form > .primary-button,
+.groups-request-form > .primary-button { justify-self: start; min-height: 44px; }
+.groups-material-share-form .field-hint,
+.groups-session-form .field-hint { font-size: 11px; line-height: 1.5; }
+
+.groups-announcement-form textarea,
+.groups-change-request textarea,
+.groups-request-form textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 112px;
+  padding: 10px 11px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  resize: vertical;
+}
+.groups-check { display: inline-flex; align-items: center; gap: 8px; min-height: 38px; color: var(--muted); font-size: 11px; }
+.groups-check input { width: auto; min-height: auto; }
+.groups-announcement-list { display: grid; gap: 10px; min-width: 0; }
+.groups-announcement { min-width: 0; padding: 13px 15px; border-left: 3px solid var(--forest); background: var(--soft); }
+.groups-announcement-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-width: 0; }
+.groups-announcement-head strong { display: block; color: var(--ink); font-size: 14px; overflow-wrap: anywhere; }
 .groups-announcement-head small { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; }
-.groups-announcement p { margin: 10px 0 0; color: var(--ink); font-size: 12px; line-height: 1.55; white-space: pre-wrap; }
+.groups-announcement p { margin: 10px 0 0; color: var(--ink); font-size: 12px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
 .groups-change-request { border-top: 3px solid var(--clay); }
-@media (max-width: 700px) { .groups-announcement-head { flex-direction: column; } }
+.groups-page,
+.groups-page > *,
+.groups-page .card,
+.groups-page form,
+.groups-page .row,
+.groups-page .row-main { min-width: 0; }
+.groups-page .card-header { flex-wrap: wrap; gap: 8px 14px; }
+.groups-page .card-header > * { min-width: 0; overflow-wrap: anywhere; }
+.groups-page .groups-field { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; }
+.groups-page .groups-field > input,
+.groups-page .groups-field > select,
+.groups-page .groups-field > textarea { box-sizing: border-box; width: 100%; max-width: 100%; }
+
+@media (max-width: 700px) {
+  .groups-announcement-head { flex-direction: column; }
+}
+
+@media (max-width: 520px) {
+  .groups-material-share-form,
+  .groups-session-form,
+  .groups-announcement-form,
+  .groups-request-form { gap: 11px; padding: 12px; }
+  .groups-material-scope-row { grid-template-columns: minmax(0, 1fr); }
+  .groups-material-share-form > .primary-button,
+  .groups-session-form > .primary-button,
+  .groups-announcement-form > .primary-button,
+  .groups-request-form > .primary-button { width: 100%; justify-content: center; }
+  .groups-material-source-tabs { gap: 4px; }
+  .groups-material-source-tabs .tab { flex: 1 1 auto; min-width: 0; padding: 7px; font-size: 11px; }
+  .groups-page .card-header { align-items: flex-start; }
+  .groups-attendance-section > .card-header,
+  .groups-summary-section > .card-header { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .groups-attendance-section > .card-header > *,
+  .groups-summary-section > .card-header > * { min-width: 0; }
+  .groups-date-range { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .groups-summary-section > .card-header > button { width: 100%; justify-content: center; text-align: center; }
+}
