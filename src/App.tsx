@@ -156,6 +156,7 @@ const CourseOutlinePage = lazy(() => import("./CourseOutlinePage"));
 const SupportPage = lazy(() => import("./SupportPage"));
 const MessagesPage = lazy(() => import("./MessagesPage"));
 const ConstitutionPage = lazy(() => import("./ConstitutionPage"));
+const PenalCodePage = lazy(() => import("./PenalCodePage"));
 
 const nav = [
   { id: "dashboard", label: "Home", icon: LayoutDashboard },
@@ -189,6 +190,7 @@ const nav = [
   { id: "opportunities", label: "Career research", icon: GraduationCap },
   { id: "cases", label: "Case law", icon: BookOpen },
   { id: "constitution", label: "Constitution", icon: BookOpen },
+  { id: "penal-code", label: "Penal Code", icon: Gavel },
   { id: "daily-case", label: "Daily Case", icon: Sparkles },
   { id: "scheduled-cases", label: "Scheduled cases", icon: CalendarDays },
   { id: "counsellor", label: "Counsellor", icon: Users },
@@ -553,7 +555,13 @@ function App() {
       if (!active) return;
       const value = !error && typeof data === "string" ? data.trim() : "";
       setProfile((current) => ({ ...current, username: value }));
-      setUsernamePromptOpen(!value);
+      let promptDismissed = false;
+      try {
+        promptDismissed = window.localStorage.getItem(`username-prompt-dismissed:${userId}`) === "true";
+      } catch {
+        // If storage is unavailable, the prompt remains dismissible for this render.
+      }
+      setUsernamePromptOpen(!value && !promptDismissed);
       setUsernameChecked(true);
     });
     return () => { active = false; };
@@ -981,6 +989,16 @@ function App() {
     setUsernamePromptOpen(false);
     setNotice("Username saved. Messaging is now ready.");
   };
+  const deferUsernamePrompt = () => {
+    if (userId) {
+      try {
+        window.localStorage.setItem(`username-prompt-dismissed:${userId}`, "true");
+      } catch {
+        // Dismiss the prompt even when the browser blocks session storage.
+      }
+    }
+    setUsernamePromptOpen(false);
+  };
   const toggleSavedTheme = () => {
     const next: ThemeId = theme === "dark" ? "light" : "dark";
     void saveProfile({ appearanceTheme: next }).catch((error) => {
@@ -1110,7 +1128,7 @@ function App() {
     <div className="app-shell">
       <RewardWelcomePopup userId={userId} name={profile.displayName || userEmail?.split("@")[0] || "learner"} onNavigate={setPage} />
       {policyRequired && <PolicyAcceptanceModal busy={policyBusy} onAccept={() => void acceptCurrentPolicies()} />}
-      {usernamePromptOpen && usernameChecked && <UsernamePrompt onSave={saveUsername} />}
+      {usernamePromptOpen && usernameChecked && <UsernamePrompt onSave={saveUsername} onLater={deferUsernamePrompt} />}
       <HelpButton floating onNavigate={setPage} />
       <FloatingLawyerAgent historyKey={userEmail ?? "workspace"} currentPage={currentPageLabel} onOpenDictionary={() => setPage("dictionary")} />
       <aside className="sidebar">
@@ -1369,6 +1387,11 @@ function App() {
           {view === "constitution" && (
             <Suspense fallback={<div className="subheading">Opening the Constitution study feature…</div>}>
               <ConstitutionPage />
+            </Suspense>
+          )}
+          {view === "penal-code" && (
+            <Suspense fallback={<div className="subheading">Opening the Penal Code study feature…</div>}>
+              <PenalCodePage />
             </Suspense>
           )}
           {view === "growth" && (
@@ -5236,15 +5259,15 @@ function AssignmentForm({
     </FormShell>
   );
 }
-function UsernamePrompt({ onSave }: { onSave: (username: string) => Promise<void> }) {
+function UsernamePrompt({ onSave, onLater }: { onSave: (username: string) => Promise<void>; onLater: () => void }) {
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     const normalized = value.trim().toLowerCase();
-    if (!/^[a-z0-9._]{3,30}$/.test(normalized)) {
-      setError("Use 3–30 letters, numbers, periods, or underscores.");
+    if (!/^[a-z0-9._]+$/.test(normalized)) {
+      setError("Use letters, numbers, periods, or underscores. Numbers are optional.");
       return;
     }
     setBusy(true); setError("");
@@ -5254,12 +5277,14 @@ function UsernamePrompt({ onSave }: { onSave: (username: string) => Promise<void
   };
   return <div className="username-required-overlay" role="dialog" aria-modal="true" aria-labelledby="username-required-title">
     <form className="card card-pad username-required-card" onSubmit={submit}>
-      <div className="section-label">One last step</div>
+      <button className="username-prompt-close" type="button" onClick={onLater} aria-label="Close username setup"><X size={18} /></button>
+      <div className="section-label">Optional setup</div>
       <h2 id="username-required-title">Choose your username.</h2>
-      <p className="field-hint">Your username identifies you in messages and group discussions. It is separate from your private email address. Letters, numbers, periods, and underscores are allowed.</p>
-      <label className="data-form">Username<input autoFocus required value={value} onChange={(event) => setValue(event.target.value.replace(/\s/g, ""))} placeholder="e.g. makori_13" autoComplete="username" maxLength={30} /></label>
+      <p className="field-hint">You can set this now or later in Messages. It is separate from your private email. Numbers are optional, and there is no character-count limit.</p>
+      <label className="data-form">Username<input required value={value} onChange={(event) => setValue(event.target.value.replace(/\s/g, ""))} placeholder="e.g. emmakori" autoComplete="username" /></label>
       {error && <div className="connection-error" role="alert">{error}</div>}
       <button className="primary-button" type="submit" disabled={busy}>{busy ? "Saving…" : "Save username"}</button>
+      <button className="username-prompt-later" type="button" onClick={onLater}>Later</button>
     </form>
   </div>;
 }

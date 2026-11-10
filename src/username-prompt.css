@@ -1,1 +1,11 @@
-.username-required-overlay{position:fixed;inset:0;z-index:200;display:grid;place-items:center;padding:20px;background:rgba(15,24,22,.62);backdrop-filter:blur(10px)}.username-required-card{width:min(440px,100%);box-shadow:0 24px 70px rgba(0,0,0,.28)}.username-required-card h2{margin:8px 0 10px}.username-required-card>p{margin:0 0 18px}.username-required-card .data-form{display:grid;gap:7px;margin-bottom:12px}.username-required-card .data-form input{width:100%;box-sizing:border-box}.username-required-card .primary-button{width:100%;justify-content:center}@media(max-width:520px){.username-required-overlay{padding:14px;align-items:end}.username-required-card{padding:20px 17px calc(20px + env(safe-area-inset-bottom))}}
+.username-required-overlay{position:fixed;inset:0;z-index:200;display:grid;place-items:center;padding:20px;background:rgba(15,24,22,.48);backdrop-filter:blur(6px)}
+.username-required-card{position:relative;width:min(440px,100%);box-shadow:0 24px 70px rgba(0,0,0,.28)}
+.username-required-card h2{margin:8px 36px 10px 0}
+.username-required-card>p{margin:0 0 18px}
+.username-required-card .data-form{display:grid;gap:7px;margin-bottom:12px}
+.username-required-card .data-form input{width:100%;box-sizing:border-box}
+.username-required-card .primary-button{width:100%;justify-content:center}
+.username-prompt-close{position:absolute;top:14px;right:14px;display:grid;place-items:center;width:40px;height:40px;border:1px solid var(--line,#d9dedb);border-radius:50%;background:transparent;color:inherit;cursor:pointer}
+.username-prompt-close:active,.username-prompt-later:active{transform:scale(.97)}
+.username-prompt-later{display:block;width:100%;min-height:44px;margin-top:8px;border:0;background:transparent;color:inherit;font:inherit;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+@media(max-width:520px){.username-required-overlay{padding:14px;align-items:end}.username-required-card{padding:20px 17px calc(16px + env(safe-area-inset-bottom))}.username-prompt-close{top:10px;right:10px}}

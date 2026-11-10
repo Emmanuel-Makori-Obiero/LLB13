@@ -53,6 +53,14 @@
       "title": "Law dictionary"
     },
     {
+      "path": "/constitution",
+      "title": "Constitution of Kenya"
+    },
+    {
+      "path": "/penal-code",
+      "title": "Penal Code"
+    },
+    {
       "path": "/library/materials/:id",
       "title": "Reading"
     },
