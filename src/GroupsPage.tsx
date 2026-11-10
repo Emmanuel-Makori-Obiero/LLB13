@@ -480,7 +480,7 @@ export default function GroupsPage() {
               <label className="groups-field">Title<input required maxLength={120} value={sessionTitle} onChange={(event) => setSessionTitle(event.target.value)} placeholder="e.g. Read cases on consideration" /></label>
               {sessionKind === "project" && <label className="groups-field">Project label<input maxLength={120} value={projectLabel} onChange={(event) => setProjectLabel(event.target.value)} placeholder="e.g. Presentation rehearsal" /></label>}
               <label className="groups-field">Date<input type="date" required value={sessionDate} onChange={(event) => setSessionDate(event.target.value)} /></label>
-              <label className="groups-field">Check-in cutoff <span className="field-hint">Optional</span><input type="time" value={cutoff} onChange={(event) => setCutoff(event.target.value)} /></label>
+              <label className="groups-field"><span className="groups-field-label">Check-in cutoff <span className="field-hint">Optional</span></span><input type="time" value={cutoff} onChange={(event) => setCutoff(event.target.value)} /></label>
               <button className="primary-button" type="submit" disabled={busy === "session-create" || !online}><Plus size={14} /> {busy === "session-create" ? "Creating…" : "Create session"}</button>
             </form>}
             {!sessions.length ? <p className="empty">No group sessions have been created yet.</p> : <div className="groups-session-list">

@@ -45,6 +45,12 @@
 .groups-session-form-head { display: grid; gap: 5px; min-width: 0; }
 .groups-session-form-head strong { color: var(--ink); font-size: 15px; line-height: 1.35; overflow-wrap: anywhere; }
 .groups-session-form-head .field-hint { margin: 0; }
+.groups-session-form-head .field-hint { display: block; }
+.groups-field-label { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.groups-date-range { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; min-width: 0; }
+.groups-date-range > .groups-field { min-width: 0; }
+.groups-summary-section .card-header > div:first-child { display: grid; gap: 6px; min-width: 0; }
+.groups-summary-section .card-header > div:first-child > * { overflow-wrap: anywhere; }
 .groups-material-source-tabs { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; border-bottom: 1px solid var(--line); }
 .groups-material-source-tabs .tab { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 42px; max-width: 100%; padding: 8px 10px; white-space: normal; }
 .groups-material-source-tabs .tab svg { flex: 0 0 auto; }
@@ -89,6 +95,10 @@
 .groups-page .row-main { min-width: 0; }
 .groups-page .card-header { flex-wrap: wrap; gap: 8px 14px; }
 .groups-page .card-header > * { min-width: 0; overflow-wrap: anywhere; }
+.groups-page .groups-field { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; }
+.groups-page .groups-field > input,
+.groups-page .groups-field > select,
+.groups-page .groups-field > textarea { box-sizing: border-box; width: 100%; max-width: 100%; }
 
 @media (max-width: 700px) {
   .groups-announcement-head { flex-direction: column; }
@@ -107,4 +117,10 @@
   .groups-material-source-tabs { gap: 4px; }
   .groups-material-source-tabs .tab { flex: 1 1 auto; min-width: 0; padding: 7px; font-size: 11px; }
   .groups-page .card-header { align-items: flex-start; }
+  .groups-attendance-section > .card-header,
+  .groups-summary-section > .card-header { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .groups-attendance-section > .card-header > *,
+  .groups-summary-section > .card-header > * { min-width: 0; }
+  .groups-date-range { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .groups-summary-section > .card-header > button { width: 100%; justify-content: center; text-align: center; }
 }

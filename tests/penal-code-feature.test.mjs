@@ -5,6 +5,7 @@ import test from "node:test";
 const source = new URL("../src/data/penal-code-2023.json", import.meta.url);
 const data = JSON.parse(readFileSync(source, "utf8"));
 const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+const groupsPage = readFileSync(new URL("../src/GroupsPage.tsx", import.meta.url), "utf8");
 const reader = readFileSync(new URL("../src/PenalCodePage.tsx", import.meta.url), "utf8");
 const routes = JSON.parse(readFileSync(new URL("../public/manus-routes.json", import.meta.url), "utf8"));
 const groupCss = readFileSync(new URL("../src/groups.css", import.meta.url), "utf8");
@@ -48,8 +49,13 @@ test("Penal Code is a standalone app feature with a direct route", () => {
   assert.match(app, /lazy\(\(\) => import\("\.\/PenalCodePage"\)\)/);
 });
 
-test("Group sharing fields stack and controls have narrow-screen rules", () => {
+test("Group forms and attendance controls stack cleanly on narrow screens", () => {
+  assert.match(groupsPage, /import\s+"\.\/groups\.css"/);
   assert.match(groupCss, /\.groups-field\s*\{[^}]*display:\s*grid/s);
+  assert.match(groupCss, /\.groups-page\s+\.groups-field\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/s);
+  assert.match(groupCss, /\.groups-date-range\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s);
+  assert.match(groupCss, /@media\s*\(max-width:\s*520px\)[\s\S]*?\.groups-date-range\s*\{\s*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+  assert.match(groupCss, /\.groups-summary-section\s*>\s*\.card-header\s*>\s*button\s*\{\s*width:\s*100%/);
   assert.match(groupCss, /\.groups-material-scope-row\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s);
   assert.match(groupCss, /@media\s*\(max-width:\s*520px\)[\s\S]*?\.groups-material-scope-row\s*\{\s*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
   assert.match(penalCss, /@media\s*\(max-width:\s*820px\)/);
