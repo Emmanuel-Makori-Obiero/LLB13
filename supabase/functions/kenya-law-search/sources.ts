@@ -28,7 +28,8 @@ export function officialLawUrl(value: string): string | null {
       || host === "www.bailii.org" || host === "bailii.org"
       || host === "www.supremecourt.uk" || host === "supremecourt.uk"
       || host === "www.judiciary.uk" || host === "judiciary.uk"
-      || host === "caselaw.nationalarchives.gov.uk";
+      || host === "caselaw.nationalarchives.gov.uk"
+      || host === "supremecourt.judiciary.go.ke";
     if (!supported) return null;
     if (host.includes("kenyalaw.org") && !/\/akn\/ke\/judgment\//.test(clean.pathname)) return null;
     if (host.includes("bailii.org") && !/\/(uk|ie|ewca|ewhc|sc|ukhl|uksc)\//i.test(clean.pathname)) return null;

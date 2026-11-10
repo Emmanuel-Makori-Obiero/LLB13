@@ -113,6 +113,7 @@ async function discoverResults(query: string): Promise<{ results: CaseResult[]; 
   ]);
   sources.push({ name: "BAILII", url: `https://www.google.com/search?gbv=1&num=10&q=${encodeURIComponent(`site:bailii.org ${query}`)}` });
   sources.push({ name: "UK judiciary", url: `https://www.google.com/search?gbv=1&num=10&q=${encodeURIComponent(`site:supremecourt.uk OR site:judiciary.uk ${query}`)}` });
+  sources.push({ name: "Kenya Supreme Court", url: `https://www.google.com/search?gbv=1&num=10&q=${encodeURIComponent(`site:supremecourt.judiciary.go.ke ${query}`)}` });
   sources.push({ name: "Kenya Law", url: `https://new.kenyalaw.org/search/?show-advanced-tab=1&nature=Judgment&q=${encodeURIComponent(query)}` });
   const providers: string[] = [];
   const allResults: CaseResult[] = [];
@@ -181,8 +182,17 @@ Deno.serve(async (request) => {
           signal: AbortSignal.timeout(12000),
         });
         if (!judgment.ok) continue;
-        const html = await judgment.text();
-        const text = extractJudgmentText(html);
+        const contentType = judgment.headers.get("content-type")?.toLowerCase() ?? "";
+        let html = "";
+        let text = "";
+        if (contentType.includes("application/pdf") || /\.pdf(?:$|[?#])/i.test(candidate)) {
+          const pdf = await import("npm:pdf-parse@1.1.1");
+          const parsed = await pdf.default(new Uint8Array(await judgment.arrayBuffer()));
+          text = String(parsed.text ?? "").replace(/\s+/g, " ").trim().slice(0, 60000);
+        } else {
+          html = await judgment.text();
+          text = extractJudgmentText(html);
+        }
         if (text.length > bestText.length) { bestText = text; bestHtml = html; }
         if (text.length > 900) break;
       } catch {
