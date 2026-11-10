@@ -105,12 +105,14 @@ async function discoverResults(query: string): Promise<{ results: CaseResult[]; 
   const queryVariants = [
     `site:new.kenyalaw.org/akn/ke/judgment ${query}`,
     `site:kenyalaw.org/akn/ke/judgment ${query}`,
-    `${query} Kenya Law judgment`,
+    `${query} judgment law report`,
   ];
   const sources = queryVariants.flatMap((variant, index) => [
     { name: index === 0 ? "Google" : "Google related", url: `https://www.google.com/search?gbv=1&num=10&q=${encodeURIComponent(variant)}` },
     { name: index === 0 ? "Bing" : "Bing related", url: `https://www.bing.com/search?count=10&q=${encodeURIComponent(variant)}` },
   ]);
+  sources.push({ name: "BAILII", url: `https://www.google.com/search?gbv=1&num=10&q=${encodeURIComponent(`site:bailii.org ${query}`)}` });
+  sources.push({ name: "UK judiciary", url: `https://www.google.com/search?gbv=1&num=10&q=${encodeURIComponent(`site:supremecourt.uk OR site:judiciary.uk ${query}`)}` });
   sources.push({ name: "Kenya Law", url: `https://new.kenyalaw.org/search/?show-advanced-tab=1&nature=Judgment&q=${encodeURIComponent(query)}` });
   const providers: string[] = [];
   const allResults: CaseResult[] = [];
@@ -158,14 +160,15 @@ Deno.serve(async (request) => {
     return json({ error: "Send a JSON body containing a query." }, 400);
   }
   const requestedUrl = body.url ? officialLawUrl(String(body.url)) : null;
-  if (body.url && !requestedUrl) return json({ error: "Only official Kenya Law judgment links can be opened." }, 400);
+  if (body.url && !requestedUrl) return json({ error: "Only supported legal judgment repository links can be opened." }, 400);
   if (requestedUrl) {
-    const candidates = [
+    const isKenya = /kenyalaw\.org/i.test(new URL(requestedUrl).hostname);
+    const candidates = isKenya ? [
       requestedUrl,
       `${requestedUrl.replace(/\/$/, "")}/source`,
       requestedUrl.replace("https://kenyalaw.org/", "https://new.kenyalaw.org/"),
       `${requestedUrl.replace(/\/$/, "")}/source`.replace("https://kenyalaw.org/", "https://new.kenyalaw.org/"),
-    ];
+    ] : [requestedUrl];
     let bestText = "";
     let bestHtml = "";
     for (const candidate of candidates) {

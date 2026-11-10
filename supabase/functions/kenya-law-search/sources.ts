@@ -23,8 +23,15 @@ export function officialLawUrl(value: string): string | null {
     const candidate = url.searchParams.get("q") || url.searchParams.get("url") || url.searchParams.get("uddg") || url.href;
     const clean = new URL(candidate, url.origin);
     if (clean.protocol !== "https:" && clean.protocol !== "http:") return null;
-    if (clean.hostname !== "new.kenyalaw.org" && clean.hostname !== "kenyalaw.org") return null;
-    if (!/\/akn\/ke\/judgment\//.test(clean.pathname)) return null;
+    const host = clean.hostname.toLowerCase();
+    const supported = host === "new.kenyalaw.org" || host === "kenyalaw.org"
+      || host === "www.bailii.org" || host === "bailii.org"
+      || host === "www.supremecourt.uk" || host === "supremecourt.uk"
+      || host === "www.judiciary.uk" || host === "judiciary.uk"
+      || host === "caselaw.nationalarchives.gov.uk";
+    if (!supported) return null;
+    if (host.includes("kenyalaw.org") && !/\/akn\/ke\/judgment\//.test(clean.pathname)) return null;
+    if (host.includes("bailii.org") && !/\/(uk|ie|ewca|ewhc|sc|ukhl|uksc)\//i.test(clean.pathname)) return null;
     clean.protocol = "https:";
     return clean.toString();
   } catch {

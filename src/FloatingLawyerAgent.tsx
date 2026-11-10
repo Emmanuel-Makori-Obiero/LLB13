@@ -233,7 +233,7 @@ export default function FloatingLawyerAgent({ currentPage, onOpenDictionary, onN
       try {
         const results = await searchKenyaLaw(caseSearchQuery(question));
         if (!results.length) {
-          updateMessages([...next, { role: "assistant", text: "I could not find an official Kenya Law judgment link for that query. Try the case name, citation, statute, or legal issue with fewer words." }]);
+          updateMessages([...next, { role: "assistant", text: "I could not find a supported judgment source for that query. Try the case name, citation, statute, or legal issue with fewer words." }]);
           return;
         }
         const selected = results[0];
