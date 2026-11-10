@@ -4,7 +4,7 @@ import { askAI, uploadMaterial, type AIMessage, type AIResult } from "./lib/ai";
 import { analyzeImage, generateImage } from "./lib/cloudMedia";
 import { downloadPdf, downloadWord } from "./export";
 import { findLegalTerm, searchLegalDictionary } from "./legalDictionary";
-import { searchKenyaCauseLists, searchKenyaLaw } from "./lib/kenyaLaw";
+import { fetchKenyaLawCase, searchKenyaCauseLists, searchKenyaLaw } from "./lib/kenyaLaw";
 import { Markdown } from "./Markdown";
 import StorytellButton from "./StorytellButton";
 import "./floating-lawyer.css";
@@ -217,16 +217,35 @@ export default function FloatingLawyerAgent({ currentPage, onOpenDictionary, onN
       }
       return;
     }
+    const wantsCaseAnalysis = /\b(case|judgment|judgments|precedent|court decision|decision)\b/i.test(question)
+      && /\b(explain|analyse|analyze|brief|summari[sz]e|issue|ruling|holding|application|conclusion|facts|principle|what happened|tell me about)\b/i.test(question);
     const wantsCaseSearch = /\b(find|search|look up|locate|give me|show me|provide|suggest|name|example of)\b[\s\S]{0,100}\b(case|judgment|kenya law|citation|precedent|authority)\b/i.test(question)
       || /\b(case law|case|cases|judgment|judgments|precedent|precedents|court decision|court decisions)\b[\s\S]{0,80}\b(on|about|for|related to|supporting|illustrating)\b/i.test(question);
-    if (wantsCaseSearch) {
+    if (wantsCaseAnalysis || wantsCaseSearch) {
       setBusy(true);
       try {
         const results = await searchKenyaLaw(question);
-        const text = results.length
-          ? `**Official Kenya Law results**\n\n${results.map((result) => `- [${result.title}](${result.url})${result.citation ? ` — ${result.citation}` : ""}`).join("\n")}\n\nThese links were found from public Kenya Law case pages. Open the specific judgment to verify the full text and current status.`
-          : "I could not find an official Kenya Law judgment link for that query. Try the case name, citation, statute, or legal issue with fewer words.";
-        updateMessages([...next, { role: "assistant", text }]);
+        if (!results.length) {
+          updateMessages([...next, { role: "assistant", text: "I could not find an official Kenya Law judgment link for that query. Try the case name, citation, statute, or legal issue with fewer words." }]);
+          return;
+        }
+        const selected = results[0];
+        if (wantsCaseAnalysis) {
+          try {
+            const document = await fetchKenyaLawCase(selected.url);
+            const result = await askAI({
+              feature: "case_brief",
+              mode: "general",
+              messages: [{ role: "user", content: `Prepare a source-grounded Kenyan case brief from the official judgment text below. Use exactly these headings: **Case and Court**, **Material Facts**, **Issue(s)**, **Parties' Positions**, **Ruling / Holding**, **Court's Reasoning**, **Application**, and **Conclusion**. Explain the legal rule in plain language. In Application, show how the holding applies to the legal problem the student asked about; clearly label any hypothetical example as hypothetical. Do not invent or fill gaps: if the judgment text does not establish a fact, issue, holding, citation, or current status, say that it is not clear from the retrieved text. Distinguish the court's holding from commentary. End with **Source checked** and the official link. This is study support, not legal advice. Student question: ${question}\n\nOfficial Kenya Law judgment title: ${document.title}\nOfficial URL: ${document.url}\n\nJUDGMENT TEXT:\n${document.text.slice(0, 50000)}` }],
+            });
+            updateMessages([...next, { role: "assistant", text: `${result.answer.trim()}\n\n**Source checked:** [Open the official Kenya Law judgment](${document.url})\n\n*I used the retrieved official judgment text for this answer. Check the live judgment for later appeals, reviews, or changes.*`, result }]);
+          } catch {
+            updateMessages([...next, { role: "assistant", text: `I found the official judgment, but I could not retrieve readable text for a safe structured analysis. Please open it directly and verify the current position: [${selected.title}](${selected.url})${selected.citation ? ` — ${selected.citation}` : ""}` }]);
+          }
+        } else {
+          const text = `**Official Kenya Law results**\n\n${results.map((result) => `- [${result.title}](${result.url})${result.citation ? ` — ${result.citation}` : ""}`).join("\n")}\n\nThese links were found from public Kenya Law case pages. Open the specific judgment to verify the full text and current status.`;
+          updateMessages([...next, { role: "assistant", text }]);
+        }
       } catch (error) {
         updateMessages([...next, { role: "assistant", text: error instanceof Error ? error.message : "The free Kenya Law search is unavailable right now." }]);
       } finally {
