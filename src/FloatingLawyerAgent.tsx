@@ -4,7 +4,7 @@ import { askAI, uploadMaterial, type AIMessage, type AIResult } from "./lib/ai";
 import { analyzeImage, generateImage } from "./lib/cloudMedia";
 import { downloadPdf, downloadWord } from "./export";
 import { findLegalTerm, searchLegalDictionary } from "./legalDictionary";
-import { fetchKenyaLawCase, searchKenyaCauseLists, searchKenyaLaw } from "./lib/kenyaLaw";
+import { fetchKenyaLawCase, normalizeCaseQuery, searchKenyaCauseLists, searchKenyaLaw } from "./lib/kenyaLaw";
 import { Markdown } from "./Markdown";
 import StorytellButton from "./StorytellButton";
 import "./floating-lawyer.css";
@@ -34,6 +34,13 @@ function localDate(date = new Date()) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+function caseSearchQuery(value: string) {
+  const compact = value.replace(/\s+/g, " ").trim();
+  const name = compact.match(/\b([A-Z][A-Z0-9&.'-]{1,}\s+v(?:s)?\.?\s+[A-Z][A-Z0-9&.'-]{1,}(?:\s*&\s*\d+\s+others?)?)/i)?.[1];
+  const petition = compact.match(/\bPetition\s+[A-Z]?\d+\s+of\s+\d{4}\b/i)?.[0];
+  const neutralCitation = compact.match(/\[\d{4}\]\s*KESC\s*\d+(?:\s*\(KLR\))?/i)?.[0];
+  return normalizeCaseQuery([name, petition, neutralCitation].filter(Boolean).join(" ") || compact);
 }
 function speakGuide(value: string) {
   if (!("speechSynthesis" in window)) return;
@@ -224,7 +231,7 @@ export default function FloatingLawyerAgent({ currentPage, onOpenDictionary, onN
     if (wantsCaseAnalysis || wantsCaseSearch) {
       setBusy(true);
       try {
-        const results = await searchKenyaLaw(question);
+        const results = await searchKenyaLaw(caseSearchQuery(question));
         if (!results.length) {
           updateMessages([...next, { role: "assistant", text: "I could not find an official Kenya Law judgment link for that query. Try the case name, citation, statute, or legal issue with fewer words." }]);
           return;
