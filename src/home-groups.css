@@ -163,8 +163,14 @@
 .home-welcome-actions{gap:18px;margin-top:18px}
 .home-primary{border-radius:2px;background:var(--forest);color:var(--paper);font-size:11px;padding:10px 12px}
 .home-primary:hover{background:var(--oxblood)}
+.home-help-link{display:inline-flex;align-items:center;gap:8px;padding:7px 0;border:0;border-bottom:1px solid var(--forest);background:transparent;color:var(--forest);font:inherit;text-align:left;cursor:pointer}
+.home-help-link:hover{color:var(--oxblood);border-color:var(--oxblood)}
+.home-help-link>svg{flex:0 0 auto}
+.home-help-link span{display:grid;gap:2px}
+.home-help-link strong{font-size:11px;line-height:1.2}
+.home-help-link small{color:var(--muted);font-size:10px;line-height:1.2}
 .home-level-badge{padding:0 14px;border:0;border-left:1px solid var(--line);border-radius:0;background:transparent;color:var(--muted);font-size:10px;font-weight:600}
-@media(max-width:700px){.home-welcome{padding:14px 0 16px;border-width:0 0 1px 0}.home-level-badge{padding:0;border-left:0}.home-welcome-actions{gap:10px}}
+@media(max-width:700px){.home-welcome{padding:14px 0 16px;border-width:0 0 1px 0}.home-level-badge{padding:0;border-left:0}.home-welcome-actions{gap:10px}.home-help-link{width:100%;padding:9px 0}}
 
 /* Consistent dashboard surfaces: simple rules, no glossy AI-card treatment. */
 .home-dashboard{gap:28px}

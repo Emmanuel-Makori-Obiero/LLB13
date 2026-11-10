@@ -1,4 +1,4 @@
-import { ArrowRight, BookOpen, CalendarDays, CheckSquare, FileText, Gavel, Library, MessageCircle, Sparkles, Users } from "lucide-react";
+import { ArrowRight, BookOpen, CalendarDays, CheckSquare, FileText, Gavel, HelpCircle, Library, MessageCircle, Sparkles, Users } from "lucide-react";
 import type { Assignment, Lesson, Todo } from "./data/types";
 import LearningLoop from "./LearningLoop";
 import ClubPosterCarousel from "./ClubPosterCarousel";
@@ -31,8 +31,9 @@ export default function Home({ name, learnerLevel, learningPreference, lessons, 
   const greet = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   const level = levelCopy[learnerLevel] ?? { label: "Law student", focus: "Your law learning space", next: "Choose your study level to tune your library and practice recommendations." };
   const preferenceLabel = learningPreference === "guided" ? "Step-by-step support" : learningPreference === "challenge" ? "Challenge mode" : "Balanced support";
+  const openOrientationGuide = () => window.dispatchEvent(new CustomEvent("g13:open-lawyer-agent", { detail: { prompt: "I am new to Law Hub. Please be my platform orientation guide. Start by asking what I want to do first, then guide me one small step at a time using the exact page and button names. Explain what each major area is for, but do not give me a long list." } }));
   return <div className="home-dashboard">
-    <section className="home-welcome"><div className="home-welcome-copy"><span className="home-kicker">LAW HUB / STUDY DASHBOARD</span><h1>{greet}, {name}.</h1><p>{level.next}</p><div className="home-welcome-actions"><button className="home-primary" onClick={() => setPage("library")}><Library size={16} /> Open library <ArrowRight size={15} /></button><span className="home-level-badge">Level: {level.label}</span><span className="home-level-badge">Support: {preferenceLabel}</span></div></div></section>
+    <section className="home-welcome"><div className="home-welcome-copy"><span className="home-kicker">LAW HUB / STUDY DASHBOARD</span><h1>{greet}, {name}.</h1><p>{level.next}</p><div className="home-welcome-actions"><button className="home-primary" onClick={() => setPage("library")}><Library size={16} /> Open library <ArrowRight size={15} /></button><button type="button" className="home-help-link" onClick={openOrientationGuide}><HelpCircle size={15} /><span><strong>New to Law Hub?</strong><small>Press here for step-by-step help</small></span></button><span className="home-level-badge">Level: {level.label}</span><span className="home-level-badge">Support: {preferenceLabel}</span></div></div></section>
     {unreadMessages > 0 && <button type="button" className="home-unread-message" onClick={() => setPage("messages")} aria-label={`Open ${unreadMessages} unread message${unreadMessages === 1 ? "" : "s"}`}><span className="home-unread-icon"><MessageCircle size={18} /></span><span><strong>{unreadMessages} unread message{unreadMessages === 1 ? "" : "s"}</strong><small>Someone sent you a private message. Open Messages to read it.</small></span><ArrowRight size={18} /></button>}
     <ClubPosterCarousel />
     <section className="home-feature-index" aria-labelledby="home-feature-index-title">
