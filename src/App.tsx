@@ -1130,7 +1130,7 @@ function App() {
       {policyRequired && <PolicyAcceptanceModal busy={policyBusy} onAccept={() => void acceptCurrentPolicies()} />}
       {usernamePromptOpen && usernameChecked && <UsernamePrompt onSave={saveUsername} onLater={deferUsernamePrompt} />}
       <HelpButton floating onNavigate={setPage} />
-      <FloatingLawyerAgent historyKey={userEmail ?? "workspace"} currentPage={currentPageLabel} onOpenDictionary={() => setPage("dictionary")} />
+      <FloatingLawyerAgent historyKey={userEmail ?? "workspace"} currentPage={currentPageLabel} onNavigate={setPage} onOpenDictionary={() => setPage("dictionary")} />
       <aside className="sidebar">
         <Brand />
         <nav>

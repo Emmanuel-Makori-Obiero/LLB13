@@ -44,6 +44,10 @@
 .floating-lawyer-message.assistant { margin-right: 15px; border: 1px solid var(--line); background: #fff; }
 .floating-lawyer-message.assistant .md>:first-child { margin-top: 0; }
 .floating-lawyer-message.assistant .md>:last-child { margin-bottom: 0; }
+.floating-lawyer-message-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.floating-lawyer-message-actions button { display: inline-flex; align-items: center; gap: 5px; padding: 7px 9px; border: 1px solid var(--line); background: var(--paper); color: var(--forest); font: inherit; font-size: 10px; font-weight: 700; cursor: pointer; }
+.floating-lawyer-message-actions button:hover { border-color: var(--forest); background: var(--moss); }
+.floating-lawyer-message-actions .floating-lawyer-action { border-color: var(--forest); background: var(--forest); color: #fff; }
 .floating-lawyer-thinking { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 10px; }
 .floating-lawyer-export { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; padding: 7px 10px; border-top: 1px solid var(--line); background: var(--moss); color: var(--forest); font-size: 9px; }
 .floating-lawyer-export span { display: inline-flex; align-items: center; gap: 4px; margin-right: auto; font-weight: 700; }
