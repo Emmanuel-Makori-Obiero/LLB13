@@ -47,6 +47,7 @@ import {
   Plus,
   Search,
   ScanLine,
+  ScrollText,
   Settings,
   ShieldCheck,
   SkipBack,
@@ -156,6 +157,7 @@ const CourseOutlinePage = lazy(() => import("./CourseOutlinePage"));
 const SupportPage = lazy(() => import("./SupportPage"));
 const MessagesPage = lazy(() => import("./MessagesPage"));
 const ConstitutionPage = lazy(() => import("./ConstitutionPage"));
+const ActsPage = lazy(() => import("./ActsPage"));
 const PenalCodePage = lazy(() => import("./PenalCodePage"));
 
 const nav = [
@@ -190,6 +192,7 @@ const nav = [
   { id: "opportunities", label: "Career research", icon: GraduationCap },
   { id: "cases", label: "Case law", icon: BookOpen },
   { id: "constitution", label: "Constitution", icon: BookOpen },
+  { id: "acts", label: "Acts", icon: ScrollText },
   { id: "penal-code", label: "Penal Code", icon: Gavel },
   { id: "daily-case", label: "Daily Case", icon: Sparkles },
   { id: "scheduled-cases", label: "Scheduled cases", icon: CalendarDays },
@@ -1387,6 +1390,11 @@ function App() {
           {view === "constitution" && (
             <Suspense fallback={<div className="subheading">Opening the Constitution study feature…</div>}>
               <ConstitutionPage />
+            </Suspense>
+          )}
+          {view === "acts" && (
+            <Suspense fallback={<div className="subheading">Opening the Acts library…</div>}>
+              <ActsPage isAdmin={isAdmin} />
             </Suspense>
           )}
           {view === "penal-code" && (
