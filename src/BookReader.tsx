@@ -49,12 +49,21 @@ function BrowserAudiobook({ title, text, disabledReason, loading = false }: { ti
 
   const cleanText = text.replace(/\s+/g, " ").trim().slice(0, 50000);
   const speakNext = () => {
-    const chunk = cleanText.slice(indexRef.current, indexRef.current + 900).trim();
+    const extraSlow = rate < 0.8;
+    const chunkSize = extraSlow ? 220 : 900;
+    const chunk = cleanText.slice(indexRef.current, indexRef.current + chunkSize).trim();
     if (!chunk) { setPlaying(false); setPaused(false); indexRef.current = 0; return; }
     const utterance = new SpeechSynthesisUtterance(chunk);
     utterance.lang = document.documentElement.lang || "en-GB";
-    utterance.rate = rate;
-    utterance.onend = () => { indexRef.current += chunk.length; if (playingRef.current && !window.speechSynthesis.paused) speakNext(); };
+    // Several Android voices clamp values below 0.8×. For those values, use the
+    // slowest reliable voice rate and add real pauses between short phrases.
+    utterance.rate = Math.max(0.8, rate);
+    utterance.onend = () => {
+      indexRef.current += chunk.length;
+      if (!playingRef.current || window.speechSynthesis.paused) return;
+      const pauseMs = extraSlow ? Math.round((0.8 / rate - 1) * 420) : 0;
+      window.setTimeout(() => { if (playingRef.current && !window.speechSynthesis.paused) speakNext(); }, pauseMs);
+    };
     utterance.onerror = () => { playingRef.current = false; setPlaying(false); setPaused(false); };
     window.speechSynthesis.speak(utterance);
   };
@@ -75,7 +84,7 @@ function BrowserAudiobook({ title, text, disabledReason, loading = false }: { ti
   const resume = () => { window.speechSynthesis.resume(); setPaused(false); };
   const stop = () => { window.speechSynthesis.cancel(); playingRef.current = false; setPlaying(false); setPaused(false); indexRef.current = 0; };
 
-  return <div className="browser-audiobook" aria-label={`Audiobook controls for ${title}`}><div className="browser-audiobook-head"><div><span className="section-label">Audiobook mode</span><strong>Listen with your browser voice</strong></div><BookOpen size={16} /></div><p>{disabledReason || "Uses your phone or computer’s built-in speech voice. No AI audio or tokens are used. It can continue while you switch apps; use the media controls or Stop to end it."}</p><div className="browser-audiobook-controls"><button className="secondary-button" type="button" onClick={playing ? (paused ? resume : pause) : start} disabled={!cleanText || loading}>{loading ? <><Loader2 size={13} className="browser-audiobook-spin" /> Preparing audio…</> : playing ? (paused ? <><Play size={13} /> Resume</> : <><Pause size={13} /> Pause</>) : <><Play size={13} /> Play audiobook</>}</button><button className="secondary-button" type="button" onClick={stop} disabled={!playing}><Square size={12} /> Stop</button><label className="browser-audiobook-speed">Speed <input aria-label="Audiobook speed" type="range" min="0.2" max="1.5" step="0.1" value={rate} onChange={(event) => setRate(Number(event.target.value))} /><strong>{rate.toFixed(1)}×</strong></label></div></div>;
+  return <div className="browser-audiobook" aria-label={`Audiobook controls for ${title}`}><div className="browser-audiobook-head"><div><span className="section-label">Audiobook mode</span><strong>Listen with your browser voice</strong></div><BookOpen size={16} /></div><p>{disabledReason || (rate < 0.8 ? "Extra-slow mode adds pauses between short phrases because some Android voices ignore rates below 0.8×." : "Uses your phone or computer’s built-in speech voice. No AI audio or tokens are used. It can continue while you switch apps; use the media controls or Stop to end it.")}</p><div className="browser-audiobook-controls"><button className="secondary-button" type="button" onClick={playing ? (paused ? resume : pause) : start} disabled={!cleanText || loading}>{loading ? <><Loader2 size={13} className="browser-audiobook-spin" /> Preparing audio…</> : playing ? (paused ? <><Play size={13} /> Resume</> : <><Pause size={13} /> Pause</>) : <><Play size={13} /> Play audiobook</>}</button><button className="secondary-button" type="button" onClick={stop} disabled={!playing}><Square size={12} /> Stop</button><label className="browser-audiobook-speed">Speed <input aria-label="Audiobook speed" type="range" min="0.2" max="1.5" step="0.1" value={rate} onChange={(event) => setRate(Number(event.target.value))} /><strong>{rate.toFixed(1)}×</strong></label></div></div>;
 }
 
 export default function BookReader({ material, onClose }: Props) {
