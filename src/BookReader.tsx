@@ -1,9 +1,9 @@
 import { makeId } from "./lib/uuid";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent } from "react";
-import { ArrowLeft, BookOpen, Check, Copy, Highlighter, List, Maximize2, Minimize2, Minus, Pause, Play, Plus, Send, Sparkles, Square, Type, X } from "lucide-react";
+import { ArrowLeft, BookOpen, Check, Copy, Highlighter, List, Loader2, Maximize2, Minimize2, Minus, Pause, Play, Plus, Send, Sparkles, Square, Type, X } from "lucide-react";
 import { materialSourceUrl, readerUrl } from "./links";
 import { isDocxMaterial, isPdfMaterial, isTextMaterial } from "./lib/material-reader";
-import { askAI, docxToHtml, type AIResult } from "./lib/ai";
+import { askAI, docxToHtml, extractText, type AIResult } from "./lib/ai";
 import { Markdown } from "./Markdown";
 import StorytellButton from "./StorytellButton";
 import type { Material } from "./data/types";
@@ -28,7 +28,7 @@ const keyFor = (id: string) => `llb13-highlights:${id}`;
 const readerStyleKeyFor = (id: string) => `llb13-reader-style:${id}`;
 const readerPositionKeyFor = (id: string) => `llb13-reader-position:${id}`;
 
-function BrowserAudiobook({ title, text, disabledReason }: { title: string; text: string; disabledReason?: string }) {
+function BrowserAudiobook({ title, text, disabledReason, loading = false }: { title: string; text: string; disabledReason?: string; loading?: boolean }) {
   const [playing, setPlaying] = useState(false);
   const [paused, setPaused] = useState(false);
   const [rate, setRate] = useState(1);
@@ -75,7 +75,7 @@ function BrowserAudiobook({ title, text, disabledReason }: { title: string; text
   const resume = () => { window.speechSynthesis.resume(); setPaused(false); };
   const stop = () => { window.speechSynthesis.cancel(); playingRef.current = false; setPlaying(false); setPaused(false); indexRef.current = 0; };
 
-  return <div className="browser-audiobook" aria-label={`Audiobook controls for ${title}`}><div className="browser-audiobook-head"><div><span className="section-label">Audiobook mode</span><strong>Listen with your browser voice</strong></div><BookOpen size={16} /></div><p>{disabledReason || "Uses your phone or computer’s built-in speech voice. No AI audio or tokens are used. It can continue while you switch apps; use the media controls or Stop to end it."}</p><div className="browser-audiobook-controls"><button className="secondary-button" type="button" onClick={playing ? (paused ? resume : pause) : start} disabled={!cleanText}>{playing ? (paused ? <><Play size={13} /> Resume</> : <><Pause size={13} /> Pause</>) : <><Play size={13} /> Play audiobook</>}</button><button className="secondary-button" type="button" onClick={stop} disabled={!playing}><Square size={12} /> Stop</button><label>Speed <select value={rate} onChange={(event) => setRate(Number(event.target.value))}><option value={0.8}>0.8×</option><option value={1}>1×</option><option value={1.2}>1.2×</option><option value={1.5}>1.5×</option></select></label></div></div>;
+  return <div className="browser-audiobook" aria-label={`Audiobook controls for ${title}`}><div className="browser-audiobook-head"><div><span className="section-label">Audiobook mode</span><strong>Listen with your browser voice</strong></div><BookOpen size={16} /></div><p>{disabledReason || "Uses your phone or computer’s built-in speech voice. No AI audio or tokens are used. It can continue while you switch apps; use the media controls or Stop to end it."}</p><div className="browser-audiobook-controls"><button className="secondary-button" type="button" onClick={playing ? (paused ? resume : pause) : start} disabled={!cleanText || loading}>{loading ? <><Loader2 size={13} className="browser-audiobook-spin" /> Preparing audio…</> : playing ? (paused ? <><Play size={13} /> Resume</> : <><Pause size={13} /> Pause</>) : <><Play size={13} /> Play audiobook</>}</button><button className="secondary-button" type="button" onClick={stop} disabled={!playing}><Square size={12} /> Stop</button><label>Speed <select value={rate} onChange={(event) => setRate(Number(event.target.value))}><option value={0.8}>0.8×</option><option value={1}>1×</option><option value={1.2}>1.2×</option><option value={1.5}>1.5×</option></select></label></div></div>;
 }
 
 export default function BookReader({ material, onClose }: Props) {
@@ -99,6 +99,10 @@ export default function BookReader({ material, onClose }: Props) {
   const [docxHtml, setDocxHtml] = useState("");
   const [textContent, setTextContent] = useState("");
   const [docxLoading, setDocxLoading] = useState(false);
+  const [pdfText, setPdfText] = useState("");
+  const [pdfTextLoading, setPdfTextLoading] = useState(false);
+  const [pdfTextError, setPdfTextError] = useState("");
+  const [pdfTextStatus, setPdfTextStatus] = useState("");
   const [readerStyle, setReaderStyle] = useState<"classic" | "notebook">(() => {
     try { return localStorage.getItem(readerStyleKeyFor(material.id)) === "notebook" ? "notebook" : "classic"; } catch { return "classic"; }
   });
@@ -177,6 +181,33 @@ export default function BookReader({ material, onClose }: Props) {
   }, [isText, sourceUrl]);
 
   useEffect(() => {
+    if (!isPdfMaterial(material) || !sourceUrl) return;
+    let active = true;
+    setPdfText("");
+    setPdfTextError("");
+    setPdfTextStatus("Opening PDF text layer…");
+    setPdfTextLoading(true);
+    void (async () => {
+      try {
+        const response = await fetch(sourceUrl);
+        if (!response.ok) throw new Error(`Could not load the PDF (${response.status}).`);
+        const blob = await response.blob();
+        const file = new File([blob], `${material.title.replace(/[^a-z0-9]+/gi, "-") || "library-book"}.pdf`, { type: "application/pdf" });
+        const extracted = (await extractText(file, (completed, total) => {
+          if (active) setPdfTextStatus(`Reading PDF pages ${completed} of ${total} for audiobook…`);
+        })).trim();
+        if (!extracted) throw new Error("No readable text was found in this PDF.");
+        if (active) { setPdfText(extracted); setPdfTextStatus(`Audiobook ready · ${extracted.length.toLocaleString()} characters`); }
+      } catch (cause) {
+        if (active) { setPdfTextError(cause instanceof Error ? cause.message : "The PDF text could not be prepared."); setPdfTextStatus(""); }
+      } finally {
+        if (active) setPdfTextLoading(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [material, sourceUrl]);
+
+  useEffect(() => {
     if (!docxHtml || !docxReaderRef.current || savedPosition <= 0) return;
     requestAnimationFrame(() => { if (docxReaderRef.current) docxReaderRef.current.scrollTop = savedPosition; });
   }, [docxHtml, savedPosition]);
@@ -250,8 +281,8 @@ export default function BookReader({ material, onClose }: Props) {
   };
 
   const hasPassage = Boolean(selectedText || activeHighlight || customPrompt.trim());
-  const audiobookText = docxHtml ? new DOMParser().parseFromString(docxHtml, "text/html").body.textContent || "" : textContent;
   const isPdf = isPdfMaterial(material);
+  const audiobookText = docxHtml ? new DOMParser().parseFromString(docxHtml, "text/html").body.textContent || "" : isPdf ? pdfText : textContent;
   const previewFrame = frame ? `${frame.split("#")[0]}#page=1&zoom=${zoom}` : "";
   const effectiveReaderHeight = mobileReading ? Math.max(300, viewportHeight - 138) : readerHeight;
   const resultName = `${material.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "book-explanation"}-plain-language`;
@@ -281,7 +312,7 @@ export default function BookReader({ material, onClose }: Props) {
           </button>
           {sourceUrl && <a className="primary-button reader-source-link" href={sourceUrl} target="_blank" rel="noreferrer">Open source</a>}
         </div>
-        <BrowserAudiobook title={material.title} text={audiobookText || selectedText} disabledReason={audiobookText || selectedText ? undefined : isPdf ? "This PDF has no readable text loaded yet. Select text from the PDF or scan it for selectable text first." : "This book has no readable text loaded yet."} />
+        <BrowserAudiobook title={material.title} text={audiobookText || selectedText} loading={pdfTextLoading && !audiobookText && !selectedText} disabledReason={audiobookText || selectedText ? undefined : pdfTextError || (isPdf ? (pdfTextStatus || "Preparing this PDF for audiobook playback…") : "This book has no readable text loaded yet.")} />
       </div>
 
       <div className="book-reader-grid">

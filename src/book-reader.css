@@ -186,6 +186,8 @@
 .browser-audiobook-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
 .browser-audiobook-controls label { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 11px; }
 .browser-audiobook-controls select { padding: 5px 7px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); }
+.browser-audiobook-spin { animation: browser-audiobook-spin .9s linear infinite; }
+@keyframes browser-audiobook-spin { to { transform: rotate(360deg); } }
 .book-reader .reader-toolbar > .browser-audiobook { flex: 1 1 100%; order: 5; margin: 0; }
 .book-reader .reader-toolbar > .browser-audiobook .browser-audiobook-head { display: flex; }
 .book-reader .reader-toolbar > .browser-audiobook > p { display: none; }
