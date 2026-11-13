@@ -35,13 +35,24 @@ function BrowserAudiobook({ title, text, disabledReason }: { title: string; text
   const playingRef = useRef(false);
   const indexRef = useRef(0);
 
-  useEffect(() => () => { window.speechSynthesis?.cancel(); }, []);
+  useEffect(() => {
+    const keepSpeechAlive = () => {
+      if (playingRef.current && !paused) {
+        window.setTimeout(() => {
+          if (playingRef.current && !window.speechSynthesis.paused) window.speechSynthesis.resume();
+        }, 180);
+      }
+    };
+    document.addEventListener("visibilitychange", keepSpeechAlive);
+    return () => document.removeEventListener("visibilitychange", keepSpeechAlive);
+  }, [paused]);
 
   const cleanText = text.replace(/\s+/g, " ").trim().slice(0, 50000);
   const speakNext = () => {
     const chunk = cleanText.slice(indexRef.current, indexRef.current + 900).trim();
     if (!chunk) { setPlaying(false); setPaused(false); indexRef.current = 0; return; }
     const utterance = new SpeechSynthesisUtterance(chunk);
+    utterance.lang = document.documentElement.lang || "en-GB";
     utterance.rate = rate;
     utterance.onend = () => { indexRef.current += chunk.length; if (playingRef.current && !window.speechSynthesis.paused) speakNext(); };
     utterance.onerror = () => { playingRef.current = false; setPlaying(false); setPaused(false); };
@@ -52,13 +63,19 @@ function BrowserAudiobook({ title, text, disabledReason }: { title: string; text
     window.speechSynthesis.cancel();
     indexRef.current = 0;
     playingRef.current = true; setPlaying(true); setPaused(false);
+    if ("mediaSession" in navigator) {
+      navigator.mediaSession.metadata = new MediaMetadata({ title, artist: "Law Hub audiobook", album: "Library" });
+      navigator.mediaSession.setActionHandler("play", resume);
+      navigator.mediaSession.setActionHandler("pause", pause);
+      navigator.mediaSession.setActionHandler("stop", stop);
+    }
     window.setTimeout(speakNext, 30);
   };
   const pause = () => { window.speechSynthesis.pause(); setPaused(true); };
   const resume = () => { window.speechSynthesis.resume(); setPaused(false); };
   const stop = () => { window.speechSynthesis.cancel(); playingRef.current = false; setPlaying(false); setPaused(false); indexRef.current = 0; };
 
-  return <div className="browser-audiobook" aria-label={`Audiobook controls for ${title}`}><div className="browser-audiobook-head"><div><span className="section-label">Audiobook mode</span><strong>Listen with your browser voice</strong></div><BookOpen size={16} /></div><p>{disabledReason || "Uses your phone or computer’s built-in speech voice. No AI audio or tokens are used."}</p><div className="browser-audiobook-controls"><button className="secondary-button" type="button" onClick={playing ? (paused ? resume : pause) : start} disabled={!cleanText}>{playing ? (paused ? <><Play size={13} /> Resume</> : <><Pause size={13} /> Pause</>) : <><Play size={13} /> Play audiobook</>}</button><button className="secondary-button" type="button" onClick={stop} disabled={!playing}><Square size={12} /> Stop</button><label>Speed <select value={rate} onChange={(event) => setRate(Number(event.target.value))}><option value={0.8}>0.8×</option><option value={1}>1×</option><option value={1.2}>1.2×</option><option value={1.5}>1.5×</option></select></label></div></div>;
+  return <div className="browser-audiobook" aria-label={`Audiobook controls for ${title}`}><div className="browser-audiobook-head"><div><span className="section-label">Audiobook mode</span><strong>Listen with your browser voice</strong></div><BookOpen size={16} /></div><p>{disabledReason || "Uses your phone or computer’s built-in speech voice. No AI audio or tokens are used. It can continue while you switch apps; use the media controls or Stop to end it."}</p><div className="browser-audiobook-controls"><button className="secondary-button" type="button" onClick={playing ? (paused ? resume : pause) : start} disabled={!cleanText}>{playing ? (paused ? <><Play size={13} /> Resume</> : <><Pause size={13} /> Pause</>) : <><Play size={13} /> Play audiobook</>}</button><button className="secondary-button" type="button" onClick={stop} disabled={!playing}><Square size={12} /> Stop</button><label>Speed <select value={rate} onChange={(event) => setRate(Number(event.target.value))}><option value={0.8}>0.8×</option><option value={1}>1×</option><option value={1.2}>1.2×</option><option value={1.5}>1.5×</option></select></label></div></div>;
 }
 
 export default function BookReader({ material, onClose }: Props) {
@@ -264,6 +281,7 @@ export default function BookReader({ material, onClose }: Props) {
           </button>
           {sourceUrl && <a className="primary-button reader-source-link" href={sourceUrl} target="_blank" rel="noreferrer">Open source</a>}
         </div>
+        <BrowserAudiobook title={material.title} text={audiobookText || selectedText} disabledReason={audiobookText || selectedText ? undefined : isPdf ? "This PDF has no readable text loaded yet. Select text from the PDF or scan it for selectable text first." : "This book has no readable text loaded yet."} />
       </div>
 
       <div className="book-reader-grid">
@@ -292,7 +310,6 @@ export default function BookReader({ material, onClose }: Props) {
         <aside className="book-ai-pane">
           <div className="book-ai-head"><div><span className="section-label">AI reading desk</span><h2>Understand it better.</h2></div><Sparkles size={18} /></div>
           <p className="field-hint">Paste a passage from the preview below, or use a saved highlight. The answer will be based on the text you provide.</p>
-          <BrowserAudiobook title={material.title} text={audiobookText || selectedText} disabledReason={audiobookText || selectedText ? undefined : isPdf ? "This PDF has no readable text loaded yet. Use “Scan for selectable text” first, then select a passage to listen." : "This book has no readable text loaded yet."} />
           <div className="book-actions">
             <button className="secondary-button" onClick={saveHighlight} disabled={!hasPassage}><Highlighter size={14} /> Save passage</button>
             {selectedText && <button className="book-clear" onClick={() => setSelectedText("")}>Clear selection</button>}

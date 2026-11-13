@@ -186,6 +186,11 @@
 .browser-audiobook-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
 .browser-audiobook-controls label { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 11px; }
 .browser-audiobook-controls select { padding: 5px 7px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); }
+.book-reader .reader-toolbar > .browser-audiobook { flex: 1 1 100%; order: 5; margin: 0; }
+.book-reader .reader-toolbar > .browser-audiobook .browser-audiobook-head { display: flex; }
+.book-reader .reader-toolbar > .browser-audiobook > p { display: none; }
+.book-reader .reader-toolbar > .browser-audiobook .browser-audiobook-head { display: none; }
+.book-reader .reader-toolbar > .browser-audiobook .browser-audiobook-controls { justify-content: flex-start; }
 
 .book-ai-pane > .field-hint {
   line-height: 1.5;
@@ -480,7 +485,7 @@
   .book-reader-mobile-reading .reader-toolbar {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
-    grid-template-areas: "back title" "actions actions";
+    grid-template-areas: "back title" "actions actions" "audiobook audiobook";
     align-items: center;
     justify-content: stretch;
     gap: 4px 8px;
@@ -496,6 +501,15 @@
   .book-reader-mobile-reading .reader-heading strong { color: #fff; }
   .book-reader-mobile-reading .reader-heading span { color: rgba(255,255,255,.65); }
   .book-reader-mobile-reading .reader-actions { grid-area: actions; width: 100%; min-width: 0; margin-left: 0; justify-content: flex-start; flex-wrap: wrap; }
+  .book-reader-mobile-reading .reader-toolbar > .browser-audiobook { grid-area: audiobook; width: 100%; margin: 0; padding: 7px 9px; border-color: rgba(255,255,255,.28); background: rgba(255,255,255,.1); color: #fff; }
+  .book-reader-mobile-reading .reader-toolbar > .browser-audiobook .browser-audiobook-head { display: flex; }
+  .book-reader-mobile-reading .reader-toolbar > .browser-audiobook .browser-audiobook-head strong,
+  .book-reader-mobile-reading .reader-toolbar > .browser-audiobook .section-label { color: #fff; }
+  .book-reader-mobile-reading .reader-toolbar > .browser-audiobook > p { display: none; }
+  .book-reader-mobile-reading .reader-toolbar > .browser-audiobook .browser-audiobook-controls { flex-wrap: nowrap; }
+  .book-reader-mobile-reading .reader-toolbar > .browser-audiobook .browser-audiobook-controls .secondary-button { color: #fff; border-color: rgba(255,255,255,.42); background: rgba(255,255,255,.08); }
+  .book-reader-mobile-reading .reader-toolbar > .browser-audiobook .browser-audiobook-controls label { color: rgba(255,255,255,.8); }
+  .book-reader-mobile-reading .reader-toolbar > .browser-audiobook .browser-audiobook-controls select { border-color: rgba(255,255,255,.35); background: #222; color: #fff; }
   .book-reader-mobile-reading .reader-actions .reader-expand-button { display: none; }
   .book-reader-mobile-reading .reader-actions .reader-mobile-mode-button { color: #fff; border-color: rgba(255,255,255,.42); background: rgba(255,255,255,.1); }
   .book-reader-mobile-reading .reader-actions .reader-mobile-mode-button span { display: inline; }
