@@ -45,3 +45,11 @@
 ## Wallpaper rendering and member default
 - Built-in theme wallpapers and separately uploaded personal wallpapers render as page backgrounds in both light and dark themes; profile avatars are never backgrounds.
 - The primary admin can choose or clear a platform-default theme from the Admin page. It applies only when an account has no explicit personal theme or custom wallpaper; personal themes, uploaded wallpapers, and avatars remain untouched, and the default is stored server-side.
+
+
+## Timetable editing and AI proposal reliability
+- Admins can manually update shared group timetable lessons through the existing interface, with clear errors for invalid dates or actual save failures.
+- An AI timetable proposal continues through the configured provider fallback chain when an individual provider/model is unavailable, then saves a usable proposal for admin review; no provider credential values are exposed.
+
+## Library controls
+- Remove the Library AI/Librarian search control and its output panel, and remove the per-material Summarise button and summary panel; keep unrelated Library search, reading, indexing, editing, and admin organization features intact.

@@ -125,7 +125,7 @@ test("recaps and the whole-book overview use ordered source-grounded text", () =
   assert.match(prompt, /do not add outside knowledge/i);
 });
 
-test("production routes batch all book sections and expose both document downloads", () => {
+test("study tools batch all book sections and expose both document downloads", () => {
   const page = fs.readFileSync(new URL("../src/StudyAssistant.tsx", import.meta.url), "utf8");
   const assignmentHelper = fs.readFileSync(new URL("../src/AssignmentHelperPage.tsx", import.meta.url), "utf8");
   const library = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
@@ -144,13 +144,8 @@ test("production routes batch all book sections and expose both document downloa
   assert.match(server, /feature === "summarize" \? 1 : 3/);
   assert.match(server, /Complete book summaries require one selected readable book and an exact section batch/);
   assert.match(server, /\["notes", "notes_research", "notes_review", "summarize"\]/);
-  assert.match(library, /getLibraryMaterialDocumentId\(material\.id\)/);
-  assert.match(library, /supabase\.storage\.from\("materials"\)\.download\(material\.storage_path\)/);
-  assert.match(library, /if \(!documentId \|\| totalSections === 0\)[\s\S]*?const indexed = await uploadLibraryMaterial\([\s\S]*?material\.id/);
-  assert.match(library, /requestBookSummaryPart\(request, part, documentId, "materials", askAI/);
-  assert.match(library, /onClick=\{\(\) => void summarizeLibraryMaterial\(material\)\}/);
-  assert.match(library, /Download DOCX/);
-  assert.match(library, /Download PDF/);
+  assert.match(library, /Preview & read/);
+  assert.doesNotMatch(library, /getLibraryMaterialDocumentId|summarizeLibraryMaterial|Summarise|library-summary-panel/);
   assert.match(assignmentHelper, /countMaterialChunks\(selectedBook\.id\)/);
   assert.match(assignmentHelper, /sections \$\{part\.startSection\}/);
   assert.match(assignmentHelper, /Promise\.all\(Array\.from/);

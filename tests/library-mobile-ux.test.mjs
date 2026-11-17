@@ -3,17 +3,14 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
-const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 const reader = readFileSync(new URL("../src/BookReader.tsx", import.meta.url), "utf8");
 const readerStyles = readFileSync(new URL("../src/book-reader.css", import.meta.url), "utf8");
 
-test("Library summaries bring their progress and result panel into view on phone-width screens", () => {
-  assert.match(app, /summaryPanelRef = useRef/);
-  assert.match(app, /matchMedia\("\(max-width: 760px\)"\)/);
-  assert.match(app, /summaryPanelRef\.current\?\.scrollIntoView/);
-  assert.match(app, /prefers-reduced-motion: reduce/);
-  assert.match(app, /ref=\{summaryPanelRef\} className="card card-pad library-summary-panel"/);
-  assert.match(styles, /\.library-summary-panel \{ scroll-margin-top: 16px; \}/);
+test("Library no longer exposes AI/Librarian search or the per-material summary action", () => {
+  assert.doesNotMatch(app, /AI Library search|Ask Library AI|Summarise|summaryPanelRef|summarizeLibraryMaterial/);
+  assert.match(app, /Preview & read/);
+  assert.match(app, /Retry AI/);
+  assert.match(app, /retryMaterialIndexing/);
 });
 
 test("BookReader automatically sizes the phone preview from the current viewport height", () => {

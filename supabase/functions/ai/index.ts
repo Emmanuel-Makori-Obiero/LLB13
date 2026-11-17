@@ -292,7 +292,6 @@ export async function callChain(
       break;
     }
       if (retryWithNextKey) continue;
-      break;
     }
   }
   throw Object.assign(new Error("All AI providers are busy or unavailable"), { attempts, retryAfterMs });

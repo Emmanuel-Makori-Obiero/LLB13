@@ -105,9 +105,7 @@ import LegalProcessPage from "./LegalProcessPage";
 import FloatingLawyerAgent from "./FloatingLawyerAgent";
 import { ResearchWriter } from "./ResearchWriter";
 import { TranscriptAI } from "./TranscriptAI";
-import { askAI, countMaterialChunks, extractText, getLibraryMaterialDocumentId, setLearnerAdaptation, uploadLibraryMaterial, type AIResult, type AIFeature } from "./lib/ai";
-import { bookSummarySynthesisPrompt, extractBookPartRecap, mergeBookSummaryParts, planBookSummary, requestBookSummaryPart, type CompletedBookSummaryPart } from "./lib/bookSummary";
-import { downloadPdf, downloadWord } from "./export";
+import { askAI, extractText, setLearnerAdaptation, uploadLibraryMaterial, type AIFeature } from "./lib/ai";
 import { KENYAN_UNIVERSITIES } from "./universities";
 import { defaultLearningPreference, materialVisibleToLevel } from "./lib/learnerAdaptation";
 import { Markdown } from "./Markdown";
@@ -1488,6 +1486,7 @@ function App() {
               materials={filteredMaterials}
               learnerLevel={profile.learnerLevel}
               isAdmin={isAdmin}
+              setNotice={setNotice}
               openAdmin={() => setView("admin")}
               search={search}
               setSearch={setSearch}
@@ -4190,6 +4189,7 @@ function LibraryPageReal({
   materials,
   learnerLevel,
   isAdmin,
+  setNotice,
   openAdmin,
   search,
   setSearch,
@@ -4206,6 +4206,7 @@ function LibraryPageReal({
   materials: Material[];
   learnerLevel: LearnerLevel | "";
   isAdmin: boolean;
+  setNotice: (notice: string) => void;
   openAdmin: () => void;
   search: string;
   setSearch: (value: string) => void;
@@ -4250,43 +4251,7 @@ function LibraryPageReal({
     return () => { active = false; window.clearInterval(timer); };
   }, [isAdmin]);
   const archiveInputRef = useRef<HTMLInputElement>(null);
-  const [summaryMaterial, setSummaryMaterial] = useState<Material | null>(null);
-  const [summaryResult, setSummaryResult] = useState<AIResult | null>(null);
-  const [summaryBusy, setSummaryBusy] = useState(false);
-  const [summaryProgress, setSummaryProgress] = useState("");
-  const [summaryError, setSummaryError] = useState("");
   const [retryingMaterialId, setRetryingMaterialId] = useState<string | null>(null);
-  const [aiLibraryQuery, setAiLibraryQuery] = useState("");
-  const [aiLibraryResult, setAiLibraryResult] = useState<AIResult | null>(null);
-  const [aiLibraryBusy, setAiLibraryBusy] = useState(false);
-  const [aiLibraryError, setAiLibraryError] = useState("");
-  const searchLibraryWithAI = async (event: React.FormEvent) => {
-    event.preventDefault();
-    const question = aiLibraryQuery.trim();
-    if (!question || aiLibraryBusy) return;
-    setAiLibraryBusy(true); setAiLibraryError(""); setAiLibraryResult(null);
-    try {
-      const result = await askAI({
-        feature: "chat",
-        mode: "library",
-        messages: [{ role: "user", content: `Search the shared Library and answer this request using the indexed past papers and Library sources only: ${question}. Prefer naming the relevant paper titles, exam years, sessions, and units. If the Library does not contain enough evidence, say so clearly instead of inventing sources.` }],
-      });
-      setAiLibraryResult(result);
-    } catch (cause) {
-      setAiLibraryError(cause instanceof Error ? cause.message : "The Library AI search is unavailable right now.");
-    } finally { setAiLibraryBusy(false); }
-  };
-  const summaryPanelRef = useRef<HTMLElement | null>(null);
-  const [summaryScrollKey, setSummaryScrollKey] = useState(0);
-  useEffect(() => {
-    if (!summaryMaterial || !summaryScrollKey || typeof window.matchMedia !== "function") return;
-    if (!window.matchMedia("(max-width: 760px)").matches) return;
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const frame = window.requestAnimationFrame(() => {
-      summaryPanelRef.current?.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "start" });
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [summaryMaterial, summaryScrollKey]);
   const readLibraryAttachment = async (material: Material): Promise<File> => {
     let blob: Blob | null = null;
     let storageError = "";
@@ -4332,8 +4297,7 @@ function LibraryPageReal({
       const indexed = await uploadLibraryMaterial(file, `Past paper · ${material.course_code ?? material.unit} · ${material.exam_session ?? material.source}`, material.author ?? undefined, material.target_years ?? [], material.id);
       const ready = await repository.updateMaterialIngestion(material.id, "ready", null);
       onMaterialStatusChange(ready);
-      setSummaryError("");
-      setSummaryProgress(`Re-indexed ${indexed.chunks} AI sections successfully.`);
+      setNotice(`Re-indexed ${indexed.chunks} AI sections successfully.`);
     } catch (error) {
       const detail = error instanceof Error ? error.message : "AI indexing failed";
       try {
@@ -4342,84 +4306,9 @@ function LibraryPageReal({
       } catch {
         // Keep the user-facing error even if the status update fails.
       }
-      setSummaryError(detail);
+      setNotice(`Could not re-index this Library item: ${detail}`);
     } finally {
       setRetryingMaterialId(null);
-    }
-  };
-  const summarizeLibraryMaterial = async (material: Material) => {
-    if (summaryBusy) return;
-    setSummaryMaterial(material);
-    setSummaryScrollKey((key) => key + 1);
-    setSummaryResult(null);
-    setSummaryError("");
-    setSummaryProgress("Finding the book's indexed text…");
-    setSummaryBusy(true);
-    let totalSections = 0;
-    const completed: CompletedBookSummaryPart[] = [];
-    try {
-      let documentId = "";
-      try {
-        documentId = await getLibraryMaterialDocumentId(material.id);
-        totalSections = await countMaterialChunks(documentId);
-      } catch {
-        // Older Library rows may not be linked to the full-text AI index yet.
-      }
-      if (!documentId || totalSections === 0) {
-        setSummaryProgress("Reading the attached original and rebuilding its full-text index…");
-        const file = await readLibraryAttachment(material);
-        const indexed = await uploadLibraryMaterial(
-          file,
-          `${material.type} · ${material.unit} · ${material.source}`,
-          material.author ?? undefined,
-          material.target_years ?? [],
-          material.id,
-        );
-        documentId = indexed.id;
-        totalSections = indexed.chunks;
-      }
-      const plan = planBookSummary(totalSections);
-      const request = "Create complete, well-organized study notes for this source. Preserve its important arguments, events, examples, qualifications, and conclusions in order.";
-      for (const part of plan) {
-        setSummaryProgress(`Reading indexed sections ${part.startSection}–${part.endSection} of ${totalSections}…`);
-        try {
-          await requestBookSummaryPart(request, part, documentId, "materials", askAI, (split) => {
-            setSummaryProgress(`Provider size limit reached for sections ${split.startSection}–${split.endSection}; retrying smaller contiguous ranges…`);
-          }, (finished) => completed.push(finished));
-        } catch (cause) {
-          const detail = cause instanceof Error ? cause.message : "an AI request failed";
-          if (completed.length) {
-            setSummaryResult(mergeBookSummaryParts(material.title, totalSections, completed, null, `indexed sections ${part.startSection}–${part.endSection} failed: ${detail}`));
-          }
-          setSummaryError(`Complete coverage stopped at indexed sections ${part.startSection}–${part.endSection}. ${completed.length ? "The completed sections are shown as a partial result." : "No notes were generated."} ${detail}`);
-          return;
-        }
-      }
-
-      setSummaryProgress("Writing the overview from all section recaps…");
-      let overview: AIResult | null = null;
-      let overviewFailure: string | undefined;
-      try {
-        overview = await askAI({
-          feature: "book_summary_synthesis",
-          mode: "general",
-          messages: [{
-            role: "user",
-            content: bookSummarySynthesisPrompt(material.title, request, completed.map(({ plan, result }) => ({
-              plan,
-              recap: extractBookPartRecap(result.answer),
-            }))),
-          }],
-        });
-      } catch (cause) {
-        overviewFailure = cause instanceof Error ? cause.message : "the overview request failed";
-      }
-      setSummaryResult(mergeBookSummaryParts(material.title, totalSections, completed, overview, undefined, overviewFailure));
-    } catch (cause) {
-      setSummaryError(cause instanceof Error ? cause.message : "The Library book could not be summarized.");
-    } finally {
-      setSummaryBusy(false);
-      setSummaryProgress("");
     }
   };
   const units = [...new Set(materials.map((material) => material.unit).filter(Boolean))].sort((a, b) => a.localeCompare(b));
@@ -4587,27 +4476,14 @@ function LibraryPageReal({
         {organizerLoadError ? <div className="connection-error" style={{ marginTop: 10 }}>Organizer progress is temporarily unavailable. Your saved progress is safe.</div> : organizerJob && <><div className="library-progress-summary"><strong>{organizerJob.processed} of {organizerJob.total}</strong><span>{organizerJob.succeeded} corrected · {organizerJob.failed} failed · {organizerJob.total ? Math.round(organizerJob.processed / organizerJob.total * 100) : 100}%</span></div><div className="progress library-progress-track"><span style={{ width: `${organizerJob.total ? Math.min(100, organizerJob.processed / organizerJob.total * 100) : 100}%` }} /></div>{organizerJob.next_retry_at && <div className="field-hint" style={{ marginTop: 8 }}>A provider is temporarily unavailable. The organizer skipped it and will retry with another eligible model.</div>}<button className="secondary-button" type="button" style={{ marginTop: 10 }} onClick={openAdmin}>{organizerJob.status === "completed" ? "View organizer details" : "Open organizer controls"}</button></>}
       </section>}
       {libraryGuideOpen && <section className="card card-pad library-guide" style={{ marginBottom: 16 }}>
-        <div className="card-header"><div><div className="section-label">How to use the Library</div><div className="field-hint">A quick guide to finding, understanding, and studying from the collection.</div></div><div className="library-demo-animation" aria-label="Animated Library walkthrough: type a search, click Filters, then ask Library AI"><div className="demo-step demo-search-step"><span className="demo-step-label">1 · Type</span><span className="demo-search-field"><Search size={11} /><span className="demo-typing">constitutional law</span><i /></span></div><div className="demo-step demo-filter-step"><span className="demo-step-label">2 · Filter</span><span className="demo-filter-button"><Filter size={11} /> Filters</span><span className="demo-cursor" aria-hidden="true">⌁</span></div><div className="demo-step demo-ai-step"><span className="demo-step-label">3 · Ask AI</span><span className="demo-ai-question">Find separation of powers</span><span className="demo-ai-response">Found 8 related papers</span></div></div><button className="icon-button" type="button" onClick={() => setLibraryGuideOpen(false)} aria-label="Close Library guide"><X size={15} /></button></div>
+        <div className="card-header"><div><div className="section-label">How to use the Library</div><div className="field-hint">A quick guide to finding, opening, and maintaining the collection.</div></div><button className="icon-button" type="button" onClick={() => setLibraryGuideOpen(false)} aria-label="Close Library guide"><X size={15} /></button></div>
         <div className="page-grid" style={{ marginTop: 14 }}>
           <div><strong>1. Search normally</strong><p className="field-hint">Use the large search box for titles, topics, units, course codes, exam sessions, and variants. Small spelling mistakes are supported.</p></div>
           <div><strong>2. Filter and move through pages</strong><p className="field-hint">Open <b>Filters</b> to narrow by unit, category, course code, exam year, exam session, indexing status, or study level. Use Previous and Next below the table.</p></div>
-          <div><strong>3. Ask Library AI</strong><p className="field-hint">Ask questions in ordinary language, such as “Find Constitutional Law questions about separation of powers.” AI uses indexed Library sources and shows the papers it found.</p></div>
-          <div><strong>4. Read and study</strong><p className="field-hint"><b>Preview & read</b> opens the paper. <b>Summarise</b> creates organized study notes from its indexed sections. Use <b>Retry AI</b> when indexing has failed.</p></div>
-          {isAdmin && <div><strong>5. Organize imported papers</strong><p className="field-hint">Use <b>Organize Library</b> to extract titles, units, course codes, years, sessions, and variants from the paper itself. Progress is saved and can resume.</p></div>}
+          <div><strong>3. Read and maintain</strong><p className="field-hint"><b>Preview & read</b> opens the attached material. Use <b>Retry AI</b> when indexing has failed.</p></div>
+          {isAdmin && <div><strong>4. Organize imported papers</strong><p className="field-hint">Use <b>Organize Library</b> to extract titles, units, course codes, years, sessions, and variants from the paper itself. Progress is saved and can resume.</p></div>}
         </div>
       </section>}
-      <section className="card card-pad" style={{ marginBottom: 16 }}>
-        <div className="card-header">
-          <div><div className="section-label">AI Library search</div><div className="field-hint">Ask in ordinary language, for example: “Find Constitutional Law questions about separation of powers.”</div></div>
-          <span className="chip">Indexed sources only</span>
-        </div>
-        <form className="library-ai-search-form" onSubmit={searchLibraryWithAI} style={{ display: "flex", gap: 8, marginTop: 10 }}>
-          <input value={aiLibraryQuery} onChange={(event) => setAiLibraryQuery(event.target.value)} placeholder="Ask about units, topics, years, or repeated questions…" style={{ flex: 1 }} />
-          <button className="primary-button" type="submit" disabled={aiLibraryBusy || !aiLibraryQuery.trim()}>{aiLibraryBusy ? "Searching…" : "Ask Library AI"}</button>
-        </form>
-        {aiLibraryError && <div className="connection-error" style={{ marginTop: 10 }}>{aiLibraryError}</div>}
-        {aiLibraryResult && <div style={{ marginTop: 14 }}><div className="sa-answer"><Markdown text={aiLibraryResult.answer} /></div>{aiLibraryResult.sources.length > 0 && <div className="sa-sources" style={{ marginTop: 12 }}><div className="section-label">Sources found</div>{aiLibraryResult.sources.map((source) => <div className="sa-source" key={`${source.tag}-${source.title}`}><sup className="md-cite">{source.tag}</sup><span>{source.title}{source.ref ? ` · ${source.ref}` : ""}</span></div>)}</div>}</div>}
-      </section>
       {bulkImportProgress.phase !== "idle" && (
         <section className="card card-pad" style={{ marginBottom: 16 }} aria-live="polite">
           <div className="detail-title">
@@ -4629,39 +4505,6 @@ function LibraryPageReal({
               : `${bulkImportProgress.done} of ${bulkImportProgress.total} files processed · ${bulkImportProgress.indexed} AI sections indexed · ${bulkImportProgress.failed} failed`}
           </div>
           <div className="field-hint" style={{ marginTop: 6 }}>Each paper is uploaded and indexed separately, so one failure does not stop the rest. Nested RAR, ZIP, and 7Z archives are opened automatically.</div>
-        </section>
-      )}
-      {summaryMaterial && (
-        <section ref={summaryPanelRef} className="card card-pad library-summary-panel">
-          <div className="detail-title">
-            <div>
-              <div className="eyebrow">ORGANIZED STUDY NOTES</div>
-              <h2 style={{ fontSize: 24, margin: "8px 0" }}>{summaryMaterial.title}</h2>
-              <p className="field-hint">Notes are built from readable indexed sections in order. Interrupted runs are labelled partial; ready notes can be downloaded as DOCX or PDF.</p>
-            </div>
-            <button type="button" className="icon-button" disabled={summaryBusy} onClick={() => { setSummaryMaterial(null); setSummaryResult(null); setSummaryError(""); }} aria-label="Close book summary"><X size={15} /></button>
-          </div>
-          {summaryProgress && <p className="field-hint" role="status"><Sparkles size={13} /> {summaryProgress}</p>}
-          {summaryError && <div className="connection-error" role="alert">{summaryError}</div>}
-          {summaryResult && (() => {
-            const fileBase = summaryMaterial.title.replace(/[\\/:*?"<>|]+/g, "-").trim().slice(0, 120) || "book-study-notes";
-            const exportOptions = {
-              subtitle: "Complete-source study notes · indexed sections organized in order",
-              sources: summaryResult.sources.map((source) => `${source.tag} — ${source.title}${source.author ? ` — ${source.author}` : ""}${source.ref ? ` — ${source.ref}` : ""}`),
-              footer: "Prepared from the readable indexed source sections. Check unclear or OCR text against the original book.",
-            };
-            return (
-              <>
-                <div className="sa-answer-actions">
-                  <button type="button" className="secondary-button" onClick={() => void downloadWord(summaryMaterial.title, summaryResult.answer, `${fileBase}-study-notes.docx`, exportOptions)}><Download size={13} /> Download DOCX</button>
-                  <button type="button" className="secondary-button" onClick={() => downloadPdf(summaryMaterial.title, summaryResult.answer, `${fileBase}-study-notes.pdf`, exportOptions)}><Download size={13} /> Download PDF</button>
-                </div>
-                <div className="sa-answer"><Markdown text={summaryResult.answer} /></div>
-                {summaryResult.warnings.length > 0 && <ul className="sa-warnings">{summaryResult.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
-                {summaryResult.sources.length > 0 && <div className="sa-sources"><div className="section-label">Sources used</div>{summaryResult.sources.map((source) => <div className="sa-source" key={source.tag}><sup className="md-cite">{source.tag}</sup><span>{source.title}{source.author ? ` — ${source.author}` : ""}{source.ref ? ` · ${source.ref}` : ""}</span></div>)}</div>}
-              </>
-            );
-          })()}
         </section>
       )}
       <div className="card card-pad table-wrap">
@@ -4710,15 +4553,6 @@ function LibraryPageReal({
                 </td>
                 <td>
                   <div className="resource-actions">
-                    <button
-                      className="secondary-button small-action"
-                      type="button"
-                      disabled={summaryBusy}
-                      onClick={() => void summarizeLibraryMaterial(material)}
-                      aria-label={`Summarise ${material.title}`}
-                    >
-                      {summaryBusy && summaryMaterial?.id === material.id ? "Summarising…" : "Summarise"}
-                    </button>
                     <button
                       className="secondary-button small-action"
                       onClick={() => openEdit(material)}

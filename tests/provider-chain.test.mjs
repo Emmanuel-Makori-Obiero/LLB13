@@ -104,6 +104,15 @@ test("the Edge Function wires key-slot failover into the provider request loop",
   assert.match(handler, /invalidKeyUntil\.set\(credentialId/);
 });
 
+test("a failed provider route advances to the next configured model/provider", () => {
+  const handler = readFileSync(new URL("../supabase/functions/ai/index.ts", import.meta.url), "utf8");
+  assert.match(
+    handler,
+    /if \(retryWithNextKey\) continue;\s*\n\s*}\s*\n\s*}\s*\n\s*throw Object\.assign\(new Error\("All AI providers are busy or unavailable"\)/,
+    "the provider loop must not break out after exhausting one route",
+  );
+});
+
 test("failed model routes cool down for later requests without delaying current-request failover", () => {
   assert.equal(modelRouteCooldownMs(429, 58), 60_000);
   assert.equal(modelRouteCooldownMs(401), 15 * 60_000);
