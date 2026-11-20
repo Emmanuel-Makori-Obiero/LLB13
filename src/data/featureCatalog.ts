@@ -497,4 +497,18 @@ export const featureCatalog: FeatureEntry[] = [
     howToUse: "Open Case law from the landing page or workspace. Search by case name, citation, or topic, then open the result on Kenya Law. For AI analysis, save the full judgment text or PDF as an AI-readable Library document and select it; a reference link alone does not supply source text.",
     benefit: "Gives students a direct path to primary Kenyan judgments and the Constitution, with citations tied to the authorities used in their study.",
   },
+  {
+    id: "law_reels",
+    title: "Law Reels study feed",
+    category: "AI study & practice",
+    availability: "new",
+    access: "Sign in with an approved student account. Published videos are added and moderated by the administrator.",
+    capabilities: [
+      "Watch short law lessons in a phone-first vertical swipe feed with automatic pause and play as you move between videos.",
+      "Like, comment with your username, and save useful videos for your profile.",
+      "Use captions, topics, mute, pause, progress, and next/previous controls while studying.",
+    ],
+    howToUse: "Open Law Reels from the workspace navigation, swipe vertically, and use the action buttons to like, comment, or save a lesson. Saved lessons remain attached to your account.",
+    benefit: "Turns spare minutes into structured revision by putting administrator-curated legal explanations into a focused, easy-to-scroll study stream.",
+  },
 ];

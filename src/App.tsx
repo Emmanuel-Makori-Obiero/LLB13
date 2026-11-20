@@ -90,6 +90,7 @@ import LoginPage, { ResetPasswordPage } from "./AuthPage";
 import LandingPage, { HelpButton } from "./LandingPage";
 import { downloadInfo, readerUrl, safeUrl, toEmbedUrl, youtubeVideoId } from "./links";
 import AdminPage from "./AdminPage";
+import AdminLawReels from "./AdminLawReels";
 import InstallButton from "./InstallButton";
 import { DataRightsCard, DeleteAccountCard } from "./AccountPage";
 import Home from "./Home";
@@ -142,6 +143,7 @@ import {
 } from "./lib/cloudMedia";
 
 const FeaturesGuidePage = lazy(() => import("./FeaturesGuidePage"));
+const LawReelsPage = lazy(() => import("./LawReelsPage"));
 const ScannerNotesPage = lazy(() => import("./ScannerNotesPage"));
 const KenyaLawCasesPage = lazy(() => import("./KenyaLawCasesPage"));
 const ScheduledCourtCasesPage = lazy(() => import("./ScheduledCourtCasesPage"));
@@ -195,6 +197,7 @@ const nav = [
   { id: "daily-case", label: "Daily Case", icon: Sparkles },
   { id: "scheduled-cases", label: "Scheduled cases", icon: CalendarDays },
   { id: "counsellor", label: "Counsellor", icon: Users },
+  { id: "reels", label: "Law Reels", icon: Film },
 ];
 const validViews = new Set([
   ...nav.map((item) => item.id),
@@ -215,6 +218,7 @@ const validViews = new Set([
   "privacy",
   "terms",
   "contact",
+  "reels",
 ]);
 const CURRENT_PRIVACY_VERSION = "2026-11-09";
 const CURRENT_TERMS_VERSION = "2026-11-09";
@@ -1044,6 +1048,8 @@ function App() {
         {userEmail && <FloatingLawyerAgent historyKey={userEmail} currentPage="All platform features" onOpenDictionary={() => setPage("dictionary")} />}
       </>
     );
+  if (view === "reels")
+    return <Suspense fallback={<div className="auth-page"><p className="subheading">Loading Law Reels…</p></div>}><LawReelsPage onBack={() => setPage("dashboard")} /></Suspense>;
   if (view === "cases")
     return (
       <>
@@ -1776,6 +1782,7 @@ function App() {
               setNotice={setNotice}
             />
           )}
+          {view === "admin" && isAdmin && <AdminLawReels setNotice={setNotice} />}
           {view === "settings" && isAdmin && (
             <SettingsPage setNotice={setNotice} />
           )}

@@ -53,3 +53,11 @@
 
 ## Library controls
 - Remove the Library AI/Librarian search control and its output panel, and remove the per-material Summarise button and summary panel; keep unrelated Library search, reading, indexing, editing, and admin organization features intact.
+
+
+## Law Reels feature
+- [ ] Students can open a signed-in `/reels` feature from the workspace and watch administrator-published law videos in a phone-first vertical snap-scroll feed.
+- [ ] Each video supports muted visibility-based autoplay, pause/play, mute/unmute, progress, captions, topic label, and next/previous navigation without leaving the feed.
+- [ ] The administrator can upload many videos with title, caption, topic/category, optional cover image, ordering, and visibility controls, and can update or delete existing videos.
+- [ ] Database RLS ensures students can read only visible published feed items and only authorized administrators can manage feed rows and files.
+- [ ] The public Features directory explains the feature and the route manifest includes `/reels`.

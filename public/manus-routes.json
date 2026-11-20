@@ -149,6 +149,10 @@
       "title": "All platform features"
     },
     {
+      "path": "/reels",
+      "title": "Law Reels"
+    },
+    {
       "path": "/cases",
       "title": "Kenya Law case finder"
     },

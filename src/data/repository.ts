@@ -33,6 +33,7 @@ import type {
   StudyGroupMember,
   ClubPoster,
   DailyCase,
+  LawReel,
 } from "./types";
 import { isThemeId, type ThemeId } from "../lib/appearance";
 
@@ -169,6 +170,11 @@ export type Group13Repository = {
   getActiveClubPosters: () => Promise<ClubPoster[]>;
   adminCreateClubPoster: (input: { title: string; file: File; linkUrl: string; aiAnalysis: string; onProgress?: (stage: "checking" | "uploading" | "saving") => void }) => Promise<ClubPoster>;
   adminDeleteClubPoster: (poster: ClubPoster) => Promise<void>;
+  getLawReels: () => Promise<LawReel[]>;
+  adminGetLawReels: () => Promise<LawReel[]>;
+  adminCreateLawReel: (input: { title: string; caption: string; topic: string; sortOrder: number; isPublished: boolean; video: File; cover?: File | null }) => Promise<LawReel>;
+  adminUpdateLawReel: (id: string, input: Pick<LawReel, "title" | "caption" | "topic" | "sort_order" | "is_published">) => Promise<LawReel>;
+  adminDeleteLawReel: (reel: LawReel) => Promise<void>;
   getDailyCase: () => Promise<DailyCase | null>;
   getMyDirectoryProfile: () => Promise<DirectoryUser | null>;
   getDirectoryUser: (userId: string) => Promise<DirectoryUser | null>;
@@ -1275,6 +1281,79 @@ const supabaseRepository: Group13Repository = {
     if (storageError) throw new Error(`Could not delete poster file: ${storageError.message}`);
     const { error } = await client.from("club_posters").delete().eq("id", poster.id);
     if (error) throw new Error(`Could not delete poster: ${error.message}`);
+  },
+  getLawReels: async () => {
+    const client = db();
+    const { data, error } = await client.from("law_reels")
+      .select("id,title,caption,topic,video_path,video_url,cover_path,cover_url,sort_order,is_published,created_by,created_at,updated_at")
+      .eq("is_published", true).order("sort_order", { ascending: true }).order("created_at", { ascending: false }).limit(500);
+    if (error) throw new Error(`Could not load law reels: ${error.message}`);
+    return Promise.all(((data ?? []) as LawReel[]).map(async (reel) => {
+      const video = await client.storage.from("media").createSignedUrl(reel.video_path, 60 * 60);
+      if (video.error) throw new Error(`Could not open law reel video: ${video.error.message}`);
+      let coverUrl = reel.cover_url;
+      if (reel.cover_path) {
+        const cover = await client.storage.from("media").createSignedUrl(reel.cover_path, 60 * 60);
+        if (cover.error) throw new Error(`Could not open law reel cover: ${cover.error.message}`);
+        coverUrl = cover.data.signedUrl;
+      }
+      return { ...reel, video_url: video.data.signedUrl, cover_url: coverUrl };
+    }));
+  },
+  adminGetLawReels: async () => {
+    const { data, error } = await db().from("law_reels")
+      .select("id,title,caption,topic,video_path,video_url,cover_path,cover_url,sort_order,is_published,created_by,created_at,updated_at")
+      .order("sort_order", { ascending: true }).order("created_at", { ascending: false }).limit(500);
+    if (error) throw new Error(`Could not load admin law reels: ${error.message}`);
+    return (data ?? []) as LawReel[];
+  },
+  adminCreateLawReel: async ({ title, caption, topic, sortOrder, isPublished, video, cover }) => {
+    const client = db();
+    const { data: { user } } = await client.auth.getUser();
+    if (!user) throw new Error("Sign in as an administrator before uploading videos.");
+    const { data: allowed, error: roleError } = await client.rpc("is_super_admin");
+    if (roleError || allowed !== true) throw new Error("Only the verified administrator can publish law reels.");
+    const id = makeId();
+    const safeName = video.name.replace(/[^a-zA-Z0-9._-]/g, "-") || "law-reel.mp4";
+    const videoPath = `law-reels/${id}/${safeName}`;
+    await uploadStorageObject("media", videoPath, video);
+    let coverPath: string | null = null;
+    try {
+      let coverUrl: string | null = null;
+      if (cover) {
+        const coverName = cover.name.replace(/[^a-zA-Z0-9._-]/g, "-") || "cover.jpg";
+        coverPath = `law-reels/${id}/cover-${coverName}`;
+        await uploadStorageObject("media", coverPath, cover);
+        coverUrl = client.storage.from("media").getPublicUrl(coverPath).data.publicUrl;
+      }
+      const videoUrl = client.storage.from("media").getPublicUrl(videoPath).data.publicUrl;
+      const { data, error } = await client.from("law_reels").insert({
+        id, title: title.trim(), caption: caption.trim(), topic: topic.trim() || "General",
+        video_path: videoPath, video_url: videoUrl, cover_path: coverPath, cover_url: coverUrl,
+        sort_order: sortOrder, is_published: isPublished, created_by: user.id,
+      }).select("id,title,caption,topic,video_path,video_url,cover_path,cover_url,sort_order,is_published,created_by,created_at,updated_at").single();
+      if (error) throw new Error(`Could not save law reel: ${error.message}`);
+      return data as LawReel;
+    } catch (error) {
+      await client.storage.from("media").remove([videoPath, ...(coverPath ? [coverPath] : [])]);
+      throw error;
+    }
+  },
+  adminUpdateLawReel: async (id, input) => {
+    const { data, error } = await db().from("law_reels").update({
+      title: input.title.trim(), caption: input.caption.trim(), topic: input.topic.trim() || "General",
+      sort_order: input.sort_order, is_published: input.is_published,
+    }).eq("id", id).select("id,title,caption,topic,video_path,video_url,cover_path,cover_url,sort_order,is_published,created_by,created_at,updated_at").single();
+    if (error) throw new Error(`Could not update law reel: ${error.message}`);
+    return data as LawReel;
+  },
+  adminDeleteLawReel: async (reel) => {
+    const client = db();
+    const paths = [reel.video_path, ...(reel.cover_path ? [reel.cover_path] : [])];
+    const removed = await client.storage.from("media").remove(paths);
+    if (removed.error) throw new Error(`Could not delete law reel file: ${removed.error.message}`);
+    const { error } = await client.from("law_reels").delete().eq("id", reel.id);
+    if (error) throw new Error(`Could not delete law reel: ${error.message}`);
   },
   getMyDirectoryProfile: async () => {
     const { data: { user } } = await db().auth.getUser();

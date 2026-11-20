@@ -307,6 +307,22 @@ export type ClubPoster = {
   created_at: string;
 };
 
+export type LawReel = {
+  id: string;
+  title: string;
+  caption: string;
+  topic: string;
+  video_path: string;
+  video_url: string;
+  cover_path: string | null;
+  cover_url: string | null;
+  sort_order: number;
+  is_published: boolean;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type SupportTicket = {
   id: string;
   user_id: string;
