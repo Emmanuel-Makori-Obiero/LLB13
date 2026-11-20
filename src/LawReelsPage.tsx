@@ -113,7 +113,10 @@ export default function LawReelsPage({ onBack }: Props) {
           setActive(index);
           video.muted = muted;
           void video.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
-        } else video.pause();
+        } else {
+          video.pause();
+          video.currentTime = 0;
+        }
       });
     }, { threshold: [0.65] });
     reels.forEach((reel, index) => {
