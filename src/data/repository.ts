@@ -1457,20 +1457,54 @@ async function uploadStorageObject(bucket: string, path: string, file: File, onP
   // project origin is the endpoint documented for browser TUS uploads and
   // consistently handles CORS/preflight on mobile browsers.
   const endpoint = `${supabaseUrl.replace(/\/$/, "")}/storage/v1/upload/resumable`;
-  await new Promise<void>((resolve, reject) => {
-    const upload = new TusUpload(file, {
-      endpoint,
-      retryDelays: [0, 3000, 5000, 10000, 20000],
-      headers: { authorization: `Bearer ${session.access_token}`, apikey: supabaseAnonKey ?? "", "x-upsert": "false" },
-      uploadDataDuringCreation: true,
-      removeFingerprintOnSuccess: true,
-      chunkSize: resumableThreshold,
-      metadata: { bucketName: bucket, objectName: path, contentType: file.type || "application/octet-stream", cacheControl: "3600" },
-      onError: (error) => reject(new Error(`Could not finish large-file upload: ${error.message}`)),
-      onProgress: (uploaded, total) => onProgress?.(total ? Math.min(100, (uploaded / total) * 100) : 0),
-      onSuccess: () => resolve(),
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const upload = new TusUpload(file, {
+        endpoint,
+        retryDelays: [0, 3000, 5000, 10000, 20000],
+        headers: { authorization: `Bearer ${session.access_token}`, apikey: supabaseAnonKey ?? "", "x-upsert": "false" },
+        uploadDataDuringCreation: true,
+        removeFingerprintOnSuccess: true,
+        chunkSize: resumableThreshold,
+        metadata: { bucketName: bucket, objectName: path, contentType: file.type || "application/octet-stream", cacheControl: "3600" },
+        onError: (error) => reject(error),
+        onProgress: (uploaded, total) => onProgress?.(total ? Math.min(100, (uploaded / total) * 100) : 0),
+        onSuccess: () => resolve(),
+      });
+      upload.start();
     });
-    upload.start();
+  } catch (tusError) {
+    // Some mobile networks/proxies reject the TUS creation POST even though
+    // the normal Storage object endpoint is available. Retry transparently.
+    await uploadStorageObjectDirect(bucket, path, file, session.access_token, onProgress).catch((directError) => {
+      const tusMessage = tusError instanceof Error ? tusError.message : "Resumable upload failed";
+      const directMessage = directError instanceof Error ? directError.message : "Direct upload failed";
+      throw new Error(`${tusMessage}. Automatic fallback also failed: ${directMessage}`);
+    });
+  }
+}
+
+function uploadStorageObjectDirect(bucket: string, path: string, file: File, accessToken: string, onProgress?: (percent: number) => void) {
+  if (!supabaseUrl || !supabaseAnonKey) throw new Error("Supabase is not configured.");
+  const objectPath = path.split("/").map(encodeURIComponent).join("/");
+  const endpoint = `${supabaseUrl.replace(/\/$/, "")}/storage/v1/object/${encodeURIComponent(bucket)}/${objectPath}`;
+  return new Promise<void>((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open("POST", endpoint);
+    request.setRequestHeader("authorization", `Bearer ${accessToken}`);
+    request.setRequestHeader("apikey", supabaseAnonKey);
+    request.setRequestHeader("x-upsert", "false");
+    request.setRequestHeader("content-type", file.type || "application/octet-stream");
+    request.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress?.(Math.min(100, (event.loaded / event.total) * 100));
+    };
+    request.onerror = () => reject(new Error("The direct upload connection was interrupted."));
+    request.onabort = () => reject(new Error("The direct upload was cancelled."));
+    request.onload = () => {
+      if (request.status >= 200 && request.status < 300) { onProgress?.(100); resolve(); }
+      else reject(new Error(`Storage returned ${request.status}: ${request.responseText || "upload rejected"}`));
+    };
+    request.send(file);
   });
 }
 
