@@ -1,4 +1,4 @@
-import { ArrowRight, BookOpen, CalendarDays, CheckSquare, FileText, Gavel, HelpCircle, Library, MessageCircle, Sparkles, Users } from "lucide-react";
+import { ArrowRight, BookOpen, CalendarDays, CheckSquare, FileText, Film, Gavel, HelpCircle, Library, MessageCircle, Sparkles, Users } from "lucide-react";
 import type { Assignment, Lesson, Todo } from "./data/types";
 import LearningLoop from "./LearningLoop";
 import ClubPosterCarousel from "./ClubPosterCarousel";
@@ -36,6 +36,11 @@ export default function Home({ name, learnerLevel, learningPreference, lessons, 
     <section className="home-welcome"><div className="home-welcome-copy"><span className="home-kicker">LAW HUB / STUDY DASHBOARD</span><h1>{greet}, {name}.</h1><p>{level.next}</p><div className="home-welcome-actions"><button className="home-primary" onClick={() => setPage("library")}><Library size={16} /> Open library <ArrowRight size={15} /></button><span className="home-level-badge">Level: {level.label}</span><span className="home-level-badge">Support: {preferenceLabel}</span></div><div className="home-orientation-card"><span className="home-orientation-icon"><HelpCircle size={20} /></span><div><strong>New to Law Hub?</strong><p>Let the Law Hub Guide show you where to start and walk with you, one action at a time.</p></div><button type="button" className="home-orientation-button" onClick={openOrientationGuide}>Show me around <ArrowRight size={15} /></button></div></div></section>
     {unreadMessages > 0 && <button type="button" className="home-unread-message" onClick={() => setPage("messages")} aria-label={`Open ${unreadMessages} unread message${unreadMessages === 1 ? "" : "s"}`}><span className="home-unread-icon"><MessageCircle size={18} /></span><span><strong>{unreadMessages} unread message{unreadMessages === 1 ? "" : "s"}</strong><small>Someone sent you a private message. Open Messages to read it.</small></span><ArrowRight size={18} /></button>}
     <ClubPosterCarousel />
+    <section className="home-reels-callout" aria-labelledby="home-reels-title">
+      <div className="home-reels-icon"><Film size={24} /></div>
+      <div className="home-reels-copy"><span className="home-section-eyebrow">WATCH & REVISE</span><h2 id="home-reels-title">Law Reels</h2><p>Short legal lessons and case notes you can watch, replay, and share.</p></div>
+      <button type="button" onClick={() => setPage("reels")}>Open Law Reels <ArrowRight size={16} /></button>
+    </section>
     <section className="home-feature-index" aria-labelledby="home-feature-index-title">
       <div className="home-feature-index-head"><div><span className="home-section-eyebrow">YOUR STUDY CLASSES</span><h2 id="home-feature-index-title">Where do you want to go?</h2></div></div>
       <div className="home-feature-groups">{homeFeatureGroups.map((group) => <div className="home-feature-group" key={group.label}><span className="home-feature-group-label">{group.label}</span><div className="home-feature-buttons">{group.items.map((item) => { const Icon = item.icon; return <button type="button" key={item.id} onClick={() => setPage(item.id)}><Icon size={15} /><span>{item.title}</span><ArrowRight size={13} /></button>; })}</div></div>)}</div>

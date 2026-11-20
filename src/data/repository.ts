@@ -172,7 +172,7 @@ export type Group13Repository = {
   adminDeleteClubPoster: (poster: ClubPoster) => Promise<void>;
   getLawReels: (reelId?: string) => Promise<LawReel[]>;
   adminGetLawReels: () => Promise<LawReel[]>;
-  adminCreateLawReel: (input: { title: string; caption: string; topic: string; sortOrder: number; isPublished: boolean; video: File; cover?: File | null }) => Promise<LawReel>;
+  adminCreateLawReel: (input: { title: string; caption: string; topic: string; sortOrder: number; isPublished: boolean; video: File; cover?: File | null; onProgress?: (percent: number) => void }) => Promise<LawReel>;
   adminUpdateLawReel: (id: string, input: Pick<LawReel, "title" | "caption" | "topic" | "sort_order" | "is_published">) => Promise<LawReel>;
   adminDeleteLawReel: (reel: LawReel) => Promise<void>;
   getDailyCase: () => Promise<DailyCase | null>;
@@ -1309,21 +1309,21 @@ const supabaseRepository: Group13Repository = {
     if (error) throw new Error(`Could not load admin law reels: ${error.message}`);
     return (data ?? []) as LawReel[];
   },
-  adminCreateLawReel: async ({ title, caption, topic, sortOrder, isPublished, video, cover }) => {
+  adminCreateLawReel: async ({ title, caption, topic, sortOrder, isPublished, video, cover, onProgress }) => {
     const client = db();
     const { data: { user } } = await client.auth.getUser();
     if (!user) throw new Error("Sign in as an administrator before uploading videos.");
     const id = makeId();
     const safeName = video.name.replace(/[^a-zA-Z0-9._-]/g, "-") || "law-reel.mp4";
     const videoPath = `law-reels/${id}/${safeName}`;
-    await uploadStorageObject("media", videoPath, video);
+    await uploadStorageObject("media", videoPath, video, (percent) => onProgress?.(Math.round(percent * (cover ? 0.9 : 1))));
     let coverPath: string | null = null;
     try {
       let coverUrl: string | null = null;
       if (cover) {
         const coverName = cover.name.replace(/[^a-zA-Z0-9._-]/g, "-") || "cover.jpg";
         coverPath = `law-reels/${id}/cover-${coverName}`;
-        await uploadStorageObject("media", coverPath, cover);
+        await uploadStorageObject("media", coverPath, cover, (percent) => onProgress?.(90 + Math.round(percent * 0.1)));
         coverUrl = client.storage.from("media").getPublicUrl(coverPath).data.publicUrl;
       }
       const videoUrl = client.storage.from("media").getPublicUrl(videoPath).data.publicUrl;
@@ -1442,12 +1442,13 @@ const supabaseRepository: Group13Repository = {
   },
 };
 
-async function uploadStorageObject(bucket: string, path: string, file: File) {
+async function uploadStorageObject(bucket: string, path: string, file: File, onProgress?: (percent: number) => void) {
   if (!supabase || !supabaseUrl) throw new Error("Supabase is not configured.");
   const resumableThreshold = 6 * 1024 * 1024;
   if (file.size <= resumableThreshold) {
     const { error } = await supabase.storage.from(bucket).upload(path, file, { upsert: false });
     if (error) throw new Error(`Could not upload material: ${error.message}`);
+    onProgress?.(100);
     return;
   }
   const { data: { session } } = await supabase.auth.getSession();
@@ -1467,6 +1468,7 @@ async function uploadStorageObject(bucket: string, path: string, file: File) {
       chunkSize: resumableThreshold,
       metadata: { bucketName: bucket, objectName: path, contentType: file.type || "application/octet-stream", cacheControl: "3600" },
       onError: (error) => reject(new Error(`Could not finish large-file upload: ${error.message}`)),
+      onProgress: (uploaded, total) => onProgress?.(total ? Math.min(100, (uploaded / total) * 100) : 0),
       onSuccess: () => resolve(),
     });
     upload.start();
