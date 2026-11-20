@@ -1453,16 +1453,15 @@ async function uploadStorageObject(bucket: string, path: string, file: File, onP
   }
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.access_token) throw new Error("Your session expired. Sign in again and retry this upload.");
-  const projectUrl = new URL(supabaseUrl);
-  const storageHost = projectUrl.hostname.endsWith(".supabase.co")
-    ? projectUrl.hostname.replace(/\.supabase\.co$/i, ".storage.supabase.co")
-    : projectUrl.host;
-  const endpoint = `${projectUrl.protocol}//${storageHost}/storage/v1/upload/resumable`;
+  // Use the project API origin rather than the separate storage hostname. The
+  // project origin is the endpoint documented for browser TUS uploads and
+  // consistently handles CORS/preflight on mobile browsers.
+  const endpoint = `${supabaseUrl.replace(/\/$/, "")}/storage/v1/upload/resumable`;
   await new Promise<void>((resolve, reject) => {
     const upload = new TusUpload(file, {
       endpoint,
       retryDelays: [0, 3000, 5000, 10000, 20000],
-      headers: { authorization: `Bearer ${session.access_token}`, "x-upsert": "false" },
+      headers: { authorization: `Bearer ${session.access_token}`, apikey: supabaseAnonKey ?? "", "x-upsert": "false" },
       uploadDataDuringCreation: true,
       removeFingerprintOnSuccess: true,
       chunkSize: resumableThreshold,
