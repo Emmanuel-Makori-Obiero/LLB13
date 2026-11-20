@@ -9,7 +9,7 @@ type Props = { onBack?: () => void };
 export default function LawReelsPage({ onBack }: Props) {
   const [reels, setReels] = useState<LawReel[]>([]);
   const [active, setActive] = useState(0);
-  const [muted, setMuted] = useState(true);
+  const [muted, setMuted] = useState(false);
   const [playing, setPlaying] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -111,7 +111,7 @@ export default function LawReelsPage({ onBack }: Props) {
         const video = entry.target as HTMLVideoElement;
         if (entry.isIntersecting && entry.intersectionRatio >= 0.65) {
           setActive(index);
-          video.muted = true;
+          video.muted = muted;
           void video.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
         } else video.pause();
       });
@@ -121,7 +121,7 @@ export default function LawReelsPage({ onBack }: Props) {
       if (video) { video.dataset.index = String(index); observer.observe(video); }
     });
     return () => observer.disconnect();
-  }, [reels]);
+  }, [muted, reels]);
 
   const go = (next: number) => {
     const index = Math.max(0, Math.min(reels.length - 1, next));
@@ -151,7 +151,7 @@ export default function LawReelsPage({ onBack }: Props) {
     {!reels.length && <div className="law-reels-empty"><strong>No lessons have been published yet.</strong><span>Check back when the administrator adds the first law reel.</span></div>}
     <section className="law-reels-feed" aria-label="Law video feed">
       {reels.map((reel, index) => <article className="law-reel" id={`law-reel-${reel.id}`} key={reel.id} onDoubleClick={() => { setActive(index); if (userId) void toggleEngagement("like"); }}>
-        <video ref={(node) => { videoRefs.current[reel.id] = node; }} className="law-reel-video" src={reel.video_url} poster={reel.cover_url ?? undefined} playsInline loop muted preload={index < 2 ? "auto" : "metadata"} />
+        <video ref={(node) => { videoRefs.current[reel.id] = node; }} className="law-reel-video" src={reel.video_url} poster={reel.cover_url ?? undefined} playsInline loop muted={muted} preload={index < 2 ? "auto" : "metadata"} />
         <div className="law-reel-shade" />
         <div className="law-reel-copy">{reel.topic !== "General" && <span className="law-reel-topic">{reel.topic}</span>}{reel.title !== "Untitled law reel" && <h2>{reel.title}</h2>}{reel.caption && <p>{reel.caption}</p>}</div>
         <div className="law-reel-actions"><button type="button" aria-label={playing && active === index ? "Pause video" : "Play video"} onClick={togglePlay}>{playing && active === index ? <Pause /> : <Play />}</button><button type="button" aria-label={muted ? "Unmute video" : "Mute video"} onClick={toggleMute}>{muted ? <VolumeX /> : <Volume2 />}</button>{userId && <><button type="button" className={engagement[reel.id]?.liked ? "engaged" : ""} aria-label="Like video" onClick={() => void toggleEngagement("like")}><Heart fill={engagement[reel.id]?.liked ? "currentColor" : "none"} /><small>{engagement[reel.id]?.likes ?? 0}</small></button><button type="button" className={engagement[reel.id]?.saved ? "engaged" : ""} aria-label="Save video" onClick={() => void toggleEngagement("save")}><Bookmark fill={engagement[reel.id]?.saved ? "currentColor" : "none"} /></button><button type="button" aria-label="Comments" onClick={() => { setCommentsOpen(true); void loadComments(reel.id); }}><MessageCircle /><small>{engagement[reel.id]?.comments ?? 0}</small></button></>}<button type="button" aria-label="Share video" onClick={() => setShareReel(reel)}><Share2 /></button><button type="button" aria-label="Previous video" onClick={() => go(index - 1)} disabled={index === 0}><ChevronUp /></button><button type="button" aria-label="Next video" onClick={() => go(index + 1)} disabled={index === reels.length - 1}><ChevronDown /></button></div>
