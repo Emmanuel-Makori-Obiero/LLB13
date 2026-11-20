@@ -170,7 +170,7 @@ export type Group13Repository = {
   getActiveClubPosters: () => Promise<ClubPoster[]>;
   adminCreateClubPoster: (input: { title: string; file: File; linkUrl: string; aiAnalysis: string; onProgress?: (stage: "checking" | "uploading" | "saving") => void }) => Promise<ClubPoster>;
   adminDeleteClubPoster: (poster: ClubPoster) => Promise<void>;
-  getLawReels: () => Promise<LawReel[]>;
+  getLawReels: (reelId?: string) => Promise<LawReel[]>;
   adminGetLawReels: () => Promise<LawReel[]>;
   adminCreateLawReel: (input: { title: string; caption: string; topic: string; sortOrder: number; isPublished: boolean; video: File; cover?: File | null }) => Promise<LawReel>;
   adminUpdateLawReel: (id: string, input: Pick<LawReel, "title" | "caption" | "topic" | "sort_order" | "is_published">) => Promise<LawReel>;
@@ -1282,11 +1282,13 @@ const supabaseRepository: Group13Repository = {
     const { error } = await client.from("club_posters").delete().eq("id", poster.id);
     if (error) throw new Error(`Could not delete poster: ${error.message}`);
   },
-  getLawReels: async () => {
+  getLawReels: async (reelId?: string) => {
     const client = db();
-    const { data, error } = await client.from("law_reels")
+    let query = client.from("law_reels")
       .select("id,title,caption,topic,video_path,video_url,cover_path,cover_url,sort_order,is_published,created_by,created_at,updated_at")
-      .eq("is_published", true).order("sort_order", { ascending: true }).order("created_at", { ascending: false }).limit(500);
+      .eq("is_published", true);
+    if (reelId) query = query.eq("id", reelId);
+    const { data, error } = await query.order("sort_order", { ascending: true }).order("created_at", { ascending: false }).limit(500);
     if (error) throw new Error(`Could not load law reels: ${error.message}`);
     return Promise.all(((data ?? []) as LawReel[]).map(async (reel) => {
       const video = await client.storage.from("media").createSignedUrl(reel.video_path, 60 * 60);
