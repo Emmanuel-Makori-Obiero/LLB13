@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Bookmark, Check, ChevronDown, ChevronUp, Heart, MessageCircle, Pause, Play, Plus, Send, Share2, Upload, Volume2, VolumeX, X } from "lucide-react";
+import { ArrowLeft, Bookmark, Check, CheckCircle2, ChevronDown, ChevronUp, Heart, MessageCircle, Pause, Play, Plus, Send, Share2, Upload, Volume2, VolumeX, X } from "lucide-react";
 import { repository, supabase } from "./data/repository";
 import type { LawReel } from "./data/types";
 import "./law-reels.css";
@@ -12,6 +12,7 @@ export default function LawReelsPage({ onBack }: Props) {
   const [muted, setMuted] = useState(true);
   const [playing, setPlaying] = useState(true);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [userId, setUserId] = useState<string | null>(null);
   const [engagement, setEngagement] = useState<Record<string, { likes: number; comments: number; liked: boolean; saved: boolean }>>({});
   const [comments, setComments] = useState<Array<{ id: string; username: string; body: string }>>([]);
@@ -27,6 +28,12 @@ export default function LawReelsPage({ onBack }: Props) {
   const [shareReel, setShareReel] = useState<LawReel | null>(null);
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const sharedReelId = new URLSearchParams(window.location.search).get("reel");
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(""), 4200);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
 
   useEffect(() => {
     void Promise.all([repository.getLawReels(sharedReelId ?? undefined), supabase?.auth.getUser()]).then(async ([loaded, auth]) => {
@@ -72,16 +79,23 @@ export default function LawReelsPage({ onBack }: Props) {
     setUploadProgress(0);
     try {
       const uploaded = await repository.adminCreateLawReel({ title: uploadTitle, caption: uploadCaption, topic: uploadTopic, sortOrder: 0, isPublished: true, video: uploadVideo, onProgress: setUploadProgress });
-      setReels((current) => [...current, uploaded]);
+      setReels((current) => {
+        const nextIndex = current.length;
+        window.setTimeout(() => {
+          setActive(nextIndex);
+          document.getElementById(`law-reel-${uploaded.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 80);
+        return [...current, uploaded];
+      });
       setUploadOpen(false); setUploadTitle(""); setUploadCaption(""); setUploadTopic(""); setUploadVideo(null);
-      setError("Your law reel is now live.");
-    } catch (e) { setError(e instanceof Error ? e.message : "Could not upload this reel."); }
+      setError(""); setNotice("Your law reel is live — ready to watch and share.");
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not upload this reel."); setNotice(""); }
     finally { setUploadBusy(false); setUploadProgress(0); }
   };
   const reelLink = (reel: LawReel) => `${window.location.origin}/reels?reel=${encodeURIComponent(reel.id)}`;
   const copyReelLink = async (reel: LawReel) => {
     await navigator.clipboard.writeText(reelLink(reel));
-    setError("Reel link copied.");
+    setError(""); setNotice("Reel link copied to your clipboard.");
     setShareReel(null);
   };
   const shareNative = async (reel: LawReel) => {
@@ -132,8 +146,9 @@ export default function LawReelsPage({ onBack }: Props) {
       <div><span className="section-label">FEATURES · LAW REELS</span></div>
       {userId && <button className="law-reels-add" type="button" aria-label="Upload a law reel" onClick={() => setUploadOpen(true)}><Plus size={20} /></button>}
     </header>
-    {error && <div className="law-reels-empty">{error}</div>}
-    {!error && !reels.length && <div className="law-reels-empty"><strong>No lessons have been published yet.</strong><span>Check back when the administrator adds the first law reel.</span></div>}
+    {error && <div className="law-reels-toast law-reels-toast-error" role="alert"><X size={18} /><span>{error}</span><button type="button" aria-label="Dismiss error" onClick={() => setError("")}><X size={16} /></button></div>}
+    {notice && <div className="law-reels-toast law-reels-toast-success" role="status"><CheckCircle2 size={19} /><span>{notice}</span><button type="button" aria-label="Dismiss notification" onClick={() => setNotice("")}><X size={16} /></button></div>}
+    {!reels.length && <div className="law-reels-empty"><strong>No lessons have been published yet.</strong><span>Check back when the administrator adds the first law reel.</span></div>}
     <section className="law-reels-feed" aria-label="Law video feed">
       {reels.map((reel, index) => <article className="law-reel" id={`law-reel-${reel.id}`} key={reel.id} onDoubleClick={() => { setActive(index); if (userId) void toggleEngagement("like"); }}>
         <video ref={(node) => { videoRefs.current[reel.id] = node; }} className="law-reel-video" src={reel.video_url} poster={reel.cover_url ?? undefined} playsInline loop muted preload={index < 2 ? "auto" : "metadata"} />
