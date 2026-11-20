@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Bookmark, Check, ChevronDown, ChevronUp, Heart, MessageCircle, Pause, Play, Plus, Send, Upload, Volume2, VolumeX, X } from "lucide-react";
+import { ArrowLeft, Bookmark, Check, ChevronDown, ChevronUp, Heart, MessageCircle, Pause, Play, Plus, Send, Share2, Upload, Volume2, VolumeX, X } from "lucide-react";
 import { repository, supabase } from "./data/repository";
 import type { LawReel } from "./data/types";
 import "./law-reels.css";
@@ -23,11 +23,14 @@ export default function LawReelsPage({ onBack }: Props) {
   const [uploadCaption, setUploadCaption] = useState("");
   const [uploadTopic, setUploadTopic] = useState("");
   const [uploadVideo, setUploadVideo] = useState<File | null>(null);
+  const [shareReel, setShareReel] = useState<LawReel | null>(null);
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
 
   useEffect(() => {
     void Promise.all([repository.getLawReels(), supabase?.auth.getUser()]).then(async ([loaded, auth]) => {
       setReels(loaded); const id = auth?.data.user?.id ?? null; setUserId(id);
+      const sharedId = new URLSearchParams(window.location.search).get("reel");
+      if (sharedId) window.setTimeout(() => document.getElementById(`law-reel-${sharedId}`)?.scrollIntoView({ block: "start" }), 250);
       if (!supabase || !id || !loaded.length) return;
       const ids = loaded.map((reel) => reel.id);
       const [likes, saves] = await Promise.all([
@@ -72,6 +75,16 @@ export default function LawReelsPage({ onBack }: Props) {
       setError("Your law reel is now live.");
     } catch (e) { setError(e instanceof Error ? e.message : "Could not upload this reel."); }
     finally { setUploadBusy(false); }
+  };
+  const reelLink = (reel: LawReel) => `${window.location.origin}/reels?reel=${encodeURIComponent(reel.id)}`;
+  const copyReelLink = async (reel: LawReel) => {
+    await navigator.clipboard.writeText(reelLink(reel));
+    setError("Reel link copied.");
+    setShareReel(null);
+  };
+  const shareNative = async (reel: LawReel) => {
+    if (navigator.share) await navigator.share({ title: reel.title, text: reel.caption || "A law reel from Law Hub", url: reelLink(reel) });
+    else await copyReelLink(reel);
   };
 
   useEffect(() => {
@@ -124,12 +137,13 @@ export default function LawReelsPage({ onBack }: Props) {
         <video ref={(node) => { videoRefs.current[reel.id] = node; }} className="law-reel-video" src={reel.video_url} poster={reel.cover_url ?? undefined} playsInline loop muted preload={index < 2 ? "auto" : "metadata"} />
         <div className="law-reel-shade" />
         <div className="law-reel-copy"><span className="law-reel-topic">{reel.topic}</span><h2>{reel.title}</h2>{reel.caption && <p>{reel.caption}</p>}</div>
-        <div className="law-reel-actions"><button type="button" aria-label={playing && active === index ? "Pause video" : "Play video"} onClick={togglePlay}>{playing && active === index ? <Pause /> : <Play />}</button><button type="button" aria-label={muted ? "Unmute video" : "Mute video"} onClick={toggleMute}>{muted ? <VolumeX /> : <Volume2 />}</button><button type="button" className={engagement[reel.id]?.liked ? "engaged" : ""} aria-label="Like video" onClick={() => void toggleEngagement("like")}><Heart fill={engagement[reel.id]?.liked ? "currentColor" : "none"} /><small>{engagement[reel.id]?.likes ?? 0}</small></button><button type="button" className={engagement[reel.id]?.saved ? "engaged" : ""} aria-label="Save video" onClick={() => void toggleEngagement("save")}><Bookmark fill={engagement[reel.id]?.saved ? "currentColor" : "none"} /></button><button type="button" aria-label="Comments" onClick={() => { setCommentsOpen(true); void loadComments(reel.id); }}><MessageCircle /><small>{engagement[reel.id]?.comments ?? 0}</small></button><button type="button" aria-label="Previous video" onClick={() => go(index - 1)} disabled={index === 0}><ChevronUp /></button><button type="button" aria-label="Next video" onClick={() => go(index + 1)} disabled={index === reels.length - 1}><ChevronDown /></button></div>
+        <div className="law-reel-actions"><button type="button" aria-label={playing && active === index ? "Pause video" : "Play video"} onClick={togglePlay}>{playing && active === index ? <Pause /> : <Play />}</button><button type="button" aria-label={muted ? "Unmute video" : "Mute video"} onClick={toggleMute}>{muted ? <VolumeX /> : <Volume2 />}</button><button type="button" className={engagement[reel.id]?.liked ? "engaged" : ""} aria-label="Like video" onClick={() => void toggleEngagement("like")}><Heart fill={engagement[reel.id]?.liked ? "currentColor" : "none"} /><small>{engagement[reel.id]?.likes ?? 0}</small></button><button type="button" className={engagement[reel.id]?.saved ? "engaged" : ""} aria-label="Save video" onClick={() => void toggleEngagement("save")}><Bookmark fill={engagement[reel.id]?.saved ? "currentColor" : "none"} /></button><button type="button" aria-label="Comments" onClick={() => { setCommentsOpen(true); void loadComments(reel.id); }}><MessageCircle /><small>{engagement[reel.id]?.comments ?? 0}</small></button><button type="button" aria-label="Share video" onClick={() => setShareReel(reel)}><Share2 /></button><button type="button" aria-label="Previous video" onClick={() => go(index - 1)} disabled={index === 0}><ChevronUp /></button><button type="button" aria-label="Next video" onClick={() => go(index + 1)} disabled={index === reels.length - 1}><ChevronDown /></button></div>
         <div className="law-reel-progress"><span style={{ width: active === index ? "100%" : "0%" }} /></div>
       </article>)}
     </section>
     {commentsOpen && <div className="law-comments-backdrop" onClick={() => setCommentsOpen(false)}><aside className="law-comments" onClick={(event) => event.stopPropagation()}><div className="law-comments-head"><strong>Comments</strong><button type="button" onClick={() => setCommentsOpen(false)}><Check size={16} /></button></div><div className="law-comments-list">{comments.length ? comments.map((comment) => <div className="law-comment" key={comment.id}><strong>@{comment.username}</strong><span>{comment.body}</span></div>) : <p>No comments yet. Start the discussion.</p>}</div><form onSubmit={(event) => { event.preventDefault(); void submitComment(); }}><input value={commentText} onChange={(event) => setCommentText(event.target.value)} maxLength={500} placeholder="Add a useful legal note…" aria-label="Add a comment" /><button type="submit" aria-label="Post comment"><Send size={17} /></button></form></aside></div>}
     {uploadOpen && <div className="law-comments-backdrop" onClick={() => !uploadBusy && setUploadOpen(false)}><form className="law-upload-sheet" onClick={(event) => event.stopPropagation()} onSubmit={(event) => void submitUpload(event)}><div className="law-comments-head"><strong>Share a law reel</strong><button type="button" disabled={uploadBusy} onClick={() => setUploadOpen(false)}><X size={17} /></button></div><p>Choose a video and share it instantly. Title, caption, and topic are optional.</p><label>Video<input type="file" accept="video/*" required onChange={(event) => setUploadVideo(event.target.files?.[0] ?? null)} /></label><label>Title <span>(optional)</span><input value={uploadTitle} onChange={(event) => setUploadTitle(event.target.value)} placeholder="Untitled law reel" maxLength={160} /></label><label>Caption <span>(optional)</span><textarea value={uploadCaption} onChange={(event) => setUploadCaption(event.target.value)} placeholder="What should students remember?" maxLength={1200} rows={3} /></label><label>Topic <span>(optional)</span><input value={uploadTopic} onChange={(event) => setUploadTopic(event.target.value)} placeholder="General" maxLength={80} /></label><button className="primary-button" type="submit" disabled={uploadBusy}><Upload size={16} />{uploadBusy ? "Uploading…" : "Upload now"}</button></form></div>}
     {uploadBusy && <div className="law-upload-loader" role="status" aria-live="polite"><span className="law-spinner" /><strong>Uploading your law reel…</strong><small>Please keep this screen open.</small></div>}
+    {shareReel && <div className="law-comments-backdrop" onClick={() => setShareReel(null)}><aside className="law-share-sheet" onClick={(event) => event.stopPropagation()}><div className="law-comments-head"><strong>Share this law reel</strong><button type="button" onClick={() => setShareReel(null)}><X size={17} /></button></div><button type="button" onClick={() => void shareNative(shareReel)}><Share2 size={18} /> Share with another app</button><a href={`https://wa.me/?text=${encodeURIComponent(`${shareReel.title} — ${reelLink(shareReel)}`)}`} target="_blank" rel="noreferrer"><strong className="law-share-whatsapp">WhatsApp</strong> Send on WhatsApp</a><button type="button" onClick={() => { void copyReelLink(shareReel); window.open("https://www.instagram.com/", "_blank", "noopener,noreferrer"); }}><strong className="law-share-instagram">Instagram</strong> Copy link and open Instagram</button><button type="button" onClick={() => void copyReelLink(shareReel)}>Copy link</button></aside></div>}
   </main>;
 }
