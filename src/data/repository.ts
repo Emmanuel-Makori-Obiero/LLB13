@@ -1311,8 +1311,6 @@ const supabaseRepository: Group13Repository = {
     const client = db();
     const { data: { user } } = await client.auth.getUser();
     if (!user) throw new Error("Sign in as an administrator before uploading videos.");
-    const { data: allowed, error: roleError } = await client.rpc("is_super_admin");
-    if (roleError || allowed !== true) throw new Error("Only the verified administrator can publish law reels.");
     const id = makeId();
     const safeName = video.name.replace(/[^a-zA-Z0-9._-]/g, "-") || "law-reel.mp4";
     const videoPath = `law-reels/${id}/${safeName}`;
@@ -1328,7 +1326,7 @@ const supabaseRepository: Group13Repository = {
       }
       const videoUrl = client.storage.from("media").getPublicUrl(videoPath).data.publicUrl;
       const { data, error } = await client.from("law_reels").insert({
-        id, title: title.trim(), caption: caption.trim(), topic: topic.trim() || "General",
+        id, title: title.trim() || "Untitled law reel", caption: caption.trim(), topic: topic.trim() || "General",
         video_path: videoPath, video_url: videoUrl, cover_path: coverPath, cover_url: coverUrl,
         sort_order: sortOrder, is_published: isPublished, created_by: user.id,
       }).select("id,title,caption,topic,video_path,video_url,cover_path,cover_url,sort_order,is_published,created_by,created_at,updated_at").single();

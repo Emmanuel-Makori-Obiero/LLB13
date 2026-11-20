@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Bookmark, Check, ChevronDown, ChevronUp, Heart, MessageCircle, Pause, Play, Send, Volume2, VolumeX } from "lucide-react";
+import { ArrowLeft, Bookmark, Check, ChevronDown, ChevronUp, Heart, MessageCircle, Pause, Play, Plus, Send, Upload, Volume2, VolumeX, X } from "lucide-react";
 import { repository, supabase } from "./data/repository";
 import type { LawReel } from "./data/types";
 import "./law-reels.css";
@@ -17,6 +17,12 @@ export default function LawReelsPage({ onBack }: Props) {
   const [comments, setComments] = useState<Array<{ id: string; username: string; body: string }>>([]);
   const [commentText, setCommentText] = useState("");
   const [commentsOpen, setCommentsOpen] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const [uploadTitle, setUploadTitle] = useState("");
+  const [uploadCaption, setUploadCaption] = useState("");
+  const [uploadTopic, setUploadTopic] = useState("");
+  const [uploadVideo, setUploadVideo] = useState<File | null>(null);
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
 
   useEffect(() => {
@@ -54,6 +60,17 @@ export default function LawReelsPage({ onBack }: Props) {
     if (!supabase || !userId || !reel || !body) return;
     const { error: saveError } = await supabase.from("law_reel_comments").insert({ reel_id: reel.id, user_id: userId, body });
     if (!saveError) { setCommentText(""); await loadComments(reel.id); }
+  };
+  const submitUpload = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!uploadVideo) return;
+    setUploadBusy(true);
+    try {
+      await repository.adminCreateLawReel({ title: uploadTitle, caption: uploadCaption, topic: uploadTopic, sortOrder: 0, isPublished: false, video: uploadVideo });
+      setUploadOpen(false); setUploadTitle(""); setUploadCaption(""); setUploadTopic(""); setUploadVideo(null);
+      setError("Your reel was uploaded for administrator review.");
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not upload this reel."); }
+    finally { setUploadBusy(false); }
   };
 
   useEffect(() => {
@@ -97,7 +114,7 @@ export default function LawReelsPage({ onBack }: Props) {
     <header className="law-reels-header">
       <button type="button" className="law-reels-back" onClick={onBack}><ArrowLeft size={17} /> Back</button>
       <div><span className="section-label">FEATURES · LAW REELS</span><h1>Case notes in motion</h1></div>
-      <span className="law-reels-count">{reels.length ? `${active + 1} / ${reels.length}` : ""}</span>
+      <span className="law-reels-count">{reels.length ? `${active + 1} / ${reels.length}` : ""}</span><button className="law-reels-add" type="button" aria-label="Upload a law reel" onClick={() => setUploadOpen(true)}><Plus size={20} /></button>
     </header>
     {error && <div className="law-reels-empty">{error}</div>}
     {!error && !reels.length && <div className="law-reels-empty"><strong>No lessons have been published yet.</strong><span>Check back when the administrator adds the first law reel.</span></div>}
@@ -111,5 +128,6 @@ export default function LawReelsPage({ onBack }: Props) {
       </article>)}
     </section>
     {commentsOpen && <div className="law-comments-backdrop" onClick={() => setCommentsOpen(false)}><aside className="law-comments" onClick={(event) => event.stopPropagation()}><div className="law-comments-head"><strong>Comments</strong><button type="button" onClick={() => setCommentsOpen(false)}><Check size={16} /></button></div><div className="law-comments-list">{comments.length ? comments.map((comment) => <div className="law-comment" key={comment.id}><strong>@{comment.username}</strong><span>{comment.body}</span></div>) : <p>No comments yet. Start the discussion.</p>}</div><form onSubmit={(event) => { event.preventDefault(); void submitComment(); }}><input value={commentText} onChange={(event) => setCommentText(event.target.value)} maxLength={500} placeholder="Add a useful legal note…" aria-label="Add a comment" /><button type="submit" aria-label="Post comment"><Send size={17} /></button></form></aside></div>}
+    {uploadOpen && <div className="law-comments-backdrop" onClick={() => setUploadOpen(false)}><form className="law-upload-sheet" onClick={(event) => event.stopPropagation()} onSubmit={(event) => void submitUpload(event)}><div className="law-comments-head"><strong>Share a law reel</strong><button type="button" onClick={() => setUploadOpen(false)}><X size={17} /></button></div><p>Video is required. Title, caption, and topic are optional. An administrator reviews it before students see it in the feed.</p><label>Video<input type="file" accept="video/*" required onChange={(event) => setUploadVideo(event.target.files?.[0] ?? null)} /></label><label>Title <span>(optional)</span><input value={uploadTitle} onChange={(event) => setUploadTitle(event.target.value)} placeholder="Untitled law reel" maxLength={160} /></label><label>Caption <span>(optional)</span><textarea value={uploadCaption} onChange={(event) => setUploadCaption(event.target.value)} placeholder="What should students remember?" maxLength={1200} rows={3} /></label><label>Topic <span>(optional)</span><input value={uploadTopic} onChange={(event) => setUploadTopic(event.target.value)} placeholder="General" maxLength={80} /></label><button className="primary-button" type="submit" disabled={uploadBusy}><Upload size={16} />{uploadBusy ? "Uploading…" : "Upload for review"}</button></form></div>}
   </main>;
 }
