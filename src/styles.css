@@ -1369,6 +1369,8 @@ html, body { background-color: var(--on-dark); background-image: linear-gradient
 .nav-more-toggle:hover, .nav-more-toggle.active { background: rgba(255,255,255,.1); color: #fff; }
 .nav-more-chevron { margin-left: auto; transition: transform .18s ease; }
 .nav-more-chevron.open { transform: rotate(90deg); }
+.nav-more-hint { display: block; margin: -2px 12px 8px 40px; color: rgba(255,255,255,.45); font-size: 11px; line-height: 1.35; }
+.nav-sub-label { margin: 12px 12px 4px 12px; color: rgba(255,255,255,.42); font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
 .auth-email-checklist { display: grid; gap: 5px; margin: 16px 0; padding: 13px 15px; border: 1px solid var(--line); border-radius: 12px; background: color-mix(in srgb, var(--white) 75%, var(--paper)); font-size: 13px; line-height: 1.45; }
 .auth-email-checklist strong { color: var(--ink); margin-bottom: 2px; }
 .auth-email-checklist span { color: var(--muted); }

@@ -204,6 +204,13 @@ const PRIMARY_NAV_IDS = new Set([
   "library", "groups", "messages", "support",
 ]);
 const ADMIN_ONLY_VIEWS = new Set(["members"]);
+const MORE_TOOL_GROUPS = [
+  { label: "Study", ids: ["attendance", "course-outline", "units", "discussions", "guide", "review", "assistant", "assignment-helper"] },
+  { label: "Practice", ids: ["daily-quiz", "leaderboard", "exam-review", "arena", "growth"] },
+  { label: "Research", ids: ["dictionary", "legal-process", "research", "cases", "constitution", "acts", "penal-code", "scheduled-cases", "opportunities"] },
+  { label: "Media", ids: ["scanner", "transcribe", "music", "reels", "media"] },
+  { label: "Community", ids: ["group-attendance", "counsellor"] },
+] as const;
 const validViews = new Set([
   ...nav.map((item) => item.id),
   "media",
@@ -1144,6 +1151,25 @@ function App() {
   const visibleNav = nav.filter((item) => item.id !== "group-attendance" || isAdmin);
   const primaryNav = visibleNav.filter((item) => PRIMARY_NAV_IDS.has(item.id));
   const moreNav = visibleNav.filter((item) => !PRIMARY_NAV_IDS.has(item.id));
+  const groupedMoreNav = MORE_TOOL_GROUPS.map((group) => ({
+    ...group,
+    items: moreNav.filter((item) => (group.ids as readonly string[]).includes(item.id)),
+  }));
+  const groupedMoreIds = new Set<string>(MORE_TOOL_GROUPS.flatMap((group) => [...group.ids]));
+  const ungroupedMoreNav = moreNav.filter((item) => !groupedMoreIds.has(item.id));
+  const renderMoreNav = () => (<>
+    {groupedMoreNav.map((group) => group.items.length > 0 && (
+      <div className="nav-group" key={group.label}>
+        <div className="nav-sub-label">{group.label}</div>
+        {group.items.map((item) => (
+          <NavItem key={item.id} {...item} badge={item.id === "messages" ? unreadDirectMessages : 0} active={view === item.id} onClick={() => setPage(item.id)} />
+        ))}
+      </div>
+    ))}
+    {ungroupedMoreNav.map((item) => (
+      <NavItem key={item.id} {...item} badge={item.id === "messages" ? unreadDirectMessages : 0} active={view === item.id} onClick={() => setPage(item.id)} />
+    ))}
+  </>);
   return (
     <div className="app-shell">
       <RewardWelcomePopup userId={userId} name={profile.displayName || userEmail?.split("@")[0] || "learner"} onNavigate={setPage} />
@@ -1166,18 +1192,11 @@ function App() {
           ))}
           <button className={`nav-more-toggle ${moreOpen ? "active" : ""}`} type="button" aria-expanded={moreOpen} onClick={() => setMoreOpen((open) => !open)}>
             <MoreHorizontal size={18} />
-            <span>{moreOpen ? "Hide tools" : "More tools"}</span>
+            <span>{moreOpen ? "Hide all tools" : "All tools & features"}</span>
             <ChevronRight size={14} className={moreOpen ? "nav-more-chevron open" : "nav-more-chevron"} />
           </button>
-          {moreOpen && moreNav.map((item) => (
-            <NavItem
-              key={item.id}
-              {...item}
-              badge={item.id === "messages" ? unreadDirectMessages : 0}
-              active={view === item.id}
-              onClick={() => setPage(item.id)}
-            />
-          ))}
+          {!moreOpen && <span className="nav-more-hint">Browse the full Law Hub</span>}
+          {moreOpen && renderMoreNav()}
           <div className="nav-label">You</div>
           <NavItem
             id="account"
@@ -1276,18 +1295,11 @@ function App() {
             ))}
             <button className={`nav-more-toggle ${moreOpen ? "active" : ""}`} type="button" aria-expanded={moreOpen} onClick={() => setMoreOpen((open) => !open)}>
               <MoreHorizontal size={18} />
-              <span>{moreOpen ? "Hide tools" : "More tools"}</span>
+              <span>{moreOpen ? "Hide all tools" : "All tools & features"}</span>
               <ChevronRight size={14} className={moreOpen ? "nav-more-chevron open" : "nav-more-chevron"} />
             </button>
-            {moreOpen && moreNav.map((item) => (
-              <NavItem
-                key={item.id}
-                {...item}
-                badge={item.id === "messages" ? unreadDirectMessages : 0}
-                active={view === item.id}
-                onClick={() => setPage(item.id)}
-              />
-            ))}
+            {!moreOpen && <span className="nav-more-hint">Browse the full Law Hub</span>}
+            {moreOpen && renderMoreNav()}
             <div className="nav-label">You</div>
             <NavItem
               id="account"
