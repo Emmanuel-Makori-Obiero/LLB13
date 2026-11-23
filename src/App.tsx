@@ -199,9 +199,15 @@ const nav = [
   { id: "counsellor", label: "Counsellor", icon: Users },
   { id: "reels", label: "Law Reels", icon: Film },
 ];
+const PRIMARY_NAV_IDS = new Set([
+  "dashboard", "timetable", "todos", "assignments", "daily-case",
+  "library", "groups", "messages", "support",
+]);
+const ADMIN_ONLY_VIEWS = new Set(["members"]);
 const validViews = new Set([
   ...nav.map((item) => item.id),
   "media",
+  "members",
   "settings",
   "meeting",
   "unit",
@@ -319,6 +325,7 @@ function App() {
   const [surveyLevel, setSurveyLevel] = useState<LearnerLevel | "">("");
   const [surveyPreference, setSurveyPreference] = useState<LearningPreference | "">("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [pathKey, setPathKey] = useState(() => window.location.pathname);
   const [profile, setProfile] = useState<UserProfile>({
     username: "",
@@ -620,7 +627,7 @@ function App() {
         repository.getMaterials(),
         repository.getAssignments(),
         repository.getDiscussions(),
-        repository.getMembers(),
+        isAdmin ? repository.getMembers() : Promise.resolve([] as Member[]),
         repository.getTodos(),
         repository.getTimetable(),
         repository.getMedia(),
@@ -652,7 +659,7 @@ function App() {
       "materials",
       "assignments",
       "discussions",
-      "members",
+      ...(isAdmin ? ["members"] : []),
       "todos",
       "timetable",
       "media_resources",
@@ -669,7 +676,7 @@ function App() {
       active = false;
       void client.removeChannel(channel);
     };
-  }, [userEmail]);
+  }, [userEmail, isAdmin]);
   useEffect(() => {
     const meetingId =
       window.location.pathname.match(/^\/meetings\/([^/]+)/)?.[1];
@@ -713,7 +720,11 @@ function App() {
   const visibleTodos = todos.filter((todo) => !todo.assignment_id || visibleAssignmentIds.has(todo.assignment_id));
   const currentPageLabel = nav.find((item) => item.id === view)?.label ?? "learning workspace";
   const setPage = (next: string) => {
-    const target = validViews.has(next) ? next : "dashboard";
+    const target = ADMIN_ONLY_VIEWS.has(next) && !isAdmin
+      ? "dashboard"
+      : validViews.has(next)
+        ? next
+        : "dashboard";
     setMenuOpen(false);
     const path = target === "dashboard" ? "/" : `/${target}`;
     if (window.location.pathname !== path)
@@ -739,7 +750,7 @@ function App() {
     if (
       userEmail &&
       adminState === "no" &&
-      (view === "settings" || view === "admin")
+      (view === "settings" || view === "admin" || view === "members")
     )
       setPage("dashboard");
   }, [userEmail, adminState, view]);
@@ -1131,6 +1142,8 @@ function App() {
   }
 
   const visibleNav = nav.filter((item) => item.id !== "group-attendance" || isAdmin);
+  const primaryNav = visibleNav.filter((item) => PRIMARY_NAV_IDS.has(item.id));
+  const moreNav = visibleNav.filter((item) => !PRIMARY_NAV_IDS.has(item.id));
   return (
     <div className="app-shell">
       <RewardWelcomePopup userId={userId} name={profile.displayName || userEmail?.split("@")[0] || "learner"} onNavigate={setPage} />
@@ -1141,8 +1154,8 @@ function App() {
       <aside className="sidebar">
         <Brand />
         <nav>
-          <div className="nav-label">Main</div>
-          {visibleNav.slice(0, 9).map((item) => (
+          <div className="nav-label">Start here</div>
+          {primaryNav.map((item) => (
             <NavItem
               key={item.id}
               {...item}
@@ -1151,8 +1164,12 @@ function App() {
               onClick={() => setPage(item.id)}
             />
           ))}
-          <div className="nav-label">More</div>
-          {visibleNav.slice(9).map((item) => (
+          <button className={`nav-more-toggle ${moreOpen ? "active" : ""}`} type="button" aria-expanded={moreOpen} onClick={() => setMoreOpen((open) => !open)}>
+            <MoreHorizontal size={18} />
+            <span>{moreOpen ? "Hide tools" : "More tools"}</span>
+            <ChevronRight size={14} className={moreOpen ? "nav-more-chevron open" : "nav-more-chevron"} />
+          </button>
+          {moreOpen && moreNav.map((item) => (
             <NavItem
               key={item.id}
               {...item}
@@ -1247,8 +1264,8 @@ function App() {
                 <div className="profile-role">{userEmail}</div>
               </div>
             </button>
-            <div className="nav-label">Main</div>
-            {visibleNav.slice(0, 9).map((item) => (
+            <div className="nav-label">Start here</div>
+            {primaryNav.map((item) => (
               <NavItem
                 key={item.id}
                 {...item}
@@ -1257,8 +1274,12 @@ function App() {
                 onClick={() => setPage(item.id)}
               />
             ))}
-            <div className="nav-label">More</div>
-            {visibleNav.slice(9).map((item) => (
+            <button className={`nav-more-toggle ${moreOpen ? "active" : ""}`} type="button" aria-expanded={moreOpen} onClick={() => setMoreOpen((open) => !open)}>
+              <MoreHorizontal size={18} />
+              <span>{moreOpen ? "Hide tools" : "More tools"}</span>
+              <ChevronRight size={14} className={moreOpen ? "nav-more-chevron open" : "nav-more-chevron"} />
+            </button>
+            {moreOpen && moreNav.map((item) => (
               <NavItem
                 key={item.id}
                 {...item}

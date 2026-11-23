@@ -97,10 +97,6 @@
       "title": "Meeting room"
     },
     {
-      "path": "/members",
-      "title": "Members"
-    },
-    {
       "path": "/groups",
       "title": "Groups"
     },

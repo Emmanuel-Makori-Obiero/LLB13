@@ -1363,3 +1363,12 @@ html, body { background-color: var(--on-dark); background-image: linear-gradient
 .policy-modal-backdrop{position:fixed;inset:0;z-index:1200;display:grid;place-items:center;padding:18px;background:rgba(18,31,25,.72);backdrop-filter:blur(4px)}
 .policy-modal{width:min(560px,100%);display:grid;gap:14px;padding:30px;border:1px solid var(--line);background:var(--paper);box-shadow:0 24px 90px rgba(0,0,0,.3)}
 .policy-modal h2{font-size:28px}.policy-modal p{color:var(--muted);font-size:13px;line-height:1.6}.policy-modal-links{display:flex;flex-wrap:wrap;gap:10px}.policy-modal-links a{padding:10px 12px;border:1px solid var(--line);background:var(--white);color:var(--forest);font-size:12px;font-weight:700;text-decoration:underline;text-underline-offset:3px}.policy-modal .primary-button{justify-self:start}
+
+/* Keep the learner shell focused while leaving advanced tools one deliberate tap away. */
+.nav-more-toggle { width: 100%; display: flex; align-items: center; gap: 10px; border: 0; border-radius: 10px; padding: 10px 12px; margin: 8px 0 4px; background: transparent; color: rgba(255,255,255,.68); font: inherit; cursor: pointer; text-align: left; }
+.nav-more-toggle:hover, .nav-more-toggle.active { background: rgba(255,255,255,.1); color: #fff; }
+.nav-more-chevron { margin-left: auto; transition: transform .18s ease; }
+.nav-more-chevron.open { transform: rotate(90deg); }
+.auth-email-checklist { display: grid; gap: 5px; margin: 16px 0; padding: 13px 15px; border: 1px solid var(--line); border-radius: 12px; background: color-mix(in srgb, var(--white) 75%, var(--paper)); font-size: 13px; line-height: 1.45; }
+.auth-email-checklist strong { color: var(--ink); margin-bottom: 2px; }
+.auth-email-checklist span { color: var(--muted); }

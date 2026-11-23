@@ -400,7 +400,7 @@ export default function LoginPage({
               <h1>Check your email</h1>
               <p className="auth-lead">
                 Supabase accepted the confirmation request for <strong>{pendingEmail}</strong>.
-                Open the link if it arrives, then come back and sign in.
+                Open the link if it arrives, then come back and sign in. The email may appear under Spam, Junk, or Promotions.
               </p>
               {notice && (
                 <div className={`auth-notice ${notice.tone}`}>
@@ -417,15 +417,21 @@ export default function LoginPage({
                   ? `Resend email in ${cooldown}s`
                   : "Resend confirmation email"}
               </button>
+              <div className="auth-email-checklist">
+                <strong>Still cannot find it?</strong>
+                <span>1. Check Spam, Junk, and Promotions.</span>
+                <span>2. Search your mailbox for “Law Hub” or “confirm”.</span>
+                <span>3. If you registered before, use Sign in or Forgot password instead of registering again.</span>
+              </div>
               <p className="auth-hint">
-                The timer only prevents repeated requests; it does not prove delivery. Nothing after a few minutes? Check spam or junk, confirm the address is spelled correctly, or ask the administrator to configure SMTP email delivery.
+                The timer prevents repeated requests; it does not prove delivery. If nothing arrives after the timer, confirm the address is spelled correctly and try once more.
               </p>
               <button
                 type="button"
                 className="auth-link"
                 onClick={() => switchMode("sign-in")}
               >
-                Back to sign in
+                I already have an account — sign in
               </button>
             </div>
           ) : (
