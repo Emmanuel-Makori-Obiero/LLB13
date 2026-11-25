@@ -6,6 +6,7 @@ import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import * as mammoth from "mammoth";
 import { ocrImage, ocrPdfPages } from "./ocr";
 import { extractLegacyWordHtml } from "./legacyWord";
+import { pdfItemsToPageText } from "./actParser";
 import { isPersonalizedStudyFeature, personalizeMessages, type LearningProfile } from "./learnerAdaptation";
 import { cooldownRetryDelayMs, shouldRetryAiRequest } from "./aiRetryPolicy";
 import { extractArticleNumbers, MAX_CONSTITUTION_ARTICLES_PER_BATCH, shouldReuseConstitutionHistory, splitArticleNumbers } from "./constitutionArticles";
@@ -53,6 +54,7 @@ export type AIFeature =
   | "notes_research"
   | "notes_review"
   | "quality_check"
+  | "acts_validation"
   | "extract_assignments"
   | "counsellor"
   | "rw_question"
@@ -363,8 +365,7 @@ export async function extractText(file: File, onProgress?: (completed: number, t
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
       const tc = await page.getTextContent();
-      out +=
-        tc.items.map((it) => ("str" in it ? it.str : "")).join(" ") + "\n\n";
+      out += pdfItemsToPageText(tc.items) + "\n\n";
     }
     if (out.trim().length >= 40) return out;
     return ocrPdfPages(pdf, onProgress);
