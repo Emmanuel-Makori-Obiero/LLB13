@@ -54,6 +54,7 @@ export type AIFeature =
   | "notes_research"
   | "notes_review"
   | "quality_check"
+  | "acts_validation"
   | "extract_assignments"
   | "counsellor"
   | "rw_question"

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseUploadedAct, pdfItemsToPageText } from "../src/lib/actParser.ts";
+import { buildActStructureAuditMessage, parseActStructureAudit, parseUploadedAct, pdfItemsToPageText } from "../src/lib/actParser.ts";
 
 test("PDF text items retain line boundaries needed by numbered statute headings", () => {
   const text = pdfItemsToPageText([
@@ -41,4 +41,34 @@ test("another Act layout with plain contents page numbers and dash headings is p
 
 test("a document without a numbered section 1 is not misidentified as an Act", () => {
   assert.deepEqual(parseUploadedAct("2. Later section\nText", "empty.pdf").sections, []);
+});
+
+test("Act audit input compares source headings with parsed output without special-casing one Act", () => {
+  const message = buildActStructureAuditMessage(
+    "CONTENTS\n1. Short title. ........ 1\n\n1. Short title.\nBody text\nFIRST SCHEDULE\nSchedule text",
+    [{ number: 1, title: "Short title.", text: "Body text" }],
+    [{ number: "Schedule", title: "FIRST SCHEDULE", text: "Schedule text" }],
+  );
+
+  assert.match(message, /sourceHeadingInventoryIncludesContentsEntries/);
+  assert.match(message, /parsedSections/);
+  assert.match(message, /parsedSchedules/);
+  assert.match(message, /FIRST SCHEDULE/);
+  assert.match(message, /inventoryTruncated/);
+});
+
+test("AI Act audit parsing accepts the expected shape and leaves malformed results unverified", () => {
+  assert.deepEqual(parseActStructureAudit({ status: "pass", summary: "No obvious outline mismatch.", issues: [] }), {
+    status: "pass",
+    summary: "No obvious outline mismatch.",
+    issues: [],
+  });
+  assert.deepEqual(parseActStructureAudit('{"status":"review","summary":"Check numbering.","issues":["Possible missing heading"]}'), {
+    status: "review",
+    summary: "Check numbering.",
+    issues: ["Possible missing heading"],
+  });
+  assert.equal(parseActStructureAudit({ status: "pass", summary: "No issue." }), null);
+  assert.equal(parseActStructureAudit({ status: "pass", summary: "Mismatch noted.", issues: ["Possible omitted heading"] })?.status, "review");
+  assert.equal(parseActStructureAudit("not JSON"), null);
 });
