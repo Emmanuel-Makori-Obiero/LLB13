@@ -27,6 +27,18 @@ test("Law of Contract Act skips table-of-contents entries and captures operative
   assert.doesNotMatch(parsed.sections[0].text, /\.{3,}/);
 });
 
+test("another Act layout with plain contents page numbers and dash headings is parsed generically", () => {
+  const raw = `THE SAMPLE ADMINISTRATION ACT\nContents\n1. Short title 1\n2. Application 1\nFIRST SCHEDULE 8\n\nTHE SAMPLE ADMINISTRATION ACT\n1—Short title.\nThis Act may be cited as the Sample Administration Act.\n\n2—Application.\nThis Act applies throughout Kenya.\n\nFIRST SCHEDULE\nMatters prescribed under this Act.`;
+  const parsed = parseUploadedAct(raw, "sample-administration.pdf");
+
+  assert.equal(parsed.title, "SAMPLE ADMINISTRATION ACT");
+  assert.deepEqual(parsed.sections.map(({ number }) => number), [1, 2]);
+  assert.match(parsed.sections[0].text, /may be cited as the Sample Administration Act/);
+  assert.match(parsed.sections[1].text, /applies throughout Kenya/);
+  assert.equal(parsed.schedules.length, 1);
+  assert.match(parsed.schedules[0].text, /Matters prescribed under this Act/);
+});
+
 test("a document without a numbered section 1 is not misidentified as an Act", () => {
   assert.deepEqual(parseUploadedAct("2. Later section\nText", "empty.pdf").sections, []);
 });

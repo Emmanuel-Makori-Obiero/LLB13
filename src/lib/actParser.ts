@@ -23,21 +23,30 @@ export function pdfItemsToPageText(items: readonly unknown[]): string {
   return output.join("").replace(/[ \t]+\n/g, "\n").trim();
 }
 
-function isContentsEntry(line: string): boolean {
-  return /\.(?:\s*\.){2,}\s*\d+\s*$/.test(line);
+function sectionHeading(line: string): { number: number; title: string } | null {
+  const match = line.match(/^\s*(\d{1,3})\s*(?:[.)]|[-–—])\s*(.+?)\s*$/);
+  return match ? { number: Number(match[1]), title: match[2].trim() } : null;
 }
 
-function sectionHeading(line: string): { number: number; title: string } | null {
-  const match = line.match(/^\s*(\d{1,3})\.\s+(.+?)\s*$/);
-  return match ? { number: Number(match[1]), title: match[2].trim() } : null;
+function isScheduleHeading(line: string): boolean {
+  return /^(?:(?:FIRST|SECOND|THIRD|FOURTH|FIFTH|SIXTH|SEVENTH|EIGHTH|NINTH|TENTH|\d+(?:ST|ND|RD|TH))\s+)?SCHEDULES?\b/i.test(line);
+}
+
+function isContentsEntry(line: string): boolean {
+  const hasDotLeaders = /\.(?:\s*\.){2,}\s*\d+\s*$/.test(line);
+  const hasTrailingPageNumber = /\s(?:\d{1,4}|[ivxlcdm]{1,8})$/i.test(line);
+  return hasDotLeaders || (hasTrailingPageNumber && (sectionHeading(line) !== null || isScheduleHeading(line)));
 }
 
 export function parseUploadedAct(raw: string, filename: string) {
   const text = raw.replace(/\r/g, "").replace(/\f/g, "\n").replace(/\n{3,}/g, "\n\n");
   const title = (text.match(/\bTHE\s+([A-Z][A-Z\s]+ACT)\b/i)?.[1] || filename.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ")).trim();
   const lines = text.split("\n").map((line) => line.replace(/[\t ]+/g, " ").trim());
-  const firstSectionIndex = lines.findIndex((line) => sectionHeading(line)?.number === 1 && !isContentsEntry(line));
-  const scheduleIndex = firstSectionIndex < 0 ? -1 : lines.findIndex((line, index) => index > firstSectionIndex && /^SCHEDULES?\b/i.test(line) && !isContentsEntry(line));
+  const contentHeadingIndex = lines.findIndex((line) => /^CONTENTS\b/i.test(line));
+  const sectionOneCandidates = lines.flatMap((line, index) => sectionHeading(line)?.number === 1 && !isContentsEntry(line) ? [index] : []);
+  const contentCandidates = sectionOneCandidates.filter((index) => index > contentHeadingIndex);
+  const firstSectionIndex = contentHeadingIndex >= 0 ? contentCandidates[contentCandidates.length - 1] ?? -1 : sectionOneCandidates[0] ?? -1;
+  const scheduleIndex = firstSectionIndex < 0 ? -1 : lines.findIndex((line, index) => index > firstSectionIndex && isScheduleHeading(line) && !isContentsEntry(line));
   const operativeEnd = scheduleIndex >= 0 ? scheduleIndex : lines.length;
   const markers = lines
     .map((line, index) => ({ line, index, heading: sectionHeading(line) }))
