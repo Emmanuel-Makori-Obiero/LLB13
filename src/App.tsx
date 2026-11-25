@@ -91,7 +91,6 @@ import LoginPage, { ResetPasswordPage } from "./AuthPage";
 import LandingPage, { HelpButton } from "./LandingPage";
 import { downloadInfo, readerUrl, safeUrl, toEmbedUrl, youtubeVideoId } from "./links";
 import AdminPage from "./AdminPage";
-import AdminLawReels from "./AdminLawReels";
 import InstallButton from "./InstallButton";
 import { DataRightsCard, DeleteAccountCard } from "./AccountPage";
 import Home from "./Home";
@@ -1817,7 +1816,6 @@ function App() {
               setNotice={setNotice}
             />
           )}
-          {view === "admin" && isAdmin && <AdminLawReels setNotice={setNotice} />}
           {view === "settings" && isAdmin && (
             <SettingsPage setNotice={setNotice} />
           )}
