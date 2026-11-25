@@ -1,0 +1,32 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { parseUploadedAct, pdfItemsToPageText } from "../src/lib/actParser.ts";
+
+test("PDF text items retain line boundaries needed by numbered statute headings", () => {
+  const text = pdfItemsToPageText([
+    { str: "CONTENTS", transform: [1, 0, 0, 1, 18, 700] },
+    { str: "1. Short title.", transform: [1, 0, 0, 1, 18, 680] },
+    { str: "........................................ 1", transform: [1, 0, 0, 1, 100, 680] },
+    { str: "2. English law of contract to apply in Kenya.", transform: [1, 0, 0, 1, 18, 660] },
+    { str: "........................................ 1", transform: [1, 0, 0, 1, 180, 660] },
+  ]);
+
+  assert.match(text, /CONTENTS\n1\. Short title\. \.{3,} 1\n2\./);
+});
+
+test("Law of Contract Act skips table-of-contents entries and captures operative sections and schedule", () => {
+  const raw = `THE LAW OF CONTRACT ACT\nCAP. 23\nLegislation as at 31 December 2022\n\nContents\n1. Short title. .................................................... 1\n2. English law of contract to apply in Kenya. ...................... 1\n3. Certain contracts to be in writing. ............................. 1\n4. Application of Indian Act. ...................................... 3\nSCHEDULE [s. 2] .................................................... 3\n\nLaw of Contract Act (Cap. 23)\n1. Short title.\nThis Act may be cited as the Law of Contract Act.\n\n2. English law of contract to apply in Kenya.\nThe common law of England relating to contract shall extend and apply to Kenya.\n\n3. Certain contracts to be in writing.\nNo suit shall be brought upon a contract unless it is in writing.\n\n4. Application of Indian Act.\nThe Indian Act shall apply as provided by this Act.\n\nSCHEDULE [s. 2]\nThe provisions set out in this Schedule apply.`;
+
+  const parsed = parseUploadedAct(raw, "LawofContractAct.pdf");
+  assert.equal(parsed.title, "LAW OF CONTRACT ACT");
+  assert.deepEqual(parsed.sections.map(({ number }) => number), [1, 2, 3, 4]);
+  assert.equal(parsed.sections[0].text, "This Act may be cited as the Law of Contract Act.");
+  assert.match(parsed.sections[1].text, /common law of England/);
+  assert.equal(parsed.schedules.length, 1);
+  assert.match(parsed.schedules[0].text, /provisions set out in this Schedule/);
+  assert.doesNotMatch(parsed.sections[0].text, /\.{3,}/);
+});
+
+test("a document without a numbered section 1 is not misidentified as an Act", () => {
+  assert.deepEqual(parseUploadedAct("2. Later section\nText", "empty.pdf").sections, []);
+});

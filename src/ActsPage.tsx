@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Bookmark, BookOpen, Download, FileUp, Loader2, Search, ScrollText, Trash2 } from "lucide-react";
 import { extractText } from "./lib/ai";
+import { parseUploadedAct, type ActSchedule, type ActSection } from "./lib/actParser";
 import { supabase } from "./data/repository";
 import seedAct from "./data/judicature-act.json";
 import "./constitution.css";
 import "./acts.css";
 
-type ActSection = { number: number; title: string; text: string };
-type ActSchedule = { number: string; title: string; text: string };
 type Act = { id: string; title: string; shortTitle: string; chapter: string; edition: string; source: string; sourceUrl: string; assentDate: string; commencementDate: string; preamble: string; sections: ActSection[]; schedules: ActSchedule[]; created_by?: string };
 const seeded = seedAct as Act;
 const bookmarksKey = "llb13-act-bookmarks-v1";
@@ -15,23 +14,6 @@ const bookmarksKey = "llb13-act-bookmarks-v1";
 function readBookmarks(): Record<string, number[]> {
   try { const value = JSON.parse(localStorage.getItem(bookmarksKey) || "{}"); return value && typeof value === "object" ? value : {}; } catch { return {}; }
 }
-function parseUploadedAct(raw: string, filename: string): Act {
-  const text = raw.replace(/\r/g, "").replace(/\f/g, "\n").replace(/\n{3,}/g, "\n\n");
-  const title = (text.match(/(?:THE|THE\s+)\s*([A-Z][A-Z\s]+ACT)/i)?.[1] || filename.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ")).trim();
-  const afterCommencement = text.search(/Date of commencement:/i);
-  const startText = afterCommencement >= 0 ? text.slice(afterCommencement) : text;
-  const firstSection = startText.search(/(?:^|\n)\s*1\.\s+[^\n]+/);
-  const operative = firstSection >= 0 ? startText.slice(firstSection) : startText;
-  const scheduleIndex = operative.search(/(?:^|\n)\s*SCHEDULES?\s*\n/i);
-  const sectionsText = scheduleIndex >= 0 ? operative.slice(0, scheduleIndex) : operative;
-  const scheduleText = scheduleIndex >= 0 ? operative.slice(scheduleIndex).replace(/^\s*SCHEDULES?\s*/i, "").trim() : "";
-  const markers = [...sectionsText.matchAll(/(?:^|\n)\s*(\d{1,3})\.\s+([^\n]+)\n/g)];
-  const sections = markers.map((marker, index) => ({ number: Number(marker[1]), title: marker[2].trim(), text: sectionsText.slice(marker.index! + marker[0].length, markers[index + 1]?.index ?? sectionsText.length).trim() }));
-  const assentDate = text.match(/Date of assent:\s*([^\]\n]+)/i)?.[1]?.trim() || "";
-  const commencementDate = text.match(/Date of commencement:\s*([^\]\n]+)/i)?.[1]?.trim() || "";
-  return { id: `uploaded-${Date.now()}`, title: title || "Uploaded Act", shortTitle: title || "Uploaded Act", chapter: text.match(/CHAPTER\s+([\w-]+)/i)?.[1] ? `Chapter ${text.match(/CHAPTER\s+([\w-]+)/i)![1]}` : "", edition: text.match(/Revised Edition[^\n]*/i)?.[0]?.trim() || "Uploaded edition", source: `Uploaded by administrator · ${filename}`, sourceUrl: "", assentDate, commencementDate, preamble: text.match(/An Act of Parliament to[\s\S]{0,800}?\.(?=\n\s*\[Act|\n\s*\d+\.)/i)?.[0]?.trim() || "", sections, schedules: scheduleText ? [{ number: "Schedule", title: "Schedule", text: scheduleText }] : [] };
-}
-
 export default function ActsPage({ isAdmin }: { isAdmin: boolean }) {
   const [acts, setActs] = useState<Act[]>([seeded]);
   const [selectedActId, setSelectedActId] = useState(seeded.id);
