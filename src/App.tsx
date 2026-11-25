@@ -71,6 +71,7 @@ import {
   repository,
   supabase,
   uploadUserAsset,
+  type LibraryUploadPhase,
 } from "./data/repository";
 import type {
   Assignment,
@@ -367,6 +368,7 @@ function App() {
   const [activeMeeting, setActiveMeeting] = useState<Discussion | null>(null);
   const [activeMaterial, setActiveMaterial] = useState<Material | null>(null);
   const [materialFormOpen, setMaterialFormOpen] = useState(false);
+  const [materialUploadPhase, setMaterialUploadPhase] = useState<LibraryUploadPhase | null>(null);
   const [bulkImportBusy, setBulkImportBusy] = useState(false);
   const [bulkImportProgress, setBulkImportProgress] = useState<{ phase: string; total: number; done: number; indexed: number; failed: number; current: string }>({ phase: "idle", total: 0, done: 0, indexed: 0, failed: 0, current: "" });
   const [editingMaterial, setEditingMaterial] = useState<Material | null>(null);
@@ -1529,7 +1531,7 @@ function App() {
               openAdmin={() => setView("admin")}
               search={search}
               setSearch={setSearch}
-              openCreate={() => setMaterialFormOpen(true)}
+              openCreate={() => { setMaterialUploadPhase(null); setMaterialFormOpen(true); }}
               openEdit={setEditingMaterial}
               openReader={openReader}
               onBulkImport={importPastPaperArchive}
@@ -1862,14 +1864,16 @@ function App() {
         <MaterialForm
           units={units}
           university={profile.university}
-          onClose={() => setMaterialFormOpen(false)}
+          uploadPhase={materialUploadPhase}
+          onProgress={setMaterialUploadPhase}
+          onClose={() => { setMaterialUploadPhase(null); setMaterialFormOpen(false); }}
           onCreated={async (material, file, extractedText) => {
             try {
-              const created = await repository.createMaterial(material, file);
+              const created = await repository.createMaterial(material, file, setMaterialUploadPhase);
               setMaterials((current) => [created, ...current]);
-              setMaterialFormOpen(false);
               if (file) {
                 try {
+                  setMaterialUploadPhase("indexing");
                   const indexed = await uploadLibraryMaterial(
                     file,
                     `${created.type} · ${created.unit} · ${created.source}`,
@@ -1886,7 +1890,10 @@ function App() {
               } else {
                 setNotice("Material link added. Upload the readable file if you want it indexed by the AI.");
               }
+              setMaterialUploadPhase("complete");
+              setMaterialFormOpen(false);
             } catch (error) {
+              setMaterialUploadPhase(error instanceof Error && /already in the Library|duplicate|similar/i.test(error.message) ? "blocked" : "error");
               setNotice(
                 error instanceof Error
                   ? error.message
@@ -4766,6 +4773,8 @@ function MaterialForm({
   units,
   university,
   initial,
+  uploadPhase,
+  onProgress,
   onClose,
   onCreated,
   onUpdated,
@@ -4773,6 +4782,8 @@ function MaterialForm({
   units: Unit[];
   university: string;
   initial?: Material;
+  uploadPhase?: LibraryUploadPhase | null;
+  onProgress?: (phase: LibraryUploadPhase) => void;
   onClose: () => void;
   onCreated?: (material: Omit<Material, "id">, file?: File, extractedText?: string) => Promise<void>;
   onUpdated?: (material: Omit<Material, "id">) => Promise<void>;
@@ -4824,6 +4835,7 @@ function MaterialForm({
   const inspectBook = async (selectedFile: File | undefined) => {
     setFile(selectedFile);
     if (!selectedFile || initial) return;
+      onProgress?.("reading");
       setExtracting(true);
       setExtractNote(selectedFile.name.toLowerCase().endsWith(".pdf")
         ? "Checking the PDF text layer; scanned pages will be read with OCR…"
@@ -4918,6 +4930,7 @@ function MaterialForm({
           event.preventDefault();
           if (savingMaterial || extracting) return;
           setSavingMaterial(true);
+          onProgress?.(initial ? "saving" : "checking");
           try {
             const extractedText = file && extractedTextRef.current?.file === file
               ? extractedTextRef.current.text
@@ -5039,8 +5052,14 @@ function MaterialForm({
               {extractNote || "AI is analysing the readable text…"}
             </span>
           )}
-          {savingMaterial && file && file.size > 6 * 1024 * 1024 && (
-            <span className="field-hint">Uploading this large book in resumable chunks, then adding its readable text to the Library AI knowledge base…</span>
+          {(savingMaterial || uploadPhase) && !initial && (
+            <div className={`library-upload-status ${uploadPhase === "blocked" || uploadPhase === "error" ? "is-error" : uploadPhase === "complete" ? "is-complete" : ""}`} role="status" aria-live="polite">
+              <strong>{uploadPhase === "reading" ? "Reading book" : uploadPhase === "checking" ? "Checking for similar material" : uploadPhase === "uploading" ? "Uploading file" : uploadPhase === "saving" ? "Saving Library record" : uploadPhase === "indexing" ? "Indexing readable text" : uploadPhase === "blocked" ? "Upload blocked" : uploadPhase === "error" ? "Upload needs attention" : uploadPhase === "complete" ? "Saved" : "Preparing upload"}</strong>
+              <div className="library-upload-steps" aria-hidden="true">
+                {["reading", "checking", "uploading", "indexing"].map((step) => <span key={step} className={uploadPhase === step ? "active" : ["checking", "uploading", "saving", "indexing", "complete"].includes(uploadPhase ?? "") && ["reading", "checking", "uploading", "indexing"].indexOf(step) < ["checking", "uploading", "saving", "indexing", "complete"].indexOf(uploadPhase ?? "") ? "done" : ""} />)}
+              </div>
+              <span>{uploadPhase === "blocked" ? "A similar Library item already exists. Review the message above and use the existing entry instead." : uploadPhase === "indexing" ? "The file is saved. Law Hub is adding its readable text to the AI knowledge base…" : uploadPhase === "complete" ? "Your book is now available in the Library." : file && file.size > 6 * 1024 * 1024 && uploadPhase === "uploading" ? "Uploading in resumable chunks; keep this window open." : "Please keep this window open while Law Hub finishes this step."}</span>
+            </div>
           )}
           {!extracting && extractNote && (
             <span className="field-hint">{extractNote}</span>

@@ -37,6 +37,8 @@ import type {
 } from "./types";
 import { isThemeId, type ThemeId } from "../lib/appearance";
 
+export type LibraryUploadPhase = "reading" | "checking" | "uploading" | "saving" | "indexing" | "complete" | "blocked" | "error";
+
 export type Group13Repository = {
   getUnits: () => Promise<Unit[]>;
   getMaterials: () => Promise<Material[]>;
@@ -56,6 +58,7 @@ export type Group13Repository = {
   createMaterial: (
     material: Omit<Material, "id">,
     file?: File,
+    onProgress?: (phase: LibraryUploadPhase) => void,
   ) => Promise<Material>;
   updateMaterial: (
     id: string,
@@ -237,34 +240,65 @@ async function sha256File(file: Blob): Promise<string> {
   return fingerprint;
 }
 
-export async function findLibraryMaterialDuplicate(file: File, title?: string, expectedHash?: string): Promise<Material | null> {
+export async function findLibraryMaterialDuplicate(
+  file: File,
+  title?: string,
+  expectedHash?: string,
+  context?: Partial<Pick<Material, "type" | "unit" | "topic" | "date" | "source" | "exam_year" | "exam_session" | "course_code" | "paper_variant">> & { id?: string },
+): Promise<Material | null> {
   const client = db();
   const fileHash = expectedHash ?? await sha256File(file);
   const { data: exact, error: exactError } = await client
     .from("materials")
     .select(MATERIAL_COLUMNS)
     .eq("file_sha256", fileHash)
+    .neq("id", context?.id ?? "")
     .limit(1)
     .maybeSingle();
   if (exactError) throw new Error(`Could not check Library duplicates: ${exactError.message}`);
   if (exact) return exact as Material;
 
-  // Compare likely same-name or same-title uploads created before file fingerprints existed.
-  const cleanTitle = title?.trim().toLocaleLowerCase();
+  const normalize = (value?: string | null) => (value ?? "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase()
+    .replace(/\.[a-z0-9]{1,5}$/i, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+  const cleanTitle = normalize(title);
   const fileName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-").toLocaleLowerCase();
   const { data: matches, error: matchesError } = await client
     .from("materials")
     .select(MATERIAL_COLUMNS)
-    .is("file_sha256", null)
+    .neq("id", context?.id ?? "")
     .not("storage_path", "is", null)
-    .limit(500);
+    .limit(2000);
   if (matchesError) throw new Error(`Could not check existing Library entries: ${matchesError.message}`);
   for (const candidate of matches ?? []) {
     const legacy = candidate as Material;
-    if (legacy.file_sha256 || !legacy.storage_path || !legacy.url) continue;
-    const sameTitle = cleanTitle && legacy.title.trim().toLocaleLowerCase() === cleanTitle;
+    if (!legacy.storage_path) continue;
+    const candidateTitle = normalize(legacy.title);
+    const sameTitle = Boolean(cleanTitle && candidateTitle === cleanTitle);
+    const sameType = normalize(legacy.type) === normalize(context?.type);
+    const sameUnit = normalize(legacy.unit) === normalize(context?.unit);
+    const samePastPaperMetadata = Boolean(
+      normalize(context?.type) === "past paper" &&
+      context?.course_code && legacy.course_code &&
+      normalize(context.course_code) === normalize(legacy.course_code) &&
+      context.exam_year && legacy.exam_year === context.exam_year &&
+      normalize(context.exam_session) === normalize(legacy.exam_session) &&
+      normalize(context.paper_variant || "regular") === normalize(legacy.paper_variant || "regular"),
+    );
+    const titleTokens = new Set(cleanTitle.split(" ").filter(Boolean));
+    const candidateTokens = new Set(candidateTitle.split(" ").filter(Boolean));
+    const sharedTokens = [...titleTokens].filter((token) => candidateTokens.has(token)).length;
+    const similarTitle = titleTokens.size >= 3 && candidateTokens.size >= 3 && sharedTokens / Math.max(titleTokens.size, candidateTokens.size) >= 0.9;
+    if (samePastPaperMetadata || (sameTitle && sameType && (sameUnit || !context?.unit)) || (similarTitle && sameType && sameUnit)) {
+      return legacy;
+    }
     const savedName = legacy.storage_path.split("/").pop()?.toLocaleLowerCase();
-    if (!sameTitle && savedName !== fileName) continue;
+    if (legacy.file_sha256 || !legacy.url || (!sameTitle && savedName !== fileName)) continue;
     try {
       const response = await fetch(legacy.url);
       if (response.ok && await sha256File(await response.blob()) === fileHash) return legacy;
@@ -635,12 +669,13 @@ const supabaseRepository: Group13Repository = {
       .eq("id", id);
     if (error) throw new Error(`Could not update assignment: ${error.message}`);
   },
-  createMaterial: async (material, file) => {
+  createMaterial: async (material, file, onProgress) => {
     if (!supabase) throw new Error("Supabase is not configured.");
     const id = makeId();
+    onProgress?.("checking");
     const fileHash = file ? await sha256File(file) : null;
     if (fileHash) {
-      const duplicate = await findLibraryMaterialDuplicate(file!, material.title, fileHash);
+      const duplicate = await findLibraryMaterialDuplicate(file!, material.title, fileHash, material);
       if (duplicate) throw new Error(`This exact file is already in the Library as “${duplicate.title}”. Open the existing entry instead.`);
     }
     const record = { id, ...material, file_sha256: fileHash };
@@ -659,6 +694,7 @@ const supabaseRepository: Group13Repository = {
     let storagePath: string | null = null;
     if (file) {
       const path = `${record.id}/${file.name.replace(/[^a-zA-Z0-9._-]/g, "-")}`;
+      onProgress?.("uploading");
       await uploadStorageObject("materials", path, file);
       storagePath = path;
       Object.assign(record, {
@@ -666,6 +702,7 @@ const supabaseRepository: Group13Repository = {
         storage_path: path,
       });
     }
+    onProgress?.("saving");
     const { data, error } = await supabase
       .from("materials")
       .insert(record)
@@ -674,7 +711,7 @@ const supabaseRepository: Group13Repository = {
     if (error) {
       if (storagePath) await supabase.storage.from("materials").remove([storagePath]);
       if (error.code === "23505" && file) {
-        const duplicate = await findLibraryMaterialDuplicate(file, material.title, fileHash ?? undefined);
+        const duplicate = await findLibraryMaterialDuplicate(file, material.title, fileHash ?? undefined, material);
         if (duplicate) throw new Error(`This exact file is already in the Library as “${duplicate.title}”. Open the existing entry instead.`);
       }
       throw new Error(`Could not add material: ${error.message}`);
